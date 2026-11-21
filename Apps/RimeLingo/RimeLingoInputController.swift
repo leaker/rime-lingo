@@ -359,12 +359,19 @@ final class RimeLingoInputController: IMKInputController {
                 session.clearComposition()
                 isComposing = false
                 let target = client ?? textClient
-                flushDraft(client: target)
-                if !code.isEmpty {
+                if live != nil, !code.isEmpty {
+                    // In a session the keys were shown at the draft's caret: they stay there.
+                    DebugLog.write("commit-code length=\(code.count)")
+                    _ = draft.insertForLiveSession(code)
+                    flushDraft(client: target)
+                } else if !code.isEmpty {
+                    flushDraft(client: target)
                     DebugLog.write("commit-code length=\(code.count)")
                     target?.insertText(code, replacementRange: NSRange(location: NSNotFound, length: 0))
                     recentText.append(code)
                     hasMarkedText = false
+                } else {
+                    flushDraft(client: target)
                 }
                 if hasMarkedText { clearMarkedText(target) }
                 if ownsPanel { engine.panel.hide() }
@@ -445,13 +452,20 @@ final class RimeLingoInputController: IMKInputController {
             if menuHold.isArmed { engine.panel.hideHoldCue(animated: true) }
             menuHold.keyPressed() // a key while the modifier is down is a shortcut, not a hold
             let flags = event.modifierFlags
-            // Live translation shortcuts (⌃⌥⌘E / ⌃⌥⌘J), reached only past the secure-context gate.
-            if let target = TranslationShortcuts.target(
-                keyCode: event.keyCode, control: flags.contains(.control), option: flags.contains(.option),
-                command: flags.contains(.command), shift: flags.contains(.shift)),
-               let consumed = handleTranslationShortcut(target, isRepeat: event.isARepeat, client: client) {
-                return consumed
+            // Translation shortcuts as configured in Settings (⌃⌥⌘E / ⌃⌥⌘J / ⌥↩ by default),
+            // read at use and reached only past the secure-context gate.
+            let shortcut = TranslationShortcutBindings(features: engine.features).match(
+                keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
+                eventFlags: flags.rawValue, isRepeat: event.isARepeat)
+            switch shortcut {
+            case let .language(target):
+                if let consumed = handleTranslationShortcut(target, isRepeat: false, client: client) { return consumed }
+            case let .languageRepeat(target):
+                if let consumed = handleTranslationShortcut(target, isRepeat: true, client: client) { return consumed }
+            case .submit, nil:
+                break
             }
+            let submitMatched = shortcut == .submit
             if quickMenu != nil, handleMenuKey(event, client: client) { return true }
             if isMenuHotkey(event) {
                 openMenu(client: client)
@@ -465,15 +479,15 @@ final class RimeLingoInputController: IMKInputController {
                 else { engine.showStatus("没有可处理的文字：先打一段字，或选中一段文字") }
                 return true
             }
-            // A selection preview of this field takes ⌥↩ (replace the selection) and Esc
-            // (close) while nothing is composed or drafted; with something pending ⌥↩ is
+            // A selection preview of this field takes the submit shortcut (replace the
+            // selection) and Esc (close) while nothing is composed or drafted; with something pending it is
             // swallowed with a notice. Every other key, typing included, goes on as usual
             // and the preview stays.
             if quickMenu == nil, polish == nil, selectionPreviewIsAttached {
                 switch SelectionPreviewKey.decision(
                     keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
                     control: flags.contains(.control), shift: flags.contains(.shift),
-                    hasMarkedText: hasPendingInput) {
+                    hasMarkedText: hasPendingInput, submitMatched: submitMatched) {
                 case .replace:
                     engine.replaceSelectedText()
                     return true
@@ -489,14 +503,14 @@ final class RimeLingoInputController: IMKInputController {
             }
             // A pending draft (nothing being composed): Return / Esc confirm it, ⌫ edits
             // it, navigation and shortcuts confirm it and then reach the app.
-            // A live session takes ⌥↩ (submit the translation) and Esc (exit). ⌥↩ never
+            // A live session takes the submit shortcut and Esc (exit). The shortcut never
             // reaches the app, composing or not: there it could send a message.
             if live != nil, quickMenu == nil, polish == nil {
                 switch LiveSessionKey.decision(
                     keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
                     control: flags.contains(.control), shift: flags.contains(.shift),
                     isComposing: isComposing, hasValidTranslation: live?.validTranslation != nil,
-                    selectionPreviewOpen: engine.selection.isActive) {
+                    selectionPreviewOpen: engine.selection.isActive, submitMatched: submitMatched) {
                 case .submit:
                     submitLive(client: client)
                     return true
@@ -509,6 +523,15 @@ final class RimeLingoInputController: IMKInputController {
                 case .none:
                     break
                 }
+            }
+            // The draft of a session has a caret: ← → Home End move it, ⌫ and ⌦ edit at it.
+            // The key is consumed even at a boundary; the draft stays and so does the session.
+            if let key = LiveDraftKey.decision(
+                keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
+                control: flags.contains(.control), shift: flags.contains(.shift),
+                sessionActive: live != nil, draftIsEmpty: draft.isEmpty, isComposing: isComposing) {
+                if draft.apply(key) { sync(client: client) }
+                return true
             }
             if !draft.isEmpty, !isComposing {
                 switch DraftBuffer.decision(keyCode: event.keyCode, command: flags.contains(.command), control: flags.contains(.control)) {
@@ -678,7 +701,8 @@ final class RimeLingoInputController: IMKInputController {
         case .commandRight: "长按右⌘ 动作"
         case .off: "⌃⌥M 动作"
         }
-        var state = PanelState(status: live != nil ? "↩ 原文   ⌥↩ 译文   esc 退出" : "↩ 上屏   \(hold)")
+        var state = PanelState(status: live != nil
+            ? TranslationShortcutBindings(features: engine.features).liveStatusHint : "↩ 上屏   \(hold)")
         state.statusBadge = liveSession?.option("ascii_mode") == true ? "英" : "中"
         return state
     }
@@ -716,7 +740,7 @@ final class RimeLingoInputController: IMKInputController {
         // A session never commits part of its source and never drops what the engine has
         // committed: the text joins the draft whole, and `handle` stops further keys.
         if live != nil {
-            if draft.appendForLiveSession(text) {
+            if draft.insertForLiveSession(text) {
                 DebugLog.write("live draft full length=\(draft.text.utf16.count)")
                 liveDraftFull = true
             }
@@ -789,10 +813,12 @@ final class RimeLingoInputController: IMKInputController {
     /// (e.g. a raw underline style) do not survive the IMK XPC bridge on macOS 26+, and
     /// clients then insert the preedit as ordinary text — the raw pinyin stays in the
     /// document next to the committed characters.
-    private func markedText(_ text: String, converted: Int, selectedEnd: Int) -> NSAttributedString {
+    /// The last `tail` units are draft text after the caret, styled as converted text.
+    private func markedText(_ text: String, converted: Int, selectedEnd: Int, tail: Int = 0) -> NSAttributedString {
         let result = NSMutableAttributedString(string: text)
-        let length = (text as NSString).length
-        guard length > 0 else { return result }
+        let fullLength = (text as NSString).length
+        guard fullLength > 0 else { return result }
+        let length = max(0, fullLength - tail)
         let convertedEnd = max(0, min(converted, length))
         let selectionEnd = max(convertedEnd, min(selectedEnd, length))
         func apply(_ style: Int, _ range: NSRange) {
@@ -803,6 +829,7 @@ final class RimeLingoInputController: IMKInputController {
         apply(kTSMHiliteConvertedText, NSRange(location: 0, length: convertedEnd))
         apply(kTSMHiliteSelectedRawText, NSRange(location: convertedEnd, length: selectionEnd - convertedEnd))
         apply(kTSMHiliteRawText, NSRange(location: selectionEnd, length: length - selectionEnd))
+        apply(kTSMHiliteConvertedText, NSRange(location: length, length: fullLength - length))
         return result
     }
 
@@ -848,12 +875,15 @@ final class RimeLingoInputController: IMKInputController {
 
         // Marked text: the client shows the composition inline, or a placeholder
         // space when the panel carries the preedit (keeps cursor tracking alive).
-        // A pending draft comes first, styled as converted text.
-        let draftPrefix = draft.text
+        // A pending draft is styled as converted text; the composition sits at its caret
+        // (the end of the draft, unless a session moved the caret).
+        let draftPrefix = draft.textBeforeCaret
+        let draftSuffix = draft.textAfterCaret
         let draftLength = draftPrefix.utf16.count
-        if !isComposing, !draftPrefix.isEmpty {
-            client.setMarkedText(markedText(draftPrefix, converted: draftLength, selectedEnd: draftLength),
-                                 selectionRange: NSRange(location: draftLength, length: 0),
+        if !isComposing, !draft.isEmpty {
+            let fullLength = draft.text.utf16.count
+            client.setMarkedText(markedText(draft.text, converted: fullLength, selectedEnd: fullLength),
+                                 selectionRange: NSRange(location: draft.caret, length: 0),
                                  replacementRange: NSRange(location: NSNotFound, length: 0))
             hasMarkedText = true
         } else if isComposing {
@@ -864,7 +894,7 @@ final class RimeLingoInputController: IMKInputController {
             // keys, so pinyin letters end up interleaved with committed characters.
             // Without inline preedit a single space stands in for the composition.
             let body = inline ? preedit : " "
-            let display = draftPrefix + body
+            let display = draftPrefix + body + draftSuffix
             // The caret must index the string actually shown: the librime cursor is a
             // byte offset into the preedit, meaningless for the candidate preview.
             let caret = draftLength + (!inline ? 0
@@ -873,7 +903,8 @@ final class RimeLingoInputController: IMKInputController {
             let attributed = markedText(display, converted: draftLength + (showsPreview ? body.utf16.count
                 : context.composition.utf16Offset(ofUTF8: context.composition.selectionStart)),
                 selectedEnd: draftLength + (showsPreview ? body.utf16.count
-                : context.composition.utf16Offset(ofUTF8: context.composition.selectionEnd)))
+                : context.composition.utf16Offset(ofUTF8: context.composition.selectionEnd)),
+                tail: draftSuffix.utf16.count)
             DebugLog.write("marked length=\(display.count) inline=\(inline) caret=\(caret) attrs=\(attributed.length > 0 ? attributed.attributes(at: 0, effectiveRange: nil).count : 0)")
             client.setMarkedText(attributed, selectionRange: NSRange(location: caret, length: 0),
                                  replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -945,10 +976,10 @@ final class RimeLingoInputController: IMKInputController {
     /// Cursor rectangle in screen coordinates.
     func cursorRect(client: (any IMKTextInput)? = nil) -> NSRect {
         guard let client = client ?? textClient else { return .zero }
-        // With a pending draft the panel follows where typing continues — its end — not
-        // its first character: a draft that wraps over several lines would otherwise be
-        // covered by the panel sitting under its first line.
-        let anchor = draft.isEmpty ? 0 : draft.text.utf16.count
+        // With a pending draft the panel follows where typing continues — its caret, the
+        // end unless a session moved it — not its first character: a draft that wraps over
+        // several lines would otherwise be covered by the panel sitting under its first line.
+        let anchor = draft.caret
         for index in Set([anchor, max(0, anchor - 1), 0]).sorted(by: >) {
             var rect = NSRect.zero
             client.attributes(forCharacterIndex: index, lineHeightRectangle: &rect)

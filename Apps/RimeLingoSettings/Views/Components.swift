@@ -59,6 +59,7 @@ struct CatalogPane: View {
             }
             if pane == .keys {
                 QuickMenuShortcutsSection()
+                TranslationShortcutsSection()
                 Section("方案选单") {
                     ForEach(settings.filter { $0.id == "switcher.hotkeys" }) { SettingRow(setting: $0) }
                 }
@@ -117,6 +118,106 @@ private struct QuickMenuShortcutsSection: View {
         } footer: {
             Text("关闭长按后仍可用 ⌃⌥M 打开。方案选单是切换输入方案和开关的菜单，触发键在下方单独设置。")
         }
+    }
+}
+
+/// Live and selected-text translation: the switch and its three shortcuts. Saved through
+/// the features channel, so the input method follows without a deploy or a restart.
+private struct TranslationShortcutsSection: View {
+    @Environment(SettingsModel.self) private var model
+    /// Why the last recording or restore of a shortcut was refused.
+    @State private var refusals: [TranslationShortcutAction: String] = [:]
+
+    var body: some View {
+        let features = model.features
+        let bindings = TranslationShortcutBindings(features: features)
+        Section {
+            Toggle(isOn: Binding(get: { features.liveTranslation }, set: { on in model.updateFeatures { $0.liveTranslation = on } })) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("实时翻译")
+                    Text("按语言快捷键开始：打出的字停在光标处，译文显示在预览面板里；选中了文字时翻译选中的部分。")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            ForEach(TranslationShortcutAction.allCases, id: \.self) { action in
+                row(action, bindings: bindings)
+            }
+        } header: {
+            Text("翻译")
+        } footer: {
+            Text("无法检测与其他应用或系统快捷键的冲突。")
+        }
+    }
+
+    /// The catalog's hotkey settings as stored, for duplicate detection.
+    private var catalogHotkeys: [(shortcut: String, title: String)] {
+        model.catalog.settings.flatMap { setting -> [(shortcut: String, title: String)] in
+            switch setting.type {
+            case .hotkey: [(model.value(setting)?.stringValue ?? "", setting.title)]
+            case .hotkeyList: (model.value(setting)?.listValue ?? []).compactMap(\.stringValue).map { ($0, setting.title) }
+            default: []
+            }
+        }
+    }
+
+    private func row(_ action: TranslationShortcutAction, bindings: TranslationShortcutBindings) -> some View {
+        let current = bindings[action]
+        return LabeledContent {
+            HStack(spacing: 4) {
+                KeyRecorder(value: current) { assign($0, to: action, bindings: bindings) }
+                    .accessibilityLabel("\(action.title)快捷键")
+                // Fixed slot so recorders line up whether or not the key is set.
+                ZStack {
+                    if !current.isEmpty {
+                        Button {
+                            refusals[action] = nil
+                            model.updateFeatures { $0[shortcut: action] = "" }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("清除快捷键")
+                        .accessibilityLabel("清除\(action.title)快捷键")
+                    }
+                }
+                .frame(width: 18)
+                Button {
+                    assign(action.defaultShortcut, to: action, bindings: bindings)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(current == action.defaultShortcut)
+                .help("恢复默认：\(HotkeyFormatter.display(action.defaultShortcut))")
+                .accessibilityLabel("恢复\(action.title)的默认快捷键")
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(action.title)
+                if let refusal = refusals[action] {
+                    Text(refusal).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(detail(action)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func detail(_ action: TranslationShortcutAction) -> String {
+        switch action {
+        case .english, .japanese: "开始实时翻译或切换目标语言；选中了文字时翻译选区。"
+        case .submit: "把译文写进输入框，或替换选区。清除后仍可点预览面板上的按钮。"
+        }
+    }
+
+    /// Recording and restoring take the same checks; a refused value is not saved.
+    private func assign(_ shortcut: String, to action: TranslationShortcutAction, bindings: TranslationShortcutBindings) {
+        if let issue = bindings.issue(recording: shortcut, for: action, others: catalogHotkeys) {
+            refusals[action] = "未采用 \(HotkeyFormatter.display(shortcut))：\(issue.message)"
+            return
+        }
+        refusals[action] = nil
+        model.updateFeatures { $0[shortcut: action] = shortcut }
     }
 }
 
@@ -181,6 +282,8 @@ private struct ScriptSection: View {
 struct SettingRow: View {
     @Environment(SettingsModel.self) private var model
     let setting: SettingCatalog.Setting
+    /// Why the last recorded hotkey was refused.
+    @State private var refusal: String?
 
     var body: some View {
         let customized = model.isCustomized(setting)
@@ -214,9 +317,23 @@ struct SettingRow: View {
                 if let description = setting.description, !description.isEmpty {
                     Text(description).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
+                if let refusal {
+                    Text(refusal).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(.vertical, 2)
+    }
+
+    /// A translation shortcut is matched before the key reaches the engine, so a hotkey
+    /// equal to one would never fire: it is refused with the reason shown in the row.
+    private func accepts(_ hotkey: String) -> Bool {
+        if let action = TranslationShortcutBindings(features: model.features).action(holding: hotkey) {
+            refusal = "未采用 \(HotkeyFormatter.display(hotkey))：与「\(action.title)」的快捷键重复"
+            return false
+        }
+        refusal = nil
+        return true
     }
 
     @ViewBuilder
@@ -243,11 +360,12 @@ struct SettingRow: View {
         case .hotkey:
             let key = current?.stringValue ?? ""
             HStack(spacing: 4) {
-                KeyRecorder(value: key) { model.set(.string($0), for: setting) }
+                KeyRecorder(value: key) { if accepts($0) { model.set(.string($0), for: setting) } }
                 // Fixed slot so recorders line up whether or not the key is set.
                 ZStack {
                     if !key.isEmpty {
                         Button {
+                            refusal = nil
                             model.set(.string(""), for: setting)
                         } label: {
                             Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
@@ -260,8 +378,13 @@ struct SettingRow: View {
                 .frame(width: 18)
             }
         case .hotkeyList:
-            HotkeyListControl(values: (current?.listValue ?? []).compactMap(\.stringValue)) {
-                model.set(.list($0.map(ConfigValue.string)), for: setting)
+            let hotkeys = (current?.listValue ?? []).compactMap(\.stringValue)
+            HotkeyListControl(values: hotkeys) { new in
+                // Only an added hotkey is checked; removing one is always allowed.
+                refusal = nil
+                if new.allSatisfy({ hotkeys.contains($0) || accepts($0) }) {
+                    model.set(.list(new.map(ConfigValue.string)), for: setting)
+                }
             }
         case .switchList:
             SwitchListControl(

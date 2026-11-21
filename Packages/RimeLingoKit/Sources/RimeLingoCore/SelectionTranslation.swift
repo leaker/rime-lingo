@@ -274,18 +274,18 @@ public enum SelectionPreviewKey: Sendable, Equatable {
     public static let pendingInputMessage = "请先完成输入"
 
     /// `hasMarkedText`: a composition or a draft of ours is pending in the field; every
-    /// key but Option+Return keeps its meaning there.
+    /// key but the submit shortcut keeps its meaning there. `submitMatched`: whether the
+    /// key is the configured submit shortcut; nil stands for the default, Option+Return.
     public static func decision(
-        keyCode: UInt16, option: Bool, command: Bool, control: Bool, shift: Bool, hasMarkedText: Bool
+        keyCode: UInt16, option: Bool, command: Bool, control: Bool, shift: Bool, hasMarkedText: Bool,
+        submitMatched: Bool? = nil
     ) -> SelectionPreviewKey {
-        guard !command, !control else { return .none }
-        switch keyCode {
-        case 36, 76:
-            guard option, !shift else { return .none }
+        if submitMatched ?? TranslationShortcutBindings.isDefaultSubmit(
+            keyCode: keyCode, option: option, command: command, control: control, shift: shift) {
             return hasMarkedText ? .replaceBlocked : .replace
-        case 53: return option || hasMarkedText ? .none : .close
-        default: return .none
         }
+        guard !command, !control, keyCode == 53 else { return .none }
+        return option || hasMarkedText ? .none : .close
     }
 }
 

@@ -36,6 +36,11 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
     public var asciiPunct = false
     /// Live translation shortcuts; on by default in this build.
     public var liveTranslation = true
+    /// Translation shortcuts in the key recorder's notation; empty turns the shortcut off.
+    /// Read through `TranslationShortcutBindings`, which replaces unusable values by the default.
+    public var translateEnglishShortcut = TranslationShortcutAction.english.defaultShortcut
+    public var translateJapaneseShortcut = TranslationShortcutAction.japanese.defaultShortcut
+    public var submitTranslationShortcut = TranslationShortcutAction.submit.defaultShortcut
 
     public struct AIAction: Sendable, Codable, Equatable, Identifiable {
         public var id: UUID
@@ -69,6 +74,10 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
         traditional = try container.decodeIfPresent(Bool.self, forKey: .traditional) ?? defaults.traditional
         asciiPunct = try container.decodeIfPresent(Bool.self, forKey: .asciiPunct) ?? defaults.asciiPunct
         liveTranslation = try container.decodeIfPresent(Bool.self, forKey: .liveTranslation) ?? defaults.liveTranslation
+        // A value of the wrong type costs that shortcut only, not the whole file.
+        translateEnglishShortcut = (try? container.decodeIfPresent(String.self, forKey: .translateEnglishShortcut)) ?? defaults.translateEnglishShortcut
+        translateJapaneseShortcut = (try? container.decodeIfPresent(String.self, forKey: .translateJapaneseShortcut)) ?? defaults.translateJapaneseShortcut
+        submitTranslationShortcut = (try? container.decodeIfPresent(String.self, forKey: .submitTranslationShortcut)) ?? defaults.submitTranslationShortcut
     }
 
     public static let changedNotification = Notification.Name("io.github.leaker.rimelingo.features")

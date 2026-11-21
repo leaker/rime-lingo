@@ -98,6 +98,8 @@ extension RimeLingoInputController {
     func endLive() {
         guard let ending = live else { return }
         live = nil
+        // Without a session a draft is edited at its end only.
+        _ = draft.moveCaret(.end)
         ending.onChange = nil
         ending.end()
         DebugLog.write("live end")

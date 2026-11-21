@@ -7,13 +7,66 @@ public struct DraftBuffer: Sendable, Equatable {
     /// Long marked text is expensive for clients; past this the oldest part is committed.
     public static let maxLength = 300
 
-    public private(set) var text = ""
+    /// Every plain change of the text leaves the caret at its end.
+    public private(set) var text = "" { didSet { caret = text.utf16.count } }
+    /// Where text goes in and ⌫ takes it out: a UTF-16 offset into `text`, always between
+    /// two characters. It is the end of the draft unless a live translation session moved it.
+    public private(set) var caret = 0
 
     public init() {}
 
     public var isEmpty: Bool { text.isEmpty }
 
-    /// Appends committed text. Returns text that must be inserted into the app first when
+    public enum CaretMove: Sendable, Equatable { case left, right, start, end }
+
+    /// Moves the caret by one character or to an end; false when it was already there.
+    public mutating func moveCaret(_ move: CaretMove) -> Bool {
+        let destination: Int? = switch move {
+        case .left: boundaries.last { $0 < caret }
+        case .right: boundaries.first { $0 > caret }
+        case .start: 0
+        case .end: text.utf16.count
+        }
+        guard let destination, destination != caret else { return false }
+        caret = destination
+        return true
+    }
+
+    public var textBeforeCaret: String { String(text[..<caretIndex]) }
+    public var textAfterCaret: String { String(text[caretIndex...]) }
+
+    /// Puts text in at the caret; the caret ends after it.
+    public mutating func insertAtCaret(_ addition: String) {
+        let offset = caret + addition.utf16.count
+        var edited = text
+        edited.insert(contentsOf: addition, at: caretIndex)
+        setText(edited, caret: offset)
+    }
+
+    /// Removes the character after the caret; false when there was none.
+    public mutating func deleteForward() -> Bool {
+        guard let end = boundaries.first(where: { $0 > caret }) else { return false }
+        var edited = text
+        edited.removeSubrange(caretIndex..<String.Index(utf16Offset: end, in: text))
+        setText(edited, caret: caret)
+        return true
+    }
+
+    /// UTF-16 offsets between characters, from 0 to the length of the text.
+    private var boundaries: [Int] {
+        text.reduce(into: [0]) { offsets, character in offsets.append(offsets[offsets.count - 1] + character.utf16.count) }
+    }
+
+    private var caretIndex: String.Index { String.Index(utf16Offset: caret, in: text) }
+
+    /// An edit can join the characters around the caret (a combining mark after a new
+    /// letter): the caret then goes after the joined character, never inside it.
+    private mutating func setText(_ newText: String, caret offset: Int) {
+        text = newText
+        caret = boundaries.first { $0 >= offset } ?? text.utf16.count
+    }
+
+    /// Appends committed text at the end, wherever the caret was. Returns text that must be inserted into the app first when
     /// the draft would grow past `maxLength`.
     public mutating func append(_ addition: String) -> String? {
         guard text.utf16.count + addition.utf16.count > Self.maxLength, !text.isEmpty else {
@@ -25,10 +78,12 @@ public struct DraftBuffer: Sendable, Equatable {
         return overflow
     }
 
-    /// Removes the last character; false when there was nothing to remove.
+    /// Removes the character before the caret; false when there was none.
     public mutating func deleteBackward() -> Bool {
-        guard !text.isEmpty else { return false }
-        text.removeLast()
+        guard let start = boundaries.last(where: { $0 < caret }) else { return false }
+        var edited = text
+        edited.removeSubrange(String.Index(utf16Offset: start, in: text)..<caretIndex)
+        setText(edited, caret: start)
         return true
     }
 

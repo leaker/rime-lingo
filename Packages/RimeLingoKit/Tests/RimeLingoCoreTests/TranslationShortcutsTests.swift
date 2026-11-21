@@ -162,10 +162,10 @@ struct TranslationShortcutsTests {
     @Test func sessionDraftIsFullAtTheLimit() {
         var draft = DraftBuffer()
         #expect(!draft.isFullForLiveSession)
-        let belowLimit = draft.appendForLiveSession(String(repeating: "字", count: DraftBuffer.maxLength - 1))
+        let belowLimit = draft.insertForLiveSession(String(repeating: "字", count: DraftBuffer.maxLength - 1))
         #expect(!belowLimit)
         #expect(!draft.isFullForLiveSession)
-        let atLimit = draft.appendForLiveSession("好")
+        let atLimit = draft.insertForLiveSession("好")
         #expect(atLimit)
         #expect(draft.isFullForLiveSession)
         _ = draft.deleteBackward()
@@ -176,11 +176,11 @@ struct TranslationShortcutsTests {
     @Test func sessionDraftKeepsACommitThatCrossesTheLimit() {
         var draft = DraftBuffer()
         let head = String(repeating: "字", count: DraftBuffer.maxLength - 4)
-        _ = draft.appendForLiveSession(head)
-        let crossed = draft.appendForLiveSession("明天下午开会")
+        _ = draft.insertForLiveSession(head)
+        let crossed = draft.insertForLiveSession("明天下午开会")
         #expect(crossed)
         #expect(draft.text == head + "明天下午开会")
-        let stillFull = draft.appendForLiveSession("😀")
+        let stillFull = draft.insertForLiveSession("😀")
         #expect(stillFull)
         #expect(draft.text == head + "明天下午开会😀")
     }
