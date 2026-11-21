@@ -17,6 +17,8 @@ final class InputEngine {
     static let progressNotification = Notification.Name("io.github.leaker.rimelingo.deploy.progress")
 
     let panel = CandidatePanel()
+    /// Live translation preview: a second panel that never takes focus.
+    let previewPanel = TranslationPreviewPanel()
     /// Opt-in local word statistics (高频词); off unless enabled in Settings.
     let usage = UsageRecorder()
     /// rimelingo/features.json, reloaded when Settings posts `RimeLingoFeatures.changedNotification`.
@@ -189,6 +191,8 @@ final class InputEngine {
         }
         usage.isEnabled = features.usageStats
         if !features.aiPolish { activeController?.cancelPolish() }
+        // Switched off mid-session: the source goes into the app and the session ends.
+        if !features.liveTranslation { activeController?.exitLive(client: nil) }
     }
 
     // MARK: - Subscribed vocabularies
@@ -452,6 +456,7 @@ final class InputEngine {
         activeController?.closeMenu() // or it stays open, invisible, and takes the next keys
         activeController?.flushBeforeEngineRestart()
         panel.hide()
+        previewPanel.hide()
         let engine = RimeEngine.shared
         engine.cleanupAllSessions()
         engine.initialize(traits)
@@ -624,6 +629,7 @@ final class InputEngine {
         guard force || dark != isDark else { return }
         isDark = dark
         panel.theme = PanelTheme(frontend: frontend, dark: dark)
+        previewPanel.theme = panel.theme
         eligibleController?.applyArrowKeyLayout()
     }
 

@@ -18,6 +18,8 @@ final class RimeLingoInputController: IMKInputController {
     private var appOptions = InputEngine.AppOptions()
     private var bundleID: String?
     private var hasMarkedText = false
+    /// The client currently shows marked text of ours (a draft or a composition).
+    var showsMarkedText: Bool { hasMarkedText }
     private(set) var isComposing = false
     /// Active ⌃⌥P rewrite of the selected text (see RimeLingoInputController+Polish.swift).
     var polish: PolishSession?
@@ -29,12 +31,18 @@ final class RimeLingoInputController: IMKInputController {
     private var capsSwitch = CapsLockSourceSwitch()
     /// 输入图层: committed text waiting at the cursor (underlined) until it is confirmed.
     var draft = DraftBuffer()
+    /// Active live translation session, nil when there is none
+    /// (see RimeLingoInputController+LiveTranslation.swift).
+    var live: LiveTranslationCoordinator?
     /// What was just inserted into this field, so AI actions can work on "what I just
     /// typed" without a selection. Memory only; verified against the app before use.
     var recentText = RecentText()
     /// Text of the latest commit (see `commitForAction`).
     private var lastCommitted = ""
     private var draftTimer: Task<Void, Never>?
+    /// A full session draft refused text; said once the panel has been redrawn.
+    private var liveDraftFull = false
+    private static let liveDraftFullNotice = "原文已达上限，请先提交或上屏"
     /// At most one "Chinese input is paused" hint per activation.
     private var secureHint = SecureInputHint()
     /// A composition was dropped in a secure context without a librime call; the
@@ -73,6 +81,9 @@ final class RimeLingoInputController: IMKInputController {
     /// without committing any of it. State only: no client call, no librime call.
     private func discardPendingState() {
         let showedPanel = isComposing || !draft.isEmpty || quickMenu != nil || polish != nil || menuHold.isArmed
+        // The session and its preview go without a write; late results are invalidated
+        // and nothing resumes once the context is eligible again.
+        endLive()
         draftTimer?.cancel()
         _ = draft.take()
         recentText.reset()
@@ -133,13 +144,14 @@ final class RimeLingoInputController: IMKInputController {
 
     /// Commits whatever is being composed before the engine drops all sessions.
     func flushBeforeEngineRestart() {
-        guard !blockedBySecureContext() else { return }
+        guard !blockedBySecureContext() else { return endLive() }
         if let session = liveSession, isComposing {
             session.commitComposition()
             sync(client: textClient)
             isComposing = false
         }
         flushDraft(client: textClient)
+        endLive()
     }
 
     /// Chinese/English state for this client, per `AsciiStatePolicy`: by default the
@@ -227,6 +239,7 @@ final class RimeLingoInputController: IMKInputController {
             bundleID = client?.bundleIdentifier()
             discardPendingState()
             engine.panel.hide()
+            engine.previewPanel.hide()
             // Modifier state is kept current (see `handle`) so the first modifier event
             // after the context turns eligible is compared against the truth.
             snapshotModifiers()
@@ -277,7 +290,9 @@ final class RimeLingoInputController: IMKInputController {
         quickMenu = nil
         polish?.task?.cancel()
         polish = nil
+        endLive()
         engine.panel.hide()
+        engine.previewPanel.hide()
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
@@ -301,6 +316,7 @@ final class RimeLingoInputController: IMKInputController {
             this.closeMenu()
             this.cancelPolish()
             this.commitPending(client)
+            this.endLive()
             if this.ownsPanel { this.engine.panel.hide() }
             this.engine.usage.flush()
             if this.engine.activeController === this { this.engine.activeController = nil }
@@ -310,7 +326,10 @@ final class RimeLingoInputController: IMKInputController {
 
     nonisolated override func commitComposition(_ sender: Any!) {
         nonisolated(unsafe) let this = self, client = sender as? any IMKTextInput
-        MainActor.assumeIsolated { this.commitPending(client) }
+        MainActor.assumeIsolated {
+            this.commitPending(client)
+            this.endLive()
+        }
     }
 
     /// An AI action chosen while composing: the highlighted candidate goes into the field
@@ -383,18 +402,6 @@ final class RimeLingoInputController: IMKInputController {
             if event.type == .keyDown, secureHint.shouldShow(for: context) { engine.showSecureInputHint(for: context) }
             return false
         }
-        // TEMPORARY — Phase 2 probe (RimeLingoInputController+Probe.swift), to be replaced
-        // by real shortcut dispatch. Reached only once the secure-context gate has passed.
-        if let key = probeKey(for: event) {
-            engine.activeController = self
-            if menuHold.isArmed { engine.panel.hideHoldCue(animated: true) }
-            menuHold.keyPressed()
-            // Swallow key repeats without probing again. Clear the modifier-tap latch
-            // like the normal keyDown path, so releasing the modifiers is not read as a
-            // Chinese/ASCII switch. A secure context that begins mid-event passes through.
-            liveSession?.cancelModifierTap()
-            return event.isARepeat ? true : runSelectionProbe(key: key, client: client)
-        }
         if activationDeferred {
             // Activated in a secure context that has since ended, with no new activation:
             // the setup skipped then runs now. The modifier snapshot is not retaken; it
@@ -403,6 +410,9 @@ final class RimeLingoInputController: IMKInputController {
             bundleID = client?.bundleIdentifier() ?? bundleID
             finishActivation()
         }
+        // A key delivered without an activation first: the field that owned the panels gives
+        // them up (session, menu, action result), as it does in `activate`. State only.
+        if let previous = engine.activeController, previous !== self { previous.yieldPanel() }
         // Event type and session state only — never the characters typed.
         engine.activeController = self
         guard let session = ensureSession() else {
@@ -425,6 +435,14 @@ final class RimeLingoInputController: IMKInputController {
             engine.lastUserKeyAt = Date()
             if menuHold.isArmed { engine.panel.hideHoldCue(animated: true) }
             menuHold.keyPressed() // a key while the modifier is down is a shortcut, not a hold
+            let flags = event.modifierFlags
+            // Live translation shortcuts (⌃⌥⌘E / ⌃⌥⌘J), reached only past the secure-context gate.
+            if let target = TranslationShortcuts.target(
+                keyCode: event.keyCode, control: flags.contains(.control), option: flags.contains(.option),
+                command: flags.contains(.command), shift: flags.contains(.shift)),
+               let consumed = handleTranslationShortcut(target, isRepeat: event.isARepeat, client: client) {
+                return consumed
+            }
             if quickMenu != nil, handleMenuKey(event, client: client) { return true }
             if isMenuHotkey(event) {
                 openMenu(client: client)
@@ -440,8 +458,27 @@ final class RimeLingoInputController: IMKInputController {
             }
             // A pending draft (nothing being composed): Return / Esc confirm it, ⌫ edits
             // it, navigation and shortcuts confirm it and then reach the app.
+            // A live session takes ⌥↩ (submit the translation) and Esc (exit). ⌥↩ never
+            // reaches the app, composing or not: there it could send a message.
+            if live != nil, quickMenu == nil, polish == nil {
+                switch LiveSessionKey.decision(
+                    keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
+                    control: flags.contains(.control), shift: flags.contains(.shift),
+                    isComposing: isComposing, hasValidTranslation: live?.validTranslation != nil) {
+                case .submit:
+                    submitLive(client: client)
+                    return true
+                case let .submitBlocked(reason):
+                    engine.showStatus(reason.message)
+                    return true
+                case .exit:
+                    exitLive(client: client)
+                    return true
+                case .none:
+                    break
+                }
+            }
             if !draft.isEmpty, !isComposing {
-                let flags = event.modifierFlags
                 switch DraftBuffer.decision(keyCode: event.keyCode, command: flags.contains(.command), control: flags.contains(.control)) {
                 case .commit:
                     flushDraft(client: client)
@@ -457,6 +494,12 @@ final class RimeLingoInputController: IMKInputController {
                 case .toEngine:
                     break
                 }
+            }
+            // A full session draft takes no more text. The key stops here, before librime:
+            // once the engine has committed something it can no longer be refused.
+            if live != nil, !isComposing, draft.isFullForLiveSession, Self.printableText(event) != nil {
+                engine.showStatus(Self.liveDraftFullNotice)
+                return true
             }
             guard let (keysym, mask) = RimeKey.translate(
                 keyCode: event.keyCode,
@@ -495,7 +538,7 @@ final class RimeLingoInputController: IMKInputController {
                 let committedFirst = wasComposing && (!lastCommitted.isEmpty || !isComposing)
                 // A draft opens on words only (letters typed in English mode); a space,
                 // digits or punctuation join an open draft and otherwise go to the app.
-                if let typed, draftLayerActive, !draft.isEmpty || DraftBuffer.opensDraft(typed) {
+                if let typed, collectsDraft, live != nil || !draft.isEmpty || DraftBuffer.opensDraft(typed) {
                     appendToDraft(typed, client: client)
                     sync(client: client)
                     guard !blockedBySecureContext(client: client) else { return false }
@@ -584,6 +627,10 @@ final class RimeLingoInputController: IMKInputController {
             appStartsInEnglish: appOptions.asciiMode == true, bundleID: bundleID, secureInput: IsSecureEventInputEnabled())
     }
 
+    /// Committed text waits in the draft: the layer is on, or a live translation session
+    /// is using the draft as its source (whatever the layer setting says).
+    var collectsDraft: Bool { live != nil || draftLayerActive }
+
     /// The hint under a pending draft, led by a 中 / 英 chip: in English mode keys join
     /// the draft as letters, which must not look like a composition that lost its candidates.
     private var draftHint: PanelState {
@@ -599,7 +646,7 @@ final class RimeLingoInputController: IMKInputController {
         case .commandRight: "长按右⌘ 动作"
         case .off: "⌃⌥M 动作"
         }
-        var state = PanelState(status: "↩ 上屏   \(hold)")
+        var state = PanelState(status: live != nil ? "↩ 原文   ⌥↩ 译文   esc 退出" : "↩ 上屏   \(hold)")
         state.statusBadge = liveSession?.option("ascii_mode") == true ? "英" : "中"
         return state
     }
@@ -611,7 +658,12 @@ final class RimeLingoInputController: IMKInputController {
             if ownsPanel { engine.panel.hide() }
             return
         }
-        guard ownsPanel, !isComposing else { return }
+        guard ownsPanel else { return }
+        if isComposing {
+            // A session notice shown over the candidates: put them back.
+            if live != nil, quickMenu == nil, polish == nil { sync(client: textClient) }
+            return
+        }
         if !draft.isEmpty, quickMenu == nil, polish == nil {
             engine.panel.show(draftHint, at: cursorRect(client: textClient))
         } else if draft.isEmpty {
@@ -629,6 +681,15 @@ final class RimeLingoInputController: IMKInputController {
 
     private func appendToDraft(_ text: String, client: (any IMKTextInput)?) {
         guard !blockedBySecureContext(client: client) else { return }
+        // A session never commits part of its source and never drops what the engine has
+        // committed: the text joins the draft whole, and `handle` stops further keys.
+        if live != nil {
+            if draft.appendForLiveSession(text) {
+                DebugLog.write("live draft full length=\(draft.text.utf16.count)")
+                liveDraftFull = true
+            }
+            return
+        }
         if let overflow = draft.append(text) {
             // Too long for one marked run: the older part goes into the app.
             client?.insertText(overflow, replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -647,6 +708,19 @@ final class RimeLingoInputController: IMKInputController {
         (client ?? textClient)?.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = false
         recentText.append(text)
+        draftDidChange()
+        if ownsPanel, !isComposing, quickMenu == nil, polish == nil { engine.panel.hide() }
+    }
+
+    /// Puts `text` into the app in place of the pending draft (a submitted translation).
+    /// The caller has checked the secure context; only text is inserted, never a key.
+    func replaceDraft(with text: String, client: any IMKTextInput) {
+        draftTimer?.cancel()
+        _ = draft.take()
+        client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        hasMarkedText = false
+        recentText.append(text)
+        draftDidChange()
         if ownsPanel, !isComposing, quickMenu == nil, polish == nil { engine.panel.hide() }
     }
 
@@ -655,10 +729,13 @@ final class RimeLingoInputController: IMKInputController {
     private func scheduleDraftAutoCommit() {
         draftTimer?.cancel()
         let delay = engine.features.draftAutoCommit
-        guard delay > 0, !draft.isEmpty, !isComposing, quickMenu == nil, polish == nil else { return }
+        // A session keeps its source until the user submits, commits or exits.
+        guard live == nil, delay > 0, !draft.isEmpty, !isComposing, quickMenu == nil, polish == nil else { return }
         draftTimer = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled, let self, !self.isComposing, self.quickMenu == nil, self.polish == nil else { return }
+            // A session started after the countdown did: its source stays until the user acts.
+            guard !Task.isCancelled, let self, self.live == nil, !self.isComposing,
+                  self.quickMenu == nil, self.polish == nil else { return }
             self.flushDraft(client: nil)
         }
     }
@@ -718,7 +795,7 @@ final class RimeLingoInputController: IMKInputController {
             // A commit of only punctuation or digits does not open a draft.
             if commitToDraft {
                 draft.replace(with: draft.text + text)
-            } else if draftLayerActive, !draft.isEmpty || DraftBuffer.opensDraft(text) {
+            } else if collectsDraft, live != nil || !draft.isEmpty || DraftBuffer.opensDraft(text) {
                 appendToDraft(text, client: client)
             } else {
                 // The layer was switched off with a draft pending: it goes first.
@@ -728,6 +805,9 @@ final class RimeLingoInputController: IMKInputController {
                 recentText.append(pending + text)
             }
         }
+
+        // Every draft edit (commit, ⌫) passes here: the session's source follows it.
+        draftDidChange()
 
         let context = session.context()
         isComposing = context.isComposing
@@ -775,6 +855,13 @@ final class RimeLingoInputController: IMKInputController {
         // A delayed old-context commit still reaches that client, but cannot replace
         // the shared panel belonging to the newly active field.
         guard ownsPanel else { return }
+        defer {
+            repositionLivePreview(client: client)
+            if liveDraftFull {
+                liveDraftFull = false
+                engine.showStatus(Self.liveDraftFullNotice)
+            }
+        }
         scheduleDraftAutoCommit()
         // The quick menu or an action's result list owns the panel until it closes. A
         // modifier release (⌃⌥P lets go of ⌃ and ⌥) also lands here, and must not hide
