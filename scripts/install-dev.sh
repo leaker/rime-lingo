@@ -12,8 +12,10 @@ bash "$ROOT/scripts/build-app.sh"
 echo "==> installing to $DEST"
 pkill -f "Input Methods/RimeLingo.app/Contents/MacOS/RimeLingo" 2>/dev/null || true
 mkdir -p "$DEST"
-rm -rf "$DEST/RimeLingo.app"
-ditto "$ROOT/build/Release/RimeLingo.app" "$DEST/RimeLingo.app"
+# Update the bundle in place. Deleting and recreating it makes macOS drop the input
+# source from the menu until the next login.
+mkdir -p "$DEST/RimeLingo.app"
+rsync -a --delete "$ROOT/build/Release/RimeLingo.app/" "$DEST/RimeLingo.app/"
 "$DEST/RimeLingo.app/Contents/MacOS/RimeLingo" --install || true
 # A copy installed by the .pkg (/Library) has the same bundle id: macOS may launch
 # either one and keeps showing cached icons. Development wants exactly one.
