@@ -41,3 +41,8 @@ Packages/RimeLingoKit/Frameworks/
 /THIRD_PARTY_NOTICES.md
 /CHANGELOG.md
 /CHANGELOG.en.md
+# Brand artwork, product README and CI configuration: kept locally only.
+/assets/
+/README.md
+/README.en.md
+/.github/
