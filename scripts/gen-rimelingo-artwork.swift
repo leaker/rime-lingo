@@ -4,7 +4,7 @@
 //   Apps/RimeLingo/Resources/RimeLingo.pdf                 input source (menu bar) icon
 //   Apps/Shared/Assets.xcassets/AppIcon.appiconset/*.png   app icon, ten sizes
 //   Apps/Shared/Assets.xcassets/BrandSquare.imageset/*.png square mark, light and dark
-//   Apps/Shared/Assets.xcassets/BrandLockup.imageset/*.png mark plus wordmark, light and dark
+//   Apps/Shared/Assets.xcassets/BrandLockup.imageset/*.png mark plus both names, light and dark
 //
 // Glyph outlines come from Source Han Sans SC (SIL OFL 1.1), which must be installed.
 // The font itself is not kept in the repository.
@@ -17,6 +17,7 @@ let glyphFontName = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] :
 let wordFontName = "SourceHanSansSC-Heavy"
 let character: UniChar = 0x7075 // 灵
 let wordmark = "RimeLingo"
+let chineseName = "灵译输入法"
 
 let ink = CGColor(srgbRed: 0.122, green: 0.227, blue: 0.373, alpha: 1) // app icon background
 let paper = CGColor(srgbRed: 0.965, green: 0.957, blue: 0.937, alpha: 1) // app icon glyph
@@ -102,17 +103,20 @@ for (name, tile, glyphColor) in [("light", black, white), ("dark", white, black)
     }
 }
 
-// MARK: Lockup: the mark followed by the wordmark, on a transparent background.
+// MARK: Lockup: the mark followed by both names, on a transparent background.
 for (name, tile, glyphColor, wordColor) in [("light", ink, Optional(paper), text), ("dark", white, nil, white)] {
     try png(width: 1084, height: 400, to: "\(assets)/BrandLockup.imageset/\(name).png") { context in
         mark(context, tile: CGRect(x: 56, y: 72, width: 256, height: 256), radius: 58, tileColor: tile, glyphColor: glyphColor, glyphHeight: 160)
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: wordmark, attributes: [
-            NSAttributedString.Key(kCTFontAttributeName as String): font(wordFontName, size: 132),
-            NSAttributedString.Key(kCTForegroundColorAttributeName as String): wordColor,
-        ]))
-        let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
-        context.textPosition = CGPoint(x: 364 - bounds.minX, y: 200 - bounds.midY)
-        CTLineDraw(line, context)
+        // Latin wordmark above the Chinese name, both left-aligned to the same edge.
+        for (string, fontName, size, centreY) in [(wordmark, wordFontName, CGFloat(112), CGFloat(248)), (chineseName, glyphFontName, CGFloat(66), CGFloat(124))] {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): font(fontName, size: size),
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): wordColor,
+            ]))
+            let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
+            context.textPosition = CGPoint(x: 364 - bounds.minX, y: centreY - bounds.midY)
+            CTLineDraw(line, context)
+        }
     }
 }
 
