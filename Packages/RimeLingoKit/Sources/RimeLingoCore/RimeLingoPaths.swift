@@ -33,6 +33,13 @@ public struct RimeLingoPaths: Sendable, Equatable {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Rime", isDirectory: true)
     }
 
+    /// Shared data of an installed Squirrel (system-wide, then per-user), read only.
+    public static var squirrelSharedDataDirs: [URL] {
+        let relative = "Library/Input Methods/Squirrel.app/Contents/SharedSupport"
+        return [URL(fileURLWithPath: "/", isDirectory: true), FileManager.default.homeDirectoryForCurrentUser]
+            .map { $0.appendingPathComponent(relative, isDirectory: true) }
+    }
+
     public var stagingDir: URL { userDataDir.appendingPathComponent("build", isDirectory: true) }
     public var rimelingoDir: URL { userDataDir.appendingPathComponent("rimelingo", isDirectory: true) }
     public var importedDir: URL { rimelingoDir.appendingPathComponent("imported", isDirectory: true) }

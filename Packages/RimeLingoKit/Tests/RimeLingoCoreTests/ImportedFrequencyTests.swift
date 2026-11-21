@@ -46,7 +46,7 @@ struct ImportedFrequencyTests {
         let original = try Data(contentsOf: snapshot)
         #expect(String(decoding: original, as: UTF8.self).contains("你好"))
         let paths = RimeLingoPaths(userDataDir: destination, sharedDataDir: shared)
-        let importer = SquirrelImporter(paths: paths, source: source)
+        let importer = SquirrelImporter(paths: paths, source: source, squirrelDataDirs: [])
         let report = try importer.execute(importer.plan())
         #expect(report.snapshots == ["source-test/frequency_test.userdb.txt"])
         #expect(report.warnings.isEmpty)

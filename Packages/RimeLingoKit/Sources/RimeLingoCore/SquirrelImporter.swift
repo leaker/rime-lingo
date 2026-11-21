@@ -41,6 +41,9 @@ public struct SquirrelImporter: Sendable {
         public var colorSchemesCarriedOver: [String]
         /// Things the user should know, e.g. learned frequencies that could not be migrated.
         public var warnings: [String] = []
+        /// The `schema_list` this import wrote into the generated layer in place of the
+        /// imported one; the next import undoes it before looking at the list again.
+        public var schemaListOverride: [String]?
 
         public static func url(_ paths: RimeLingoPaths) -> URL { paths.rimelingoDir.appendingPathComponent("import-report.json") }
 
@@ -102,10 +105,17 @@ public struct SquirrelImporter: Sendable {
 
     public let paths: RimeLingoPaths
     public let source: URL
+    /// Shared data directories of Squirrel application bundles, in search order. Read-only:
+    /// schemas the imported `schema_list` needs but only Squirrel ships are copied from here.
+    public let squirrelDataDirs: [URL]
 
-    public init(paths: RimeLingoPaths, source: URL = RimeLingoPaths.squirrelUserDir) {
+    public init(
+        paths: RimeLingoPaths, source: URL = RimeLingoPaths.squirrelUserDir,
+        squirrelDataDirs: [URL] = RimeLingoPaths.squirrelSharedDataDirs
+    ) {
         self.paths = paths
         self.source = source
+        self.squirrelDataDirs = squirrelDataDirs
     }
 
     public func plan() throws -> Plan {
@@ -212,6 +222,7 @@ public struct SquirrelImporter: Sendable {
         }
 
         report.colorSchemesCarriedOver = try carryOverColorSchemes(layers: layers)
+        try resolveListedSchemas(layers: layers, report: &report)
         if plan.actions.contains(where: { if case .importSnapshots = $0 { true } else { false } }), report.snapshots.isEmpty {
             report.warnings.append("未找到词频快照（sync/*/*.userdb.txt）：请先在鼠须管中执行「同步用户数据」再导入，否则学习到的词频不会迁移。")
         } else if !plan.actions.contains(where: { if case .importSnapshots = $0 { true } else { false } }) {
