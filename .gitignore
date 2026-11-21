@@ -29,3 +29,15 @@ dist/
 
 # SwiftPM binary target assembled by scripts/fetch-librime.sh
 Packages/RimeLingoKit/Frameworks/
+
+# Kept on this machine only, not versioned: project notes and community
+# and release documents. scripts/embed-license-materials.py still reads
+# THIRD_PARTY_NOTICES.md and two files under docs/ at build time, so they must stay on disk.
+/docs/
+/SECURITY.md
+/CODE_OF_CONDUCT.md
+/CONTRIBUTING.md
+/CONTRIBUTING.zh.md
+/THIRD_PARTY_NOTICES.md
+/CHANGELOG.md
+/CHANGELOG.en.md
