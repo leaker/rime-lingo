@@ -14,7 +14,7 @@ public final class CandidatePanel {
     public let view = CandidateView()
     private let window: NSPanel
     private let effect = NSVisualEffectView()
-    private let signposter = OSSignposter(subsystem: "io.github.leaker.rimelingo", category: "panel")
+    private let signposter = OSSignposter(subsystem: "com.leelib.rimelingo", category: "panel")
     private var lastCursorRect: NSRect = .zero
     /// Whether the place the panel last had (reused when showing at `.zero`) is on the
     /// screen that contains `point`. False if it was never placed.

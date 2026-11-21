@@ -22,7 +22,7 @@ public struct Diagnostics: Sendable {
     }
 
     static func locateSettings(current: URL, inputMethodApps: [URL]) -> URL {
-        if Bundle(url: current)?.bundleIdentifier?.hasPrefix("io.github.leaker.rimelingo.settings") == true { return current }
+        if Bundle(url: current)?.bundleIdentifier?.hasPrefix("com.leelib.rimelingo.settings") == true { return current }
         // A CLI inside RimeLingo.app should report its companion Settings, including zip installs.
         var ancestor = current
         for _ in 0..<8 {

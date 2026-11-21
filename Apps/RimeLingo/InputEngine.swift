@@ -13,9 +13,9 @@ import RimeKit
 final class InputEngine {
     static let shared = InputEngine()
 
-    static let reloadNotification = Notification.Name("io.github.leaker.rimelingo.reload")
-    static let resultNotification = Notification.Name("io.github.leaker.rimelingo.deploy.result")
-    static let progressNotification = Notification.Name("io.github.leaker.rimelingo.deploy.progress")
+    static let reloadNotification = Notification.Name("com.leelib.rimelingo.reload")
+    static let resultNotification = Notification.Name("com.leelib.rimelingo.deploy.result")
+    static let progressNotification = Notification.Name("com.leelib.rimelingo.deploy.progress")
 
     let panel = CandidatePanel()
     /// Translation preview: a second panel that never takes focus. Shared by live
@@ -38,7 +38,7 @@ final class InputEngine {
     /// pressed. Nil until the first session: it then starts from librime's remembered
     /// state when `switcher/save_options` lists ascii_punct, else from the setting.
     var asciiPunct: Bool?
-    let logger = Logger(subsystem: "io.github.leaker.rimelingo", category: "engine")
+    let logger = Logger(subsystem: "com.leelib.rimelingo", category: "engine")
     private(set) var paths: RimeLingoPaths
     private(set) var frontend: ConfigValue = .map([])
     private(set) var isDark = false

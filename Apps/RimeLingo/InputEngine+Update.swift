@@ -154,7 +154,7 @@ final class UpdateService {
             let content = UNMutableNotificationContent()
             content.title = title
             if let body { content.body = body }
-            center.add(UNNotificationRequest(identifier: "io.github.leaker.rimelingo.update", content: content, trigger: nil))
+            center.add(UNNotificationRequest(identifier: "com.leelib.rimelingo.update", content: content, trigger: nil))
         }
     }
 

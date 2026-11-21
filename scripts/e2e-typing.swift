@@ -14,7 +14,7 @@ func sources(_ id: String) -> [TISInputSource] {
 }
 
 let previous = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-guard let rimelingo = sources("io.github.leaker.inputmethod.rimelingo.hans").first else {
+guard let rimelingo = sources("com.leelib.inputmethod.rimelingo.hans").first else {
     print("FAIL: RimeLingo input source not registered"); exit(1)
 }
 TISEnableInputSource(rimelingo)

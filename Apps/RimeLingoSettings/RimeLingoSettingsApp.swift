@@ -73,7 +73,7 @@ extension RimeLingoSettingsApp {
     }
 
     /// Preferences written under the previous bundle id (dev.example.rimelingo.settings) are
-    /// copied once into io.github.leaker.rimelingo.settings.
+    /// copied once into com.leelib.rimelingo.settings.
     static func migrateLegacyDefaults() {
         let defaults = UserDefaults.standard
         guard !defaults.bool(forKey: "migratedFromLegacyBundleID"),

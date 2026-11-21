@@ -710,7 +710,7 @@ private struct PracticeStep: View {
         .onAppear { focused = true }
         .onChange(of: text) { _, value in evaluate(value) }
         .onChange(of: menuOpened) { _, opened in if opened { evaluate(text) } }
-        .onReceive(DistributedNotificationCenter.default().publisher(for: Notification.Name("io.github.leaker.rimelingo.menu.opened"))) { _ in
+        .onReceive(DistributedNotificationCenter.default().publisher(for: Notification.Name("com.leelib.rimelingo.menu.opened"))) { _ in
             menuOpened = true
         }
     }

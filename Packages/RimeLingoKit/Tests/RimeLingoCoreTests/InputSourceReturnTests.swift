@@ -3,11 +3,11 @@ import Testing
 
 struct InputSourceReturnTests {
     @Test func recognizesOnlyRimeLingoSources() {
-        #expect(InputSourceReturn.isRimeLingo("io.github.leaker.inputmethod.rimelingo.hans"))
-        #expect(InputSourceReturn.isRimeLingo("io.github.leaker.inputmethod.rimelingo"))
+        #expect(InputSourceReturn.isRimeLingo("com.leelib.inputmethod.rimelingo.hans"))
+        #expect(InputSourceReturn.isRimeLingo("com.leelib.inputmethod.rimelingo"))
         #expect(!InputSourceReturn.isRimeLingo("com.apple.keylayout.ABC"))
         #expect(!InputSourceReturn.isRimeLingo("im.rime.inputmethod.Squirrel.Hans"))
-        #expect(!InputSourceReturn.isRimeLingo("io.github.leaker.inputmethod.rimelingox"))
+        #expect(!InputSourceReturn.isRimeLingo("com.leelib.inputmethod.rimelingox"))
     }
 
     /// The reset is written through the policy so the next app inherits Chinese too.

@@ -4,8 +4,8 @@ import Foundation
 import RimeKit
 
 enum RimeLingoIdentity {
-    static let bundleID = "io.github.leaker.inputmethod.rimelingo"
-    static let inputModeID = "io.github.leaker.inputmethod.rimelingo.hans"
+    static let bundleID = "com.leelib.inputmethod.rimelingo"
+    static let inputModeID = "com.leelib.inputmethod.rimelingo.hans"
     /// The copy in charge (newer build; the system-wide one on a tie), else the per-user path.
     static var installedApp: URL { RimeLingoInstallations().preferred?.url ?? RimeLingoInstallations.userURL() }
 }

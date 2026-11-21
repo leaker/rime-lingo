@@ -316,7 +316,7 @@ public struct ConfigLayers: Sendable {
             try SubscriptionManager(paths: paths).ensureTables()
         } catch {
             // Keep the previous tables; vocabulary is never worth failing a deploy for.
-            Logger(subsystem: "io.github.leaker.rimelingo", category: "vocabulary").error("vocabulary tables: \(String(describing: error), privacy: .public)")
+            Logger(subsystem: "com.leelib.rimelingo", category: "vocabulary").error("vocabulary tables: \(String(describing: error), privacy: .public)")
         }
         // A broken layer aborts the deploy; the previous build stays in place.
         for target in Set(managedTargets() + extraTargets).sorted(by: { $0.configID < $1.configID }) {

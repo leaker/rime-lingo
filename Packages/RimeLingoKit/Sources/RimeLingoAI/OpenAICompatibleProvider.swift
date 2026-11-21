@@ -172,7 +172,7 @@ public struct CredentialStore: Sendable {
     @discardableResult
     public func migrateFromKeychain() -> Bool {
         guard read() == nil else { return false }
-        for service in ["io.github.leaker.rimelingo.ai", "dev.example.rimelingo.ai"] {
+        for service in ["com.leelib.rimelingo.ai", "dev.example.rimelingo.ai"] {
             let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                         kSecAttrAccount as String: account]
             var lookup = query

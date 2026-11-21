@@ -19,9 +19,9 @@
 //
 // Back the key up offline once, right after keygen; it exists nowhere else, and without
 // it no installed copy can be updated again. This prints the 32 private bytes as hex:
-//   security find-generic-password -s io.github.leaker.rimelingo.manifest-key -a ed25519 -w
+//   security find-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519 -w
 // and this puts them back on another Mac (then `pubkey` must print the key in the source):
-//   security add-generic-password -s io.github.leaker.rimelingo.manifest-key -a ed25519 \
+//   security add-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519 \
 //     -l "RimeLingo release manifest signing key" -X <the hex>
 // Do not paste the hex anywhere that is logged or synced.
 // Tests only: `--ephemeral-key-file <path>` after keygen, pubkey or sign keeps the key in
@@ -30,7 +30,7 @@ import CryptoKit
 import Foundation
 import Security
 
-let service = "io.github.leaker.rimelingo.manifest-key"
+let service = "com.leelib.rimelingo.manifest-key"
 let account = "ed25519"
 
 func fail(_ message: String) -> Never {

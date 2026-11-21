@@ -8,7 +8,7 @@ public import Foundation
 /// same bundle ID, so with both present macOS lists RimeLingo twice per kind in Input Sources
 /// (#32), and code that blindly preferred the per-user copy talked to a stale version.
 public struct RimeLingoInstallations: Sendable, Equatable {
-    public static let bundleID = "io.github.leaker.inputmethod.rimelingo"
+    public static let bundleID = "com.leelib.inputmethod.rimelingo"
     public static let systemURL = URL(fileURLWithPath: "/Library/Input Methods/RimeLingo.app")
     public static func userURL(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL {
         home.appendingPathComponent("Library/Input Methods/RimeLingo.app")

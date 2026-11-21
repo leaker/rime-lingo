@@ -56,7 +56,7 @@ extension RimeLingoInputController {
         if let page { quickMenu?.open(page) }
         // Lets the first-run guide check off "hold ⌥". An event only, no content.
         DistributedNotificationCenter.default().postNotificationName(
-            Notification.Name("io.github.leaker.rimelingo.menu.opened"), object: nil, userInfo: nil, deliverImmediately: true)
+            Notification.Name("com.leelib.rimelingo.menu.opened"), object: nil, userInfo: nil, deliverImmediately: true)
         menuShown = (quickMenu?.stack.count ?? 1, 0)
         showMenu(client: client, transition: .morph)
     }

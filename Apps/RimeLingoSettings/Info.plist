@@ -24,7 +24,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>CFBundleURLName</key>
-			<string>io.github.leaker.rimelingo.theme</string>
+			<string>com.leelib.rimelingo.theme</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>rimelingo-ime</string>

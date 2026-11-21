@@ -6,7 +6,7 @@ import Foundation
 /// Text Input Sources only lets an input method select its own modes reliably from
 /// its own bundle.
 enum InputSourceInstaller {
-    static let modeID = "io.github.leaker.inputmethod.rimelingo.hans"
+    static let modeID = "com.leelib.inputmethod.rimelingo.hans"
 
     static func property(_ source: TISInputSource, _ key: CFString) -> Any? {
         TISGetInputSourceProperty(source, key).map { Unmanaged<AnyObject>.fromOpaque($0).takeUnretainedValue() }

@@ -23,7 +23,7 @@ enum Locations {
         return env.map { URL(fileURLWithPath: $0) }
     }
 
-    static let inputMethodBundleID = "io.github.leaker.inputmethod.rimelingo"
+    static let inputMethodBundleID = "com.leelib.inputmethod.rimelingo"
 }
 
 /// Deploys through the running input method (so its sessions reload immediately), or
@@ -90,7 +90,7 @@ final class DeployService {
         let center = DistributedNotificationCenter.default()
         let request = UUID().uuidString
         nonisolated(unsafe) let progressToken = center.addObserver(
-            forName: Notification.Name("io.github.leaker.rimelingo.deploy.progress"), object: nil, queue: .main
+            forName: Notification.Name("com.leelib.rimelingo.deploy.progress"), object: nil, queue: .main
         ) { note in
             guard note.userInfo?["request"] as? String == request else { return }
             let stage = note.userInfo?["stage"] as? String ?? ""
@@ -100,7 +100,7 @@ final class DeployService {
         defer { center.removeObserver(progressToken) }
         let logDir = paths.logDir.path
         let stream = AsyncStream<Outcome> { continuation in
-            nonisolated(unsafe) let token = center.addObserver(forName: Notification.Name("io.github.leaker.rimelingo.deploy.result"), object: nil, queue: .main) { note in
+            nonisolated(unsafe) let token = center.addObserver(forName: Notification.Name("com.leelib.rimelingo.deploy.result"), object: nil, queue: .main) { note in
                 // Only the answer to this request counts.
                 guard note.userInfo?["request"] as? String == request else { return }
                 let ok = note.userInfo?["ok"] as? Bool ?? false
@@ -110,7 +110,7 @@ final class DeployService {
             }
             continuation.onTermination = { _ in center.removeObserver(token) }
         }
-        center.postNotificationName(Notification.Name("io.github.leaker.rimelingo.reload"), object: nil,
+        center.postNotificationName(Notification.Name("com.leelib.rimelingo.reload"), object: nil,
                                     userInfo: ["request": request, "mode": mode], deliverImmediately: true)
         return await withTaskGroup(of: Outcome?.self) { group in
             group.addTask { for await outcome in stream { return outcome }; return nil }

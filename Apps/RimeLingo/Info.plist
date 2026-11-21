@@ -24,10 +24,10 @@
 	<dict>
 		<key>tsInputModeListKey</key>
 		<dict>
-			<key>io.github.leaker.inputmethod.rimelingo.hans</key>
+			<key>com.leelib.inputmethod.rimelingo.hans</key>
 			<dict>
 				<key>TISInputSourceID</key>
-				<string>io.github.leaker.inputmethod.rimelingo.hans</string>
+				<string>com.leelib.inputmethod.rimelingo.hans</string>
 				<key>TISIntendedLanguage</key>
 				<string>zh-Hans</string>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
@@ -55,11 +55,11 @@
 		</dict>
 		<key>tsVisibleInputModeOrderedArrayKey</key>
 		<array>
-			<string>io.github.leaker.inputmethod.rimelingo.hans</string>
+			<string>com.leelib.inputmethod.rimelingo.hans</string>
 		</array>
 	</dict>
 	<key>InputMethodConnectionName</key>
-	<string>io.github.leaker.inputmethod.rimelingo_Connection</string>
+	<string>com.leelib.inputmethod.rimelingo_Connection</string>
 	<key>InputMethodServerControllerClass</key>
 	<string>RimeLingoInputController</string>
 	<key>InputMethodServerDelegateClass</key>
@@ -77,7 +77,7 @@
 	<key>TICapsLockLanguageSwitchCapable</key>
 	<true/>
 	<key>TISInputSourceID</key>
-	<string>io.github.leaker.inputmethod.rimelingo</string>
+	<string>com.leelib.inputmethod.rimelingo</string>
 	<key>tsInputMethodCharacterRepertoireKey</key>
 	<array>
 		<string>Hans</string>

@@ -30,7 +30,7 @@ struct Deploy: AsyncParsableCommand {
         // Explicit/test workspaces must never wake the installed input method,
         // which serves a different directory and would redeploy real user data.
         if !dryRun, workspace.userDir == nil, ProcessInfo.processInfo.environment["RIMELINGO_USER_DIR"] == nil {
-            DistributedNotificationCenter.default().postNotificationName(.init("io.github.leaker.rimelingo.reload"), object: nil)
+            DistributedNotificationCenter.default().postNotificationName(.init("com.leelib.rimelingo.reload"), object: nil)
         }
     }
 }

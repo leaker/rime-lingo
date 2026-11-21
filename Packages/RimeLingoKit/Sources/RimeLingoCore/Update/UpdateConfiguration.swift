@@ -147,11 +147,11 @@ public enum RedirectPolicy {
 /// one that installs while it is running. None of them carries anything but a version.
 public enum UpdateNotifications {
     /// Settings → input method: check now.
-    public static let check = "io.github.leaker.rimelingo.update.check"
+    public static let check = "com.leelib.rimelingo.update.check"
     /// Settings → input method: install the staged update as soon as nothing is interrupted.
-    public static let install = "io.github.leaker.rimelingo.update.install"
+    public static let install = "com.leelib.rimelingo.update.install"
     /// The persisted update state changed.
-    public static let changed = "io.github.leaker.rimelingo.update.changed"
+    public static let changed = "com.leelib.rimelingo.update.changed"
     /// A new version is in place on disk (`userInfo["version"]`).
-    public static let installed = "io.github.leaker.rimelingo.update.installed"
+    public static let installed = "com.leelib.rimelingo.update.installed"
 }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Opt-in diagnostics for the input path, off by default:
-///   defaults write io.github.leaker.inputmethod.rimelingo RimeLingoDebugLog -bool YES
+///   defaults write com.leelib.inputmethod.rimelingo RimeLingoDebugLog -bool YES
 /// Writes to ~/Library/Logs/RimeLingo/ime-debug.log. Records event kinds, flags and text
 /// *lengths* only — never the characters typed (see docs/privacy.md).
 @MainActor

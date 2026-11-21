@@ -80,7 +80,7 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
         submitTranslationShortcut = (try? container.decodeIfPresent(String.self, forKey: .submitTranslationShortcut)) ?? defaults.submitTranslationShortcut
     }
 
-    public static let changedNotification = Notification.Name("io.github.leaker.rimelingo.features")
+    public static let changedNotification = Notification.Name("com.leelib.rimelingo.features")
 
     static func url(_ paths: RimeLingoPaths) -> URL { paths.rimelingoDir.appendingPathComponent("features.json") }
 
@@ -108,7 +108,7 @@ public struct UsageStatsStore: Sendable {
         "com.1password.1password", "com.agilebits.onepassword7", "com.bitwarden.desktop",
         "com.apple.keychainaccess", "com.apple.Passwords", "org.keepassxc.keepassxc",
     ]
-    public static let clearedNotification = Notification.Name("io.github.leaker.rimelingo.stats.cleared")
+    public static let clearedNotification = Notification.Name("com.leelib.rimelingo.stats.cleared")
 
     public let directory: URL
 

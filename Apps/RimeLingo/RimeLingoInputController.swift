@@ -1030,12 +1030,12 @@ final class RimeLingoInputController: IMKInputController {
         if let pane { configuration.arguments = ["--pane", pane] }
         let embedded = Bundle.main.bundleURL.appendingPathComponent("Contents/Applications/RimeLingo Settings.app")
         let url = FileManager.default.fileExists(atPath: embedded.path) ? embedded
-            : NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.github.leaker.rimelingo.settings")
+            : NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.leelib.rimelingo.settings")
         guard let url else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: configuration)
         if let pane {
             DistributedNotificationCenter.default().postNotificationName(
-                .init("io.github.leaker.rimelingo.settings.showPane"), object: nil, userInfo: ["pane": pane], deliverImmediately: true)
+                .init("com.leelib.rimelingo.settings.showPane"), object: nil, userInfo: ["pane": pane], deliverImmediately: true)
         }
     }
 

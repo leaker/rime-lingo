@@ -1,6 +1,6 @@
 name: RimeLingo
 options:
-  bundleIdPrefix: io.github.leaker.rimelingo
+  bundleIdPrefix: com.leelib.rimelingo
   developmentLanguage: zh-Hans
   deploymentTarget:
     macOS: "15.0"
@@ -56,19 +56,19 @@ targets:
         LSBackgroundOnly: false
         NSPrincipalClass: NSApplication
         LSApplicationCategoryType: public.app-category.utilities
-        InputMethodConnectionName: io.github.leaker.inputmethod.rimelingo_Connection
+        InputMethodConnectionName: com.leelib.inputmethod.rimelingo_Connection
         InputMethodServerControllerClass: RimeLingoInputController
         InputMethodServerDelegateClass: RimeLingoInputController
         tsInputMethodIconFileKey: RimeLingo.pdf
         tsInputMethodCharacterRepertoireKey: [Hans, Hant, Latn]
-        TISInputSourceID: io.github.leaker.inputmethod.rimelingo
+        TISInputSourceID: com.leelib.inputmethod.rimelingo
         TICapsLockLanguageSwitchCapable: true
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ComponentInputModeDict:
           tsInputModeListKey:
-            io.github.leaker.inputmethod.rimelingo.hans:
-              TISInputSourceID: io.github.leaker.inputmethod.rimelingo.hans
+            com.leelib.inputmethod.rimelingo.hans:
+              TISInputSourceID: com.leelib.inputmethod.rimelingo.hans
               TISIntendedLanguage: zh-Hans
               tsInputModeScriptKey: smUnicodeScript
               tsInputModeCharacterRepertoireKey: [Hans, Hant]
@@ -79,10 +79,10 @@ targets:
               tsInputModePrimaryInScriptKey: true
               tsInputModeIsVisibleKey: true
               tsInputModeDefaultStateKey: true
-          tsVisibleInputModeOrderedArrayKey: [io.github.leaker.inputmethod.rimelingo.hans]
+          tsVisibleInputModeOrderedArrayKey: [com.leelib.inputmethod.rimelingo.hans]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.leaker.inputmethod.rimelingo
+        PRODUCT_BUNDLE_IDENTIFIER: com.leelib.inputmethod.rimelingo
         RIMELINGO_INFO_TEMPLATE: "$(SRCROOT)/Apps/RimeLingo/Info.plist"
         INFOPLIST_FILE: "$(DERIVED_FILE_DIR)/RimeLingoInfo.plist"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -124,13 +124,13 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         # rimelingo-ime://theme?v=1&d=… links from vocabulary.example.com/themes (docs/themes.md).
         CFBundleURLTypes:
-          - CFBundleURLName: io.github.leaker.rimelingo.theme
+          - CFBundleURLName: com.leelib.rimelingo.theme
             CFBundleURLSchemes: [rimelingo-ime]
             CFBundleTypeRole: Viewer
         NSPrincipalClass: NSApplication
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.leaker.rimelingo.settings
+        PRODUCT_BUNDLE_IDENTIFIER: com.leelib.rimelingo.settings
         RIMELINGO_INFO_TEMPLATE: "$(SRCROOT)/Apps/RimeLingoSettings/Info.plist"
         INFOPLIST_FILE: "$(DERIVED_FILE_DIR)/RimeLingoInfo.plist"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

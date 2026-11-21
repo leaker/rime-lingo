@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 @testable import RimeLingoCore
 
-let fixtureBundleID = "io.github.leaker.inputmethod.rimelingo"
+let fixtureBundleID = "com.leelib.inputmethod.rimelingo"
 
 /// A miniature RimeLingo.app: main executable, a library with a version link, a nested
 /// settings app, shared data that does not change between versions, and a seal file.

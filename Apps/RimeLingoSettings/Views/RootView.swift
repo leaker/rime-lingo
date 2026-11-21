@@ -129,7 +129,7 @@ struct RootView: View {
         .themeImportHost(model)
         .overlay(alignment: .bottom) { ErrorBanner() }
         // The input method's quick menu opens a specific pane in a running Settings app.
-        .onReceive(DistributedNotificationCenter.default().publisher(for: .init("io.github.leaker.rimelingo.settings.showPane"))) { note in
+        .onReceive(DistributedNotificationCenter.default().publisher(for: .init("com.leelib.rimelingo.settings.showPane"))) { note in
             if let raw = note.userInfo?["pane"] as? String, let pane = Pane(rawValue: raw) {
                 selection = pane
                 NSApp.activate()

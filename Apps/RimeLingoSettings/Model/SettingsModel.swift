@@ -96,9 +96,9 @@ final class SettingsModel {
             guard let raw = TISGetInputSourceProperty(source, kTISPropertyInputSourceIsEnabled) else { return false }
             return CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(raw).takeUnretainedValue())
         }
-        guard let mode = enabled("io.github.leaker.inputmethod.rimelingo.hans") else { return .missing }
+        guard let mode = enabled("com.leelib.inputmethod.rimelingo.hans") else { return .missing }
         guard mode else { return .notAdded }
-        return enabled("io.github.leaker.inputmethod.rimelingo") == false ? .needsRelogin : .ready
+        return enabled("com.leelib.inputmethod.rimelingo") == false ? .needsRelogin : .ready
     }
 
     /// Whether RimeLingo can be switched to right now.
