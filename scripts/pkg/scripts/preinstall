@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stop a running RimeLingo so the bundle can be replaced.
+/usr/bin/pkill -f "/Library/Input Methods/RimeLingo.app/Contents/MacOS/RimeLingo" 2>/dev/null || true
+exit 0
