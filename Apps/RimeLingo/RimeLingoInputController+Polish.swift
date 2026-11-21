@@ -53,6 +53,7 @@ extension RimeLingoInputController {
     /// 简繁转换 of the same target an AI action would use, done on the Mac (no request):
     /// the results list appears right away and applies like any other result.
     func startConversion(client: (any IMKTextInput)?, committed: String?) {
+        guard !blockedBySecureContext(client: client) else { return }
         let engine = InputEngine.shared
         guard let client = client ?? (self.client() as? (any IMKTextInput)) else { return }
         guard let target = actionTarget(client: client, committed: committed) else {
@@ -68,6 +69,8 @@ extension RimeLingoInputController {
 
     /// What the action should work on, or nil when there is nothing suitable.
     private func actionTarget(client: any IMKTextInput, committed: String?) -> PolishSession.Target? {
+        // Reads the selection and the text around the caret: never in a secure context.
+        guard !blockedBySecureContext(client: client) else { return nil }
         if !draft.isEmpty { return .draft(draft.text) }
         let selected = client.selectedRange()
         // The candidate that was put in for this action: only that word or phrase.
@@ -91,12 +94,14 @@ extension RimeLingoInputController {
 
     /// Whether an action would have something to work on right now.
     func hasActionTarget(client: (any IMKTextInput)?) -> Bool {
+        guard !blockedBySecureContext(client: client) else { return false }
         if isComposing || !draft.isEmpty { return true }
         guard let client = client ?? (self.client() as? (any IMKTextInput)) else { return false }
         return actionTarget(client: client, committed: nil) != nil
     }
 
     func startAction(_ action: TextAction, client: (any IMKTextInput)?, committed: String? = nil) {
+        guard !blockedBySecureContext(client: client) else { return }
         let engine = InputEngine.shared
         let features = engine.features
         guard features.aiPolish else { return engine.showStatus("AI 动作未开启：设置 › AI 助手") }
@@ -133,6 +138,9 @@ extension RimeLingoInputController {
             do {
                 let variants = try await TextActionRunner(provider: provider).run(action, on: text)
                 guard !Task.isCancelled, let self, self.polish?.target == target else { return }
+                // The context is judged again now: a result that arrives in a secure
+                // context is dropped with its request.
+                guard !self.blockedBySecureContext(client: client) else { return }
                 guard !variants.isEmpty else { return self.cancelPolish(message: "没有可用的结果") }
                 self.polish?.variants = variants
                 self.showPolish(client: client, transition: .push)
@@ -203,7 +211,7 @@ extension RimeLingoInputController {
     }
 
     private func showPolish(client: (any IMKTextInput)?, transition: CandidatePanel.Transition = .none) {
-        guard let request = polish else { return }
+        guard !blockedBySecureContext(client: client), let request = polish else { return }
         let candidates = request.variants.enumerated().map {
             PanelState.Candidate(label: "\($0.offset + 1)", text: $0.element.text, comment: $0.element.label)
         }
@@ -219,7 +227,7 @@ extension RimeLingoInputController {
 
     /// Copies the highlighted result and leaves the text as it is.
     private func copyPolish(_ index: Int) {
-        guard let request = polish, request.variants.indices.contains(index) else { return }
+        guard !blockedBySecureContext(), let request = polish, request.variants.indices.contains(index) else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(request.variants[index].text, forType: .string)
         cancelPolish(message: "已复制到剪贴板")
@@ -228,6 +236,8 @@ extension RimeLingoInputController {
     /// Applies a result: the draft is replaced and committed; text already in the app is
     /// replaced only if it is still exactly what was sent.
     private func applyPolish(_ index: Int, client: (any IMKTextInput)?) {
+        // Before the read-back below and before any write.
+        guard !blockedBySecureContext(client: client) else { return }
         guard let request = polish, request.variants.indices.contains(index),
               let client = client ?? (self.client() as? (any IMKTextInput)) else { return }
         let result = request.variants[index].text

@@ -32,9 +32,18 @@ final class InputEngine {
     /// Incremented on every (re)initialization so controllers can drop stale sessions.
     private(set) var generation = 0
     weak var activeController: RimeLingoInputController?
+    /// The active controller unless its context is secure: work the engine starts on its
+    /// own (settings reload, theme, schema) must not reach a secure client's session.
+    private var eligibleController: RimeLingoInputController? {
+        guard let controller = activeController, !controller.blockedBySecureContext() else { return nil }
+        return controller
+    }
     /// When the user last pressed a key. Option-change bubbles are shown only for
     /// changes the user just caused, never for ones RimeLingo makes itself (app options).
     var lastUserKeyAt = Date.distantPast
+    /// When a key last passed through in a secure context. A time and nothing else; it
+    /// only keeps a background redeploy from running while a password is being typed.
+    var lastSecureKeyAt = Date.distantPast
     /// Chinese/English state sharing (global / per app / per window), for the life of
     /// the process. The scope comes from `ascii_state/scope` in rimelingo.yaml.
     var asciiState = AsciiStatePolicy()
@@ -173,10 +182,10 @@ final class InputEngine {
     private func reloadFeatures() {
         let wasTraditional = features.traditional, wasAsciiPunct = features.asciiPunct
         features = RimeLingoFeatures.load(paths)
-        if features.traditional != wasTraditional { activeController?.applyScriptOption() }
+        if features.traditional != wasTraditional { eligibleController?.applyScriptOption() }
         if features.asciiPunct != wasAsciiPunct, asciiPunct != nil {
             asciiPunct = features.asciiPunct
-            activeController?.applyPunctOption()
+            eligibleController?.applyPunctOption()
         }
         usage.isEnabled = features.usageStats
         if !features.aiPolish { activeController?.cancelPolish() }
@@ -236,6 +245,7 @@ final class InputEngine {
     private func redeployWhenIdle(attempt: Int = 0) {
         guard vocabularyRedeployPending else { return }
         let idle = Date().timeIntervalSince(lastUserKeyAt) > 30
+            && Date().timeIntervalSince(lastSecureKeyAt) > 30
             && activeController?.isComposing != true && activeController?.polish == nil
         if idle, deployLock == nil {
             logger.info("vocabulary changed, redeploying")
@@ -509,7 +519,7 @@ final class InputEngine {
         guard UserDefaults.standard.string(forKey: key) != primary else { return }
         UserDefaults.standard.set(primary, forKey: key)
         RimeEngine.shared.rememberSelectedSchema(primary)
-        if let session = activeController?.session, session.currentSchema != primary { _ = session.selectSchema(primary) }
+        if let session = eligibleController?.session, session.currentSchema != primary { _ = session.selectSchema(primary) }
         logger.info("primary schema is now \(primary, privacy: .public)")
     }
 
@@ -564,9 +574,9 @@ final class InputEngine {
         case let .optionChanged(name, enabled):
             guard Date().timeIntervalSince(lastUserKeyAt) < 0.6,
                   ["ascii_mode", "full_shape", "traditionalization", "ascii_punct", "emoji"].contains(name),
-                  let session = activeController?.session else { return }
+                  let controller = eligibleController, let session = controller.session else { return }
             let label = session.stateLabel(option: name, state: enabled, abbreviated: false)
-            if !label.isEmpty, activeController?.isComposing == false { showStatus(label) }
+            if !label.isEmpty, !controller.isComposing { showStatus(label) }
         case let .schemaChanged(_, name):
             if !name.isEmpty { showStatus(name) }
         default:
@@ -614,7 +624,7 @@ final class InputEngine {
         guard force || dark != isDark else { return }
         isDark = dark
         panel.theme = PanelTheme(frontend: frontend, dark: dark)
-        activeController?.applyArrowKeyLayout()
+        eligibleController?.applyArrowKeyLayout()
     }
 
     struct AppOptions {
@@ -640,6 +650,15 @@ final class InputEngine {
     // MARK: - Status bubble
 
     func showStatus(_ text: String) {
+        // No bubble in a secure context, and no cursor lookup in its client. With no
+        // active field only the system-wide flag can tell.
+        // Whatever the panel still shows there (a busy action, an earlier status) goes.
+        let secure = activeController?.blockedBySecureContext() ?? IsSecureEventInputEnabled()
+        guard !secure, bubbleAllowed else {
+            statusHideTask?.cancel()
+            panel.hide()
+            return
+        }
         statusHideTask?.cancel()
         panel.show(PanelState(status: text), at: activeController?.cursorRect() ?? .zero)
         statusHideTask = Task { @MainActor [weak self] in
@@ -650,6 +669,39 @@ final class InputEngine {
     }
 
     func cancelStatus() { statusHideTask?.cancel() }
+
+    /// A second look that asks no client: no bubble while the screen is locked, an
+    /// authentication surface is the frontmost application, or the session is known to
+    /// be off the console with no frontmost application to judge by. Covers a lock screen or authorization dialog whose client does not
+    /// identify itself. Unverified on a live lock screen: "CGSSessionScreenIsLocked" is
+    /// an undocumented key (absent while unlocked), and whether loginwindow or
+    /// SecurityAgent is reported as frontmost there has not been observed.
+    private var bubbleAllowed: Bool {
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return SecureContextPolicy.allowsBubble(
+            frontmostBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            screenLocked: session?["CGSSessionScreenIsLocked"] as? Bool ?? false,
+            onConsole: session?[kCGSessionOnConsoleKey as String] as? Bool ?? true)
+    }
+
+    /// Says why Chinese input is paused while keys pass through untouched. Placed where
+    /// the panel last was if that is on the pointer's screen, else at the pointer: the
+    /// client is not asked for the cursor. The panel never takes focus.
+    func showSecureInputHint(for decision: SecureContextPolicy.Decision) {
+        guard bubbleAllowed else { return }
+        statusHideTask?.cancel()
+        let pointer = NSEvent.mouseLocation
+        let anchor = panel.wasLastShown(onScreenContaining: pointer)
+            ? NSRect.zero : NSRect(origin: pointer, size: NSSize(width: 1, height: 1))
+        // Secure Event Input is a fact; an unidentified app is only treated like it.
+        let text = decision == .unknownClient ? "无法识别当前应用，中文已暂停" : "安全输入中，中文已暂停"
+        panel.show(PanelState(status: text), at: anchor)
+        statusHideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard !Task.isCancelled, let self else { return }
+            self.panel.hide()
+        }
+    }
 
     private var deployNoticeGeneration = -1
 

@@ -35,12 +35,76 @@ final class RimeLingoInputController: IMKInputController {
     /// Text of the latest commit (see `commitForAction`).
     private var lastCommitted = ""
     private var draftTimer: Task<Void, Never>?
+    /// At most one "Chinese input is paused" hint per activation.
+    private var secureHint = SecureInputHint()
+    /// A composition was dropped in a secure context without a librime call; the
+    /// session is cleared before it is used again (see `clearDiscardedComposition`).
+    private var compositionDiscarded = false
+    /// This activation began in a secure context and its setup has not run yet; it runs
+    /// on the first key handled in an eligible context (see `finishActivation`).
+    private var activationDeferred = false
     /// Page depth and symbol category last drawn, to pick the menu's transition direction.
     var menuShown: (depth: Int, category: Int) = (0, 0)
 
     private var engine: InputEngine { InputEngine.shared }
     private var textClient: (any IMKTextInput)? { client() as? any IMKTextInput }
     var ownsPanel: Bool { engine.activeController === self }
+
+    // MARK: - Secure context
+
+    /// Whether this context is secure right now: lock screen, login window, system
+    /// authorization dialogs, any field while Secure Event Input is on, or a client that
+    /// does not identify itself. Sampled at every call and never cached; only the
+    /// client's identity is asked for, never anything in the field.
+    func secureContext(client: (any IMKTextInput)? = nil) -> SecureContextPolicy.Decision {
+        SecureContextPolicy.decision(bundleID: (client ?? textClient)?.bundleIdentifier(),
+                                     secureEventInput: IsSecureEventInputEnabled())
+    }
+
+    /// True in a secure context, after dropping everything pending here. Asked right
+    /// before each client read or write, panel show and engine-initiated librime call.
+    func blockedBySecureContext(client: (any IMKTextInput)? = nil) -> Bool {
+        guard secureContext(client: client).isSecure else { return false }
+        discardPendingState()
+        return true
+    }
+
+    /// Drops the composition, draft, quick menu, hold and action state of this field
+    /// without committing any of it. State only: no client call, no librime call.
+    private func discardPendingState() {
+        let showedPanel = isComposing || !draft.isEmpty || quickMenu != nil || polish != nil || menuHold.isArmed
+        draftTimer?.cancel()
+        _ = draft.take()
+        recentText.reset()
+        lastCommitted = ""
+        menuHold.cancel()
+        quickMenu = nil
+        polish?.task?.cancel()
+        polish = nil
+        isComposing = false
+        // The client is not asked to clear its marked text here, and may drop it on its
+        // own; an empty setMarkedText sent later could replace a selection instead.
+        hasMarkedText = false
+        // Whatever librime holds or produces from here on (a key may already be in it
+        // when the context turns secure mid-event) is dropped before the session is used.
+        if session != nil { compositionDiscarded = true }
+        if showedPanel, ownsPanel { engine.panel.hide() }
+    }
+
+    /// Back in an eligible context: librime forgets the composition dropped meanwhile,
+    /// any text it had committed but not handed over, and its modifier-tap latch, so
+    /// nothing from before is resumed, committed or replayed.
+    private func clearDiscardedComposition() {
+        guard compositionDiscarded else { return }
+        compositionDiscarded = false
+        guard let session = liveSession else { return }
+        session.clearComposition()
+        _ = session.consumeCommit()
+        session.cancelModifierTap()
+        // Settings changed meanwhile were not applied to this session.
+        applyScriptOption()
+        applyPunctOption()
+    }
 
     // MARK: - Session
 
@@ -69,6 +133,7 @@ final class RimeLingoInputController: IMKInputController {
 
     /// Commits whatever is being composed before the engine drops all sessions.
     func flushBeforeEngineRestart() {
+        guard !blockedBySecureContext() else { return }
         if let session = liveSession, isComposing {
             session.commitComposition()
             sync(client: textClient)
@@ -152,13 +217,40 @@ final class RimeLingoInputController: IMKInputController {
         // hide it, so a quick menu opened there stayed on screen over the new app.
         if let previous = engine.activeController, previous !== self { previous.yieldPanel() }
         engine.activeController = self
-        engine.refreshTheme()
+        secureHint.activated()
+        // A secure context gets no session, no Chinese/English state and no theme work,
+        // and nothing pending in this controller survives into it.
+        let context = secureContext(client: client)
+        if context.isSecure {
+            // The reason only (a case name): which kind of context paused input.
+            DebugLog.write("activate secure context reason=\(context)")
+            bundleID = client?.bundleIdentifier()
+            discardPendingState()
+            engine.panel.hide()
+            // Modifier state is kept current (see `handle`) so the first modifier event
+            // after the context turns eligible is compared against the truth.
+            snapshotModifiers()
+            activationDeferred = true
+            return
+        }
+        activationDeferred = false
         bundleID = client?.bundleIdentifier()
-        appOptions = engine.appOptions(for: bundleID)
-        // One snapshot for both views so a flag flip between reads can't desync them.
+        snapshotModifiers()
+        finishActivation()
+    }
+
+    /// One snapshot for both views so a flag flip between reads can't desync them.
+    private func snapshotModifiers() {
         let currentFlags = NSEvent.modifierFlags
         lastModifiers = currentFlags.intersection(.deviceIndependentFlagsMask)
         lastDeviceFlags = currentFlags.rawValue
+    }
+
+    /// The part of an activation that touches the session and shared state. Runs at
+    /// activation, or at the first eligible key when the activation was in a secure context.
+    private func finishActivation() {
+        engine.refreshTheme()
+        appOptions = engine.appOptions(for: bundleID)
         // Nothing here may call back into the client: it is blocked until activateServer
         // returns. A reused session may be stale if another window of the same app
         // switched Chinese/English meanwhile, so re-apply the remembered state.
@@ -167,6 +259,7 @@ final class RimeLingoInputController: IMKInputController {
         let reset = engine.consumeReturnReset()
         if reset { engine.asciiState.record(false, app: bundleID, appDefault: appOptions.asciiMode) }
         if ensureSession() != nil {
+            clearDiscardedComposition()
             applyAppOptions(newSession: false)
             applyPunctOption()
             if reset, let session = liveSession, session.option("ascii_mode") {
@@ -191,10 +284,17 @@ final class RimeLingoInputController: IMKInputController {
         nonisolated(unsafe) let this = self, client = sender as? any IMKTextInput
         MainActor.assumeIsolated {
             DebugLog.write("deactivate app=\(this.bundleID ?? "?")")
-            this.undoCapsLockSourceSwitch()
-            this.rememberAsciiMode()
+            // Leaving a secure context: its Chinese/English state is not recorded and
+            // nothing is committed (`commitPending` checks again before it writes).
+            // The same holds when the activation never left its deferred state: the
+            // session was never brought in line with the shared state.
+            if !this.blockedBySecureContext(client: client), !this.activationDeferred {
+                this.undoCapsLockSourceSwitch()
+                this.rememberAsciiMode()
+                this.liveSession?.cancelModifierTap()
+            }
+            this.activationDeferred = false
             this.menuHold.cancel()
-            this.liveSession?.cancelModifierTap()
             this.recentText.reset()
             this.lastModifiers = []
             this.lastDeviceFlags = 0
@@ -225,6 +325,7 @@ final class RimeLingoInputController: IMKInputController {
     }
 
     private func commitPending(_ client: (any IMKTextInput)?) {
+        guard !blockedBySecureContext(client: client) else { return }
         if let session = liveSession, isComposing {
             if engine.commitCodeOnLeave {
                 // Switching input source or clicking away: the keys typed stay as typed (#20).
@@ -267,6 +368,29 @@ final class RimeLingoInputController: IMKInputController {
     }
 
     private func handle(_ event: NSEvent, client: (any IMKTextInput)?) -> Bool {
+        // Secure context: every key passes through untouched. Nothing else happens —
+        // no session, no librime call, no state change, no logging of the event.
+        let context = secureContext(client: client)
+        if context.isSecure {
+            discardPendingState()
+            // Memory only: which modifiers are down, so the comparison below is not
+            // against stale flags once the context is eligible again.
+            if event.type == .flagsChanged {
+                lastModifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                lastDeviceFlags = event.modifierFlags.rawValue
+            }
+            if event.type == .keyDown { engine.lastSecureKeyAt = Date() }
+            if event.type == .keyDown, secureHint.shouldShow(for: context) { engine.showSecureInputHint(for: context) }
+            return false
+        }
+        if activationDeferred {
+            // Activated in a secure context that has since ended, with no new activation:
+            // the setup skipped then runs now. The modifier snapshot is not retaken; it
+            // would already include this event and make it look like a repeat.
+            activationDeferred = false
+            bundleID = client?.bundleIdentifier() ?? bundleID
+            finishActivation()
+        }
         // Event type and session state only — never the characters typed.
         engine.activeController = self
         guard let session = ensureSession() else {
@@ -276,6 +400,7 @@ final class RimeLingoInputController: IMKInputController {
             return false
         }
         engine.activeController = self
+        clearDiscardedComposition()
         var handled = false
 
         switch event.type {
@@ -361,10 +486,13 @@ final class RimeLingoInputController: IMKInputController {
                 if let typed, draftLayerActive, !draft.isEmpty || DraftBuffer.opensDraft(typed) {
                     appendToDraft(typed, client: client)
                     sync(client: client)
+                    guard !blockedBySecureContext(client: client) else { return false }
                     rememberAsciiMode()
                     return true
                 }
                 if let typed, committedFirst {
+                    // Secure by now: the key goes to the app as it is.
+                    guard !blockedBySecureContext(client: client) else { return false }
                     client?.insertText(typed, replacementRange: NSRange(location: NSNotFound, length: 0))
                     hasMarkedText = false
                     recentText.append(typed)
@@ -428,6 +556,9 @@ final class RimeLingoInputController: IMKInputController {
         }
 
         sync(client: client)
+        // The context turned secure while this event was being handled: the key passes
+        // through and no Chinese/English state is recorded.
+        guard !blockedBySecureContext(client: client) else { return false }
         rememberAsciiMode()
         return handled
     }
@@ -464,6 +595,10 @@ final class RimeLingoInputController: IMKInputController {
     /// After a short status (中 / 英…) the panel goes back to what it showed: the draft
     /// hint while a draft is pending, nothing otherwise.
     func restorePanelAfterStatus() {
+        if blockedBySecureContext() {
+            if ownsPanel { engine.panel.hide() }
+            return
+        }
         guard ownsPanel, !isComposing else { return }
         if !draft.isEmpty, quickMenu == nil, polish == nil {
             engine.panel.show(draftHint, at: cursorRect(client: textClient))
@@ -481,6 +616,7 @@ final class RimeLingoInputController: IMKInputController {
     }
 
     private func appendToDraft(_ text: String, client: (any IMKTextInput)?) {
+        guard !blockedBySecureContext(client: client) else { return }
         if let overflow = draft.append(text) {
             // Too long for one marked run: the older part goes into the app.
             client?.insertText(overflow, replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -491,6 +627,8 @@ final class RimeLingoInputController: IMKInputController {
 
     /// Puts the draft into the app (replacing the marked text that showed it).
     func flushDraft(client: (any IMKTextInput)?) {
+        // Also the auto-commit timer's path: the context is judged when it fires.
+        guard !blockedBySecureContext(client: client) else { return }
         draftTimer?.cancel()
         guard !draft.isEmpty else { return }
         let text = draft.take()
@@ -518,7 +656,7 @@ final class RimeLingoInputController: IMKInputController {
     /// Menu text replaces unconfirmed composition, after preserving an existing draft.
     /// Both continuous and closing insertions must leave no old preedit to restore.
     func insertMenuText(_ text: String, client: (any IMKTextInput)?) {
-        guard let client = client ?? textClient else { return }
+        guard let client = client ?? textClient, !blockedBySecureContext(client: client) else { return }
         if isComposing { liveSession?.clearComposition() }
         isComposing = false
         flushDraft(client: client)
@@ -548,6 +686,7 @@ final class RimeLingoInputController: IMKInputController {
     }
 
     private func clearMarkedText(_ client: (any IMKTextInput)?) {
+        guard !blockedBySecureContext(client: client) else { return }
         client?.setMarkedText("", selectionRange: NSRange(location: 0, length: 0),
                               replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = false
@@ -556,6 +695,8 @@ final class RimeLingoInputController: IMKInputController {
     }
 
     func sync(client: (any IMKTextInput)?, commitToDraft: Bool = false) {
+        guard !blockedBySecureContext(client: client) else { return }
+        clearDiscardedComposition()
         guard let session = liveSession, let client else { return }
 
         if let text = session.consumeCommit() {
@@ -659,13 +800,13 @@ final class RimeLingoInputController: IMKInputController {
     }
 
     private func select(_ index: Int) {
-        guard let session = liveSession else { return }
+        guard !blockedBySecureContext(), let session = liveSession else { return }
         session.selectCandidate(onCurrentPage: index)
         sync(client: textClient)
     }
 
     private func page(backward: Bool) {
-        guard let session = liveSession else { return }
+        guard !blockedBySecureContext(), let session = liveSession else { return }
         session.changePage(backward: backward)
         sync(client: textClient)
     }

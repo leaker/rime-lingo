@@ -16,6 +16,13 @@ public final class CandidatePanel {
     private let effect = NSVisualEffectView()
     private let signposter = OSSignposter(subsystem: "io.github.leaker.rimelingo", category: "panel")
     private var lastCursorRect: NSRect = .zero
+    /// Whether the place the panel last had (reused when showing at `.zero`) is on the
+    /// screen that contains `point`. False if it was never placed.
+    public func wasLastShown(onScreenContaining point: NSPoint) -> Bool {
+        guard lastCursorRect != .zero,
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) else { return false }
+        return screen.frame.contains(lastCursorRect.origin)
+    }
     private let container = NSView()
     /// Rounded background + shadow.
     private let background = CALayer()

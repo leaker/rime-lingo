@@ -15,11 +15,14 @@ extension RimeLingoInputController {
     /// Starts the hold timer; when the modifier is still held on its own afterwards, the
     /// menu opens (or closes, if it is already open).
     func scheduleMenuHold(token: Int) {
+        guard !blockedBySecureContext() else { return }
         // While the key is held a ring fills around the RimeLingo button: the menu grows from there.
         if quickMenu == nil { InputEngine.shared.panel.showHoldCue(duration: ModifierHold.duration) }
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(ModifierHold.duration))
             guard let self, InputEngine.shared.activeController === self else { return }
+            // The hold may end in a secure context: no menu there.
+            guard !self.blockedBySecureContext() else { return }
             guard self.menuHold.fire(token: token) else {
                 if !self.menuHold.isArmed { InputEngine.shared.panel.hideHoldCue(animated: true) }
                 return
@@ -32,6 +35,7 @@ extension RimeLingoInputController {
 
     /// Gathers what the menu can offer (a few small local files) and shows the root page.
     func openMenu(client: (any IMKTextInput)?, page: QuickMenu.PageID? = nil) {
+        guard !blockedBySecureContext(client: client) else { return }
         let engine = InputEngine.shared
         let paths = engine.paths
         let store = SettingsStore(paths: paths)
@@ -75,7 +79,7 @@ extension RimeLingoInputController {
     /// Draws the current page. Without an explicit transition the direction is derived
     /// from how the page stack changed: deeper pushes, shallower pops, a new category fades.
     private func showMenu(client: (any IMKTextInput)?, transition explicit: CandidatePanel.Transition? = nil) {
-        guard let menu = quickMenu else { return }
+        guard !blockedBySecureContext(client: client), let menu = quickMenu else { return }
         let page = menu.page
         let depth = menu.stack.count, category = page.board?.category ?? 0
         let transition: CandidatePanel.Transition = explicit
@@ -164,6 +168,8 @@ extension RimeLingoInputController {
     @discardableResult
     private func perform(_ outcome: QuickMenu.Outcome, client: (any IMKTextInput)?) -> Bool {
         let client = menuClient(client)
+        // Panel clicks arrive here long after the menu was drawn.
+        guard !blockedBySecureContext(client: client) else { return false }
         switch outcome {
         case .show:
             showMenu(client: client)
