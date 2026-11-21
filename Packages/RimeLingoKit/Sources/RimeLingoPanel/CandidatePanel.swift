@@ -55,6 +55,13 @@ public final class CandidatePanel {
 
     public var isVisible: Bool { window.isVisible }
 
+    /// The content rectangle (without the shadow margin) in screen coordinates while the
+    /// panel is visible, so other panels can keep clear of it.
+    public var occupiedFrame: NSRect? {
+        guard window.isVisible, contentFrame != .zero else { return nil }
+        return contentFrame.offsetBy(dx: window.frame.minX, dy: window.frame.minY)
+    }
+
     public init() {
         window = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
         window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.cursorWindow)) - 1)
