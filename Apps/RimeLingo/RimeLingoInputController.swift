@@ -383,6 +383,18 @@ final class RimeLingoInputController: IMKInputController {
             if event.type == .keyDown, secureHint.shouldShow(for: context) { engine.showSecureInputHint(for: context) }
             return false
         }
+        // TEMPORARY — Phase 2 probe (RimeLingoInputController+Probe.swift), to be replaced
+        // by real shortcut dispatch. Reached only once the secure-context gate has passed.
+        if let key = probeKey(for: event) {
+            engine.activeController = self
+            if menuHold.isArmed { engine.panel.hideHoldCue(animated: true) }
+            menuHold.keyPressed()
+            // Swallow key repeats without probing again. Clear the modifier-tap latch
+            // like the normal keyDown path, so releasing the modifiers is not read as a
+            // Chinese/ASCII switch. A secure context that begins mid-event passes through.
+            liveSession?.cancelModifierTap()
+            return event.isARepeat ? true : runSelectionProbe(key: key, client: client)
+        }
         if activationDeferred {
             // Activated in a secure context that has since ended, with no new activation:
             // the setup skipped then runs now. The modifier snapshot is not retaken; it
