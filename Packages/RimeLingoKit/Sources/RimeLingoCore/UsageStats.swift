@@ -34,6 +34,8 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
     /// English punctuation by default (librime's `ascii_punct` switch). The state is
     /// shared by all apps: ⌃⇧3 in one app switches the others too (#10).
     public var asciiPunct = false
+    /// Live translation shortcuts; on by default in this build.
+    public var liveTranslation = true
 
     public struct AIAction: Sendable, Codable, Equatable, Identifiable {
         public var id: UUID
@@ -66,6 +68,7 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
         draftAutoCommit = try container.decodeIfPresent(Int.self, forKey: .draftAutoCommit) ?? defaults.draftAutoCommit
         traditional = try container.decodeIfPresent(Bool.self, forKey: .traditional) ?? defaults.traditional
         asciiPunct = try container.decodeIfPresent(Bool.self, forKey: .asciiPunct) ?? defaults.asciiPunct
+        liveTranslation = try container.decodeIfPresent(Bool.self, forKey: .liveTranslation) ?? defaults.liveTranslation
     }
 
     public static let changedNotification = Notification.Name("io.github.leaker.rimelingo.features")

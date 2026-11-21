@@ -21,6 +21,17 @@ struct UsageStatsTests {
         #expect(try decoder.decode(RimeLingoFeatures.self, from: JSONEncoder().encode(features)).asciiPunct == true)
     }
 
+    /// Live translation is on in this build, also for features.json files written before it existed.
+    @Test func liveTranslationDefaultsOnAndRoundTrips() throws {
+        let decoder = JSONDecoder()
+        #expect(RimeLingoFeatures().liveTranslation)
+        #expect(try decoder.decode(RimeLingoFeatures.self, from: Data(#"{"usageStats":true}"#.utf8)).liveTranslation)
+        #expect(try decoder.decode(RimeLingoFeatures.self, from: Data(#"{"liveTranslation":false}"#.utf8)).liveTranslation == false)
+        var features = RimeLingoFeatures()
+        features.liveTranslation = false
+        #expect(try decoder.decode(RimeLingoFeatures.self, from: JSONEncoder().encode(features)).liveTranslation == false)
+    }
+
     @Test func countsOnlyShortChineseWords() {
         #expect(UsageStatsStore.isCountable("智能体"))
         #expect(!UsageStatsStore.isCountable("我"))
