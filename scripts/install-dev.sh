@@ -17,6 +17,9 @@ echo "==> installing to $DEST"
 MODE=--enable; [[ -d "$DEST/RimeLingo.app" ]] || MODE=--install
 mkdir -p "$DEST/RimeLingo.app"
 rsync -a --delete "$ROOT/build/Release/RimeLingo.app/" "$DEST/RimeLingo.app/"
+# rsync -a keeps the build directory's old modification time on the bundle. The system's
+# input source cache is refreshed when the bundle looks newer, so mark it as changed.
+touch "$DEST/RimeLingo.app/Contents/Info.plist" "$DEST/RimeLingo.app/Contents" "$DEST/RimeLingo.app" "$DEST"
 # Make the installed copy the one LaunchServices resolves for the bundle id, so the
 # system can start it on demand (see the note at the end of build-app.sh).
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
