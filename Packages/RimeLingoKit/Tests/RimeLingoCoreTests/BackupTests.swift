@@ -24,6 +24,9 @@ struct BackupTests {
             ("rimelingo/cache/big.bin", "cache"),
             ("custom_phrase_double.txt", "灵译输入法\tam\n"),
             ("my.schema.yaml", "schema: {}\n"),
+            ("pinyin.yaml", "abbreviation: []\n"),
+            ("essay.txt", "啊\t1\n"),
+            ("installation.yaml", "installation_id: x\n"),
             ("my_dicts/words.dict.yaml", "---\n"),
             ("lua/helper.lua", "-- lua\n"),
             ("default.custom.yaml", "# composed by RimeLingo\n"),
@@ -43,7 +46,10 @@ struct BackupTests {
         #expect(included.isSuperset(of: ["rime/rimelingo/generated/default.yaml", "rime/rimelingo/imported/default.custom.yaml",
                                           "rime/rimelingo/features.json", "rime/rimelingo/snippets.json", "rime/custom_phrase_double.txt",
                                           "rime/my.schema.yaml", "rime/my_dicts/words.dict.yaml", "rime/lua/helper.lua",
-                                          "rime/sync/dev-1/rime_ice.userdb.txt"]))
+                                          "rime/sync/dev-1/rime_ice.userdb.txt",
+                                          // Plain configs and vocabulary that copied schemas include.
+                                          "rime/pinyin.yaml", "rime/essay.txt"]))
+        #expect(!included.contains("rime/installation.yaml"))
         // Rebuilt, shipped or live data stays out.
         #expect(!included.contains { $0.contains("cache") || $0.contains("build/") || $0.contains("cn_dicts") || $0.contains(".userdb/") })
         #expect(!included.contains("rime/default.custom.yaml"))

@@ -287,8 +287,10 @@ public struct BackupManager: Sendable {
     // MARK: - Helpers
 
     static func isRootFile(_ name: String) -> Bool {
-        name.hasSuffix(".schema.yaml") || name.hasSuffix(".dict.yaml") || name.hasSuffix(".lua")
-            || name.hasSuffix(".txt") && name.contains("custom_phrase")
+        // Plain configs (`pinyin.yaml`, `symbols.yaml`) and the preset vocabulary are what
+        // schemas include; composed `*.custom.yaml` and per-installation files are not kept.
+        name.hasSuffix(".yaml") && !name.hasSuffix(".custom.yaml") && !["installation.yaml", "user.yaml"].contains(name)
+            || name.hasSuffix(".lua") || name.hasSuffix(".txt") && (name.contains("custom_phrase") || name.hasPrefix("essay"))
     }
 
     static func isAllowedFile(_ relative: String) -> Bool {
