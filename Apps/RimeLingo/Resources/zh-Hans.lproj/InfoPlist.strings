@@ -1,4 +1,4 @@
-"io.github.leaker.inputmethod.rimelingo.hans" = "RimeLingo";
-"io.github.leaker.inputmethod.rimelingo" = "RimeLingo";
-CFBundleName = "RimeLingo";
-CFBundleDisplayName = "RimeLingo";
+"io.github.leaker.inputmethod.rimelingo.hans" = "灵译输入法";
+"io.github.leaker.inputmethod.rimelingo" = "灵译输入法";
+CFBundleName = "灵译输入法";
+CFBundleDisplayName = "灵译输入法";

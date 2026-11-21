@@ -17,7 +17,7 @@ import Testing
         preedit: "ai me",
         preeditSelection: NSRange(location: 0, length: 5),
         candidates: [
-            .init(label: "1", text: "RimeLingo", comment: "输入法"),
+            .init(label: "1", text: "灵译", comment: "输入法"),
             .init(label: "2", text: "爱么"),
             .init(label: "3", text: "爱"),
             .init(label: "4", text: "哎么", comment: "叹词"),

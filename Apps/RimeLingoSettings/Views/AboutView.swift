@@ -24,7 +24,7 @@ struct AboutView: View {
             .frame(maxWidth: 560, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .navigationTitle("关于 RimeLingo")
+        .navigationTitle("关于灵译输入法")
     }
 
     private var brand: some View {
@@ -33,7 +33,7 @@ struct AboutView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 240, height: 89)
-                .accessibilityLabel("RimeLingo")
+                .accessibilityLabel("RimeLingo 灵译输入法")
             Text("中文常新，自在表达。")
                 .font(.title3)
                 .foregroundStyle(Theme.text)

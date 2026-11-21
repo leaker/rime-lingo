@@ -267,7 +267,7 @@
       "id": "ascii_state.reset_on_return",
       "group": "switching",
       "title": "从其他输入法切回时用中文",
-      "description": "从 ABC 等其他输入法切回 RimeLingo 时，总是回到中文输入；只切换应用不受影响。",
+      "description": "从 ABC 等其他输入法切回灵译时，总是回到中文输入；只切换应用不受影响。",
       "file": "frontend",
       "keypath": "ascii_state/reset_on_return",
       "type": "bool",

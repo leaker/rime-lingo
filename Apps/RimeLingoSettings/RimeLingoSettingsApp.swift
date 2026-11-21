@@ -21,7 +21,7 @@ struct RimeLingoSettingsApp: App {
     }
 
     var body: some Scene {
-        Window("RimeLingo 设置", id: "main") {
+        Window("灵译输入法设置", id: "main") {
             // The settings layout needs 900 × 620; onboarding sizes the window per step.
             RootView(selection: $selection)
                 .environment(model)
@@ -49,7 +49,7 @@ private struct AboutCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
-            Button("关于 RimeLingo") {
+            Button("关于灵译输入法") {
                 selection = .about
                 openWindow(id: "main")
                 NSApp.activate()

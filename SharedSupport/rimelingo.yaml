@@ -79,7 +79,7 @@ app_options:
 preset_color_schemes:
   # Neutral surfaces with the vermilion selection (paper-yellow panels read as dated).
   rimelingo_light:
-    name: "RimeLingo · 浅色"
+    name: "灵译 · 浅色"
     author: RimeLingo
     color_format: argb
     back_color: 0xF5FCFCFB
@@ -96,7 +96,7 @@ preset_color_schemes:
     hilited_comment_text_color: 0xE6FFFFFF
     hilited_candidate_label_color: 0xE6FFFFFF
   rimelingo_dark:
-    name: "RimeLingo · 深色"
+    name: "灵译 · 深色"
     author: RimeLingo
     color_format: argb
     back_color: 0xF21E1E20

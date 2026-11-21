@@ -22,7 +22,7 @@ struct BackupTests {
             ("rimelingo/features.json", "{\"usageStats\":true}"),
             ("rimelingo/snippets.json", "{\"categories\":[]}"),
             ("rimelingo/cache/big.bin", "cache"),
-            ("custom_phrase_double.txt", "RimeLingo\tam\n"),
+            ("custom_phrase_double.txt", "灵译输入法\tam\n"),
             ("my.schema.yaml", "schema: {}\n"),
             ("my_dicts/words.dict.yaml", "---\n"),
             ("lua/helper.lua", "-- lua\n"),

@@ -81,8 +81,8 @@ struct RootView: View {
                         .resizable().frame(width: 32, height: 32)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("RimeLingo").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
-                        Text("设置").font(.caption2).foregroundStyle(Theme.secondaryText)
+                        Text("灵译输入法").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.text)
+                        Text("RimeLingo · 设置").font(.caption2).foregroundStyle(Theme.secondaryText)
                     }
                 }
                 .padding(.vertical, 6)
