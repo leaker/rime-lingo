@@ -1,3 +1,4 @@
+import RimeLingoAI
 import RimeLingoCore
 import RimeLingoPanel
 import AppKit
@@ -17,8 +18,18 @@ final class InputEngine {
     static let progressNotification = Notification.Name("io.github.leaker.rimelingo.deploy.progress")
 
     let panel = CandidatePanel()
-    /// Live translation preview: a second panel that never takes focus.
+    /// Translation preview: a second panel that never takes focus. Shared by live
+    /// translation input and selected-text translation; an open selection preview owns it
+    /// (see InputEngine+SelectionTranslation.swift).
     let previewPanel = TranslationPreviewPanel()
+    /// Selected-text translation. Kept here and not in a controller: its preview stays
+    /// readable after the field it was captured in lost the keyboard.
+    let selection = SelectionTranslationCoordinator(translate: { request in
+        let features = await MainActor.run { InputEngine.shared.features }
+        return await LiveTranslator.translate(request, features: features)
+    })
+    /// Where the selection preview is anchored: the captured range, in screen coordinates.
+    var selectionAnchor = NSRect.zero
     /// Opt-in local word statistics (高频词); off unless enabled in Settings.
     let usage = UsageRecorder()
     /// rimelingo/features.json, reloaded when Settings posts `RimeLingoFeatures.changedNotification`.
@@ -108,6 +119,7 @@ final class InputEngine {
     // MARK: - Lifecycle
 
     func start() {
+        setUpSelectionTranslation()
         let fm = FileManager.default
         try? fm.createDirectory(at: paths.userDataDir, withIntermediateDirectories: true)
         try? fm.createDirectory(at: paths.logDir, withIntermediateDirectories: true)
@@ -192,7 +204,10 @@ final class InputEngine {
         usage.isEnabled = features.usageStats
         if !features.aiPolish { activeController?.cancelPolish() }
         // Switched off mid-session: the source goes into the app and the session ends.
-        if !features.liveTranslation { activeController?.exitLive(client: nil) }
+        if !features.liveTranslation {
+            selection.end()
+            activeController?.exitLive(client: nil)
+        }
     }
 
     // MARK: - Subscribed vocabularies
@@ -456,6 +471,7 @@ final class InputEngine {
         activeController?.closeMenu() // or it stays open, invisible, and takes the next keys
         activeController?.flushBeforeEngineRestart()
         panel.hide()
+        selection.end()
         previewPanel.hide()
         let engine = RimeEngine.shared
         engine.cleanupAllSessions()
@@ -682,7 +698,7 @@ final class InputEngine {
     /// identify itself. Unverified on a live lock screen: "CGSSessionScreenIsLocked" is
     /// an undocumented key (absent while unlocked), and whether loginwindow or
     /// SecurityAgent is reported as frontmost there has not been observed.
-    private var bubbleAllowed: Bool {
+    var bubbleAllowed: Bool {
         let session = CGSessionCopyCurrentDictionary() as? [String: Any]
         return SecureContextPolicy.allowsBubble(
             frontmostBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,

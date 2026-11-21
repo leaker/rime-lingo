@@ -21,31 +21,30 @@ extension RimeLingoInputController {
         if enabled, blockedBySecureContext(client: client) { return false }
         // The menu and a running action own the keyboard; repeats never act twice.
         let menuOrActionOpen = quickMenu != nil || polish != nil
+        // The client is asked for its selection only when the shortcut can act on it.
+        let asksClient = enabled && !isRepeat && !menuOrActionOpen
+        let (selection, attached) = asksClient ? selectionState() : (.none, false)
         let dispatch = TranslationDispatch.decide(
             target: target, featureEnabled: enabled, isRepeat: isRepeat, menuOrActionOpen: menuOrActionOpen,
-            hasSelection: enabled && !isRepeat && !menuOrActionOpen && clientHasSelection(client),
-            sessionActive: live != nil)
+            selection: selection, selectionPreviewAttached: attached, sessionActive: live != nil)
         switch dispatch {
         case .ignore:
             return nil
         case .consume:
             break
-        case .selectionNotSupported:
-            liveEngine.showStatus("选中文本翻译尚未实现")
+        case let .captureSelection(target):
+            captureSelection(target)
+        case let .retargetSelection(target):
+            liveEngine.selection.targetPressed(target)
         case let .start(target):
+            // A selection preview left over from another field ends with a new translation.
+            liveEngine.closeSelectionPreview()
             startLive(target)
         case let .forward(target):
+            liveEngine.closeSelectionPreview()
             live?.targetPressed(target)
         }
         return true
-    }
-
-    /// Whether the client reports a non-empty selection. Only the range is read, never
-    /// the text. Our own marked text (draft or composition) is not a selection.
-    private func clientHasSelection(_ client: (any IMKTextInput)?) -> Bool {
-        guard !showsMarkedText, let client = client ?? liveTextClient else { return false }
-        let range = client.selectedRange()
-        return range.location != NSNotFound && range.length > 0
     }
 
     private var liveTextClient: (any IMKTextInput)? { client() as? (any IMKTextInput) }
@@ -60,15 +59,27 @@ extension RimeLingoInputController {
         })
         coordinator.onChange = { [weak self] snapshot in self?.renderLive(snapshot) }
         live = coordinator
+        installLivePanelControls()
+        DebugLog.write("live start target=\(target.rawValue)")
+        coordinator.start(target: target)
+        // A draft already pending is the first source.
+        draftDidChange()
+    }
+
+    private func installLivePanelControls() {
         let panel = liveEngine.previewPanel
         panel.onSubmit = { [weak self] in self?.livePanelAction(writesToClient: true) { $0.submitLive(client: nil) } }
         panel.onCopy = { [weak self] in self?.livePanelAction { $0.copyLive() } }
         panel.onExit = { [weak self] in self?.livePanelAction(writesToClient: true) { $0.exitLive(client: nil) } }
         panel.onRetry = { [weak self] in self?.livePanelAction { $0.live?.retry() } }
-        DebugLog.write("live start target=\(target.rawValue)")
-        coordinator.start(target: target)
-        // A draft already pending is the first source.
-        draftDidChange()
+    }
+
+    /// A selection preview closed: the session it covered takes the panel back and
+    /// shows where it stands now.
+    func resumeLivePreview() {
+        guard let live else { return }
+        installLivePanelControls()
+        renderLive(live.session?.snapshot)
     }
 
     /// Runs a preview panel control for the field that owns the panel, outside a secure context.
@@ -76,7 +87,7 @@ extension RimeLingoInputController {
     /// while the quick menu or an action on the draft is open: that action would otherwise
     /// put its own result into the app as well.
     private func livePanelAction(writesToClient: Bool = false, _ action: (RimeLingoInputController) -> Void) {
-        guard ownsPanel, live != nil, !blockedBySecureContext() else { return }
+        guard ownsPanel, live != nil, !liveEngine.selection.isActive, !blockedBySecureContext() else { return }
         // Ignored without a notice: the status bubble would replace the menu or result list.
         if writesToClient, quickMenu != nil || polish != nil { return }
         action(self)
@@ -90,7 +101,7 @@ extension RimeLingoInputController {
         ending.onChange = nil
         ending.end()
         DebugLog.write("live end")
-        if ownsPanel { liveEngine.previewPanel.hide() }
+        if ownsPanel, !liveEngine.selection.isActive { liveEngine.previewPanel.hide() }
     }
 
     /// Esc, the 退出 control, or the feature being switched off: the source text goes
@@ -110,6 +121,13 @@ extension RimeLingoInputController {
 
     /// The draft is the only source of a session.
     func draftDidChange() {
+        // A session with text to translate is no longer suspended under a selection
+        // preview: that preview closes first, so the translation is drawn before it can
+        // be submitted.
+        if liveEngine.selection.isActive, SelectionPreviewOwnership.yieldsToLiveSession(
+            liveSessionActive: live != nil, draftIsEmpty: draft.isEmpty) {
+            liveEngine.closeSelectionPreview()
+        }
         live?.sourceChanged(draft.text)
     }
 
@@ -119,7 +137,9 @@ extension RimeLingoInputController {
     /// is inserted and nothing else: no Return reaches the app.
     func submitLive(client: (any IMKTextInput)?) {
         guard let live, !blockedBySecureContext(client: client) else { return }
-        if let block = LiveSubmitBlock.check(isComposing: isComposing, hasValidTranslation: live.validTranslation != nil) {
+        if let block = LiveSubmitBlock.check(
+            isComposing: isComposing, hasValidTranslation: live.validTranslation != nil,
+            selectionPreviewOpen: liveEngine.selection.isActive) {
             return liveEngine.showStatus(block.message)
         }
         guard let text = live.validTranslation, let target = client ?? liveTextClient else { return }
@@ -140,6 +160,9 @@ extension RimeLingoInputController {
 
     private func renderLive(_ snapshot: LiveTranslationSnapshot?) {
         let panel = liveEngine.previewPanel
+        // An open selection preview owns the panel: the session goes on underneath and is
+        // drawn again when that preview closes (`resumeLivePreview`).
+        guard !liveEngine.selection.isActive else { return }
         guard let snapshot else {
             if ownsPanel { panel.hide() }
             return
@@ -165,7 +188,8 @@ extension RimeLingoInputController {
     /// After every sync: the preview follows the caret and keeps clear of the candidate panel.
     func repositionLivePreview(client: (any IMKTextInput)?) {
         let panel = liveEngine.previewPanel
-        guard live != nil, ownsPanel, panel.isVisible, !blockedBySecureContext(client: client) else { return }
+        guard live != nil, ownsPanel, panel.isVisible, !liveEngine.selection.isActive,
+              !blockedBySecureContext(client: client) else { return }
         panel.reposition(caret: cursorRect(client: client), avoiding: liveEngine.panel.occupiedFrame)
     }
 }

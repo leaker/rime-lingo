@@ -20,6 +20,8 @@ final class RimeLingoInputController: IMKInputController {
     private var hasMarkedText = false
     /// The client currently shows marked text of ours (a draft or a composition).
     var showsMarkedText: Bool { hasMarkedText }
+    /// A composition or a draft is pending here, whether or not the client shows it.
+    var hasPendingInput: Bool { hasMarkedText || isComposing || !draft.isEmpty }
     private(set) var isComposing = false
     /// Active ⌃⌥P rewrite of the selected text (see RimeLingoInputController+Polish.swift).
     var polish: PolishSession?
@@ -82,7 +84,9 @@ final class RimeLingoInputController: IMKInputController {
     private func discardPendingState() {
         let showedPanel = isComposing || !draft.isEmpty || quickMenu != nil || polish != nil || menuHold.isArmed
         // The session and its preview go without a write; late results are invalidated
-        // and nothing resumes once the context is eligible again.
+        // and nothing resumes once the context is eligible again. A selection preview
+        // goes too, whichever field it was captured in.
+        engine.selection.end()
         endLive()
         draftTimer?.cancel()
         _ = draft.take()
@@ -292,7 +296,9 @@ final class RimeLingoInputController: IMKInputController {
         polish = nil
         endLive()
         engine.panel.hide()
-        engine.previewPanel.hide()
+        // A selection preview stays for reading and copying; it can no longer replace.
+        detachSelectionPreview()
+        if !engine.selection.isActive { engine.previewPanel.hide() }
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
@@ -317,6 +323,7 @@ final class RimeLingoInputController: IMKInputController {
             this.cancelPolish()
             this.commitPending(client)
             this.endLive()
+            this.detachSelectionPreview()
             if this.ownsPanel { this.engine.panel.hide() }
             this.engine.usage.flush()
             if this.engine.activeController === this { this.engine.activeController = nil }
@@ -423,6 +430,8 @@ final class RimeLingoInputController: IMKInputController {
         }
         engine.activeController = self
         clearDiscardedComposition()
+        // The client of this field changed under a selection preview captured here.
+        if engine.selection.isActive, !selectionPreviewIsAttached { detachSelectionPreview() }
         var handled = false
 
         switch event.type {
@@ -456,6 +465,28 @@ final class RimeLingoInputController: IMKInputController {
                 else { engine.showStatus("没有可处理的文字：先打一段字，或选中一段文字") }
                 return true
             }
+            // A selection preview of this field takes ⌥↩ (replace the selection) and Esc
+            // (close) while nothing is composed or drafted; with something pending ⌥↩ is
+            // swallowed with a notice. Every other key, typing included, goes on as usual
+            // and the preview stays.
+            if quickMenu == nil, polish == nil, selectionPreviewIsAttached {
+                switch SelectionPreviewKey.decision(
+                    keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
+                    control: flags.contains(.control), shift: flags.contains(.shift),
+                    hasMarkedText: hasPendingInput) {
+                case .replace:
+                    engine.replaceSelectedText()
+                    return true
+                case .replaceBlocked:
+                    engine.showStatus(SelectionPreviewKey.pendingInputMessage)
+                    return true
+                case .close:
+                    engine.closeSelectionPreview()
+                    return true
+                case .none:
+                    break
+                }
+            }
             // A pending draft (nothing being composed): Return / Esc confirm it, ⌫ edits
             // it, navigation and shortcuts confirm it and then reach the app.
             // A live session takes ⌥↩ (submit the translation) and Esc (exit). ⌥↩ never
@@ -464,7 +495,8 @@ final class RimeLingoInputController: IMKInputController {
                 switch LiveSessionKey.decision(
                     keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
                     control: flags.contains(.control), shift: flags.contains(.shift),
-                    isComposing: isComposing, hasValidTranslation: live?.validTranslation != nil) {
+                    isComposing: isComposing, hasValidTranslation: live?.validTranslation != nil,
+                    selectionPreviewOpen: engine.selection.isActive) {
                 case .submit:
                     submitLive(client: client)
                     return true
