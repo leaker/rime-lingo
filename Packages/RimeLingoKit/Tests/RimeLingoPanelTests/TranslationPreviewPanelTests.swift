@@ -17,6 +17,38 @@ struct TranslationPreviewPanelTests {
 
     // MARK: - Positioning
 
+    @Test func anchorSkipsRectsTheClientDidNotPlace() {
+        let screens = [NSRect(x: 0, y: 0, width: 1440, height: 900), NSRect(x: 1440, y: 0, width: 1920, height: 1080)]
+        let pointer = NSPoint(x: 700, y: 300)
+        let placed = NSRect(x: 2000, y: 400, width: 80, height: 18)
+        let unplaced = [
+            NSRect.zero,
+            NSRect(x: 0, y: 0, width: 120, height: 18),          // at the screen origin
+            NSRect(x: -5000, y: -5000, width: 10, height: 10),   // off every screen
+            NSRect(x: CGFloat.infinity, y: 10, width: 1, height: 1),
+        ]
+        let found = Panel.anchor(candidates: unplaced + [placed], pointer: pointer, screens: screens)
+        #expect(found.rect == placed)
+        #expect(found.index == unplaced.count)
+    }
+
+    @Test func anchorFallsBackToThePointerNotAScreenCorner() {
+        let screens = [NSRect(x: 0, y: 0, width: 1440, height: 900)]
+        let pointer = NSPoint(x: 700, y: 300)
+        let found = Panel.anchor(candidates: [.zero, NSRect(x: 0, y: 0, width: 1, height: 18)], pointer: pointer, screens: screens)
+        #expect(found.rect == NSRect(origin: pointer, size: .zero))
+        #expect(found.index == nil)
+        // A panel anchored there sits just above the pointer, inside the screen.
+        let frame = Panel.frame(for: Self.size, caret: found.rect, avoiding: nil, visible: Self.visible)
+        #expect(frame.minX == pointer.x && frame.minY > pointer.y)
+    }
+
+    @Test func anchorPrefersTheFirstPlacedCandidate() {
+        let screens = [NSRect(x: 0, y: 0, width: 1440, height: 900)]
+        let first = NSRect(x: 100, y: 200, width: 50, height: 18), second = NSRect(x: 300, y: 400, width: 50, height: 18)
+        #expect(Panel.anchor(candidates: [first, second], pointer: .zero, screens: screens).index == 0)
+    }
+
     @Test func sitsAboveTheCaretByDefault() {
         let caret = NSRect(x: 400, y: 500, width: 1, height: 20)
         let frame = Panel.frame(for: Self.size, caret: caret, avoiding: nil, visible: Self.visible)

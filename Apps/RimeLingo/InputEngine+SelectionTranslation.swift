@@ -73,12 +73,29 @@ extension RimeLingoInputController {
         }
     }
 
-    /// Where the captured range is on screen; the caret when the client cannot say.
+    /// Where the captured range is on screen. Clients differ in which query they answer,
+    /// so several are tried in turn; the pointer is the last resort (never a screen corner).
     private func selectionRect(_ range: NSRange, client: any IMKTextInput) -> NSRect {
-        var actual = NSRange(location: NSNotFound, length: 0)
-        let rect = client.firstRect(forCharacterRange: range, actualRange: &actual)
-        // Some apps answer a range they cannot place with an empty rect at the screen origin.
-        return rect != .zero && rect.origin != .zero ? rect : cursorRect(client: client)
+        func firstRect(_ range: NSRange) -> NSRect {
+            var actual = NSRange(location: NSNotFound, length: 0)
+            return client.firstRect(forCharacterRange: range, actualRange: &actual)
+        }
+        func lineRect(_ index: Int) -> NSRect {
+            var rect = NSRect.zero
+            client.attributes(forCharacterIndex: index, lineHeightRectangle: &rect)
+            return rect
+        }
+        let candidates = [
+            firstRect(range),
+            firstRect(NSRange(location: range.location, length: 0)),
+            lineRect(range.location),
+            lineRect(max(range.location, NSMaxRange(range) - 1)),
+            cursorRect(client: client),
+        ]
+        let anchor = TranslationPreviewPanel.anchor(candidates: candidates, pointer: NSEvent.mouseLocation,
+                                                    screens: NSScreen.screens.map(\.frame))
+        DebugLog.write("selection anchor source=\(anchor.index.map(String.init) ?? "pointer")")
+        return anchor.rect
     }
 
     /// This field was deactivated, gave up the panels or lost its client: a preview

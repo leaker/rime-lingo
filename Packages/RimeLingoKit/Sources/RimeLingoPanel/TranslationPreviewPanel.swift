@@ -168,6 +168,21 @@ public final class TranslationPreviewPanel {
         return rect(min(max(above.minY, visible.minY), max(visible.minY, visible.maxY - size.height)))
     }
 
+    /// The first of `candidates` that a client really placed on a screen, with its index;
+    /// otherwise an empty rect at `pointer` with a nil index. Clients that cannot place a
+    /// range answer with an empty rect, a rect at the screen origin, or one off every
+    /// screen, and a panel anchored there lands in a corner far from the text. The pointer
+    /// is the best remaining guess: the selection was usually just made with it.
+    public nonisolated static func anchor(candidates: [NSRect], pointer: NSPoint, screens: [NSRect]) -> (rect: NSRect, index: Int?) {
+        func isPlaced(_ rect: NSRect) -> Bool {
+            guard rect != .zero, rect.origin != .zero else { return false }
+            guard [rect.minX, rect.minY, rect.width, rect.height].allSatisfy(\.isFinite) else { return false }
+            return screens.contains { $0.contains(rect.origin) || $0.intersects(rect) }
+        }
+        if let index = candidates.firstIndex(where: isPlaced) { return (candidates[index], index) }
+        return (NSRect(origin: pointer, size: .zero), nil)
+    }
+
     // MARK: - Internals
 
     /// The content view, for tests.
