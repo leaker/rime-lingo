@@ -10,13 +10,22 @@ DEST="$HOME/Library/Input Methods"
 bash "$ROOT/scripts/build-app.sh"
 
 echo "==> installing to $DEST"
-pkill -f "Input Methods/RimeLingo.app/Contents/MacOS/RimeLingo" 2>/dev/null || true
-mkdir -p "$DEST"
 # Update the bundle in place. Deleting and recreating it makes macOS drop the input
 # source from the menu until the next login.
 mkdir -p "$DEST/RimeLingo.app"
 rsync -a --delete "$ROOT/build/Release/RimeLingo.app/" "$DEST/RimeLingo.app/"
+# Make the installed copy the one LaunchServices resolves for the bundle id, so the
+# system can start it on demand (see the note at the end of build-app.sh).
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+[[ -x "$LSREGISTER" ]] && "$LSREGISTER" -f "$DEST/RimeLingo.app" >/dev/null 2>&1 || true
 "$DEST/RimeLingo.app/Contents/MacOS/RimeLingo" --install || true
+# Restart the running input method only now that the new files are in place, and bring
+# it straight back: applications with an open text field must not be left without one.
+RUNNING="Input Methods/RimeLingo.app/Contents/MacOS/RimeLingo"
+if pkill -f "$RUNNING" 2>/dev/null; then
+  for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$RUNNING" >/dev/null || break; /bin/sleep 0.1; done
+fi
+pgrep -f "$RUNNING" >/dev/null || open -g "$DEST/RimeLingo.app"
 # A copy installed by the .pkg (/Library) has the same bundle id: macOS may launch
 # either one and keeps showing cached icons. Development wants exactly one.
 if [[ -d "/Library/Input Methods/RimeLingo.app" ]]; then

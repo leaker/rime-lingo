@@ -69,4 +69,16 @@ sign --entitlements Apps/RimeLingo/RimeLingo.entitlements "$APP/Contents/Helpers
 sign --entitlements Apps/RimeLingoSettings/RimeLingoSettings.entitlements "$APP/Contents/Applications/RimeLingo Settings.app"
 sign --entitlements Apps/RimeLingo/RimeLingo.entitlements "$APP"
 codesign --verify --deep --strict "$APP"
+
+# Xcode registers every build product with LaunchServices. A build product that shares
+# the installed input method's bundle id then becomes the copy the system resolves, and
+# the input method launcher refuses it (LaunchInputMethod() status -50) because it is
+# not in an Input Methods directory: the installed input method can no longer be
+# started on demand. Keep the build products out of the LaunchServices database.
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+if [[ -x "$LSREGISTER" ]]; then
+  for product in "$BUILT/RimeLingo.app" "$BUILT/RimeLingo Settings.app" "$APP" "$APP/Contents/Applications/RimeLingo Settings.app"; do
+    "$LSREGISTER" -u "$product" >/dev/null 2>&1 || true
+  done
+fi
 echo "==> built $APP"
