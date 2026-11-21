@@ -34,6 +34,10 @@ if [[ -d "/Library/Input Methods/RimeLingo.app" ]]; then
   echo "         sudo rm -rf '/Library/Input Methods/RimeLingo.app' '/Applications/RimeLingo Settings.app'" >&2
 fi
 echo "note: installing an RimeLingo .pkg later moves this per-user copy to the Trash (#32)." >&2
-echo "==> done. If RimeLingo is not selectable yet, add it in System Settings › Keyboard ›"
-echo "    Input Sources (log out and back in once after the first install)."
+echo "==> done. After the FIRST install the system's input method launcher, which has been"
+echo "    running since login, cannot start RimeLingo on demand (LaunchInputMethod() status"
+echo "    -50): typing does nothing and applications may misbehave. Do one of these once:"
+echo "      killall imklaunchagent TextInputMenuAgent TextInputSwitcher"
+echo "    or log out and back in. If RimeLingo is still missing from the input menu, remove"
+echo "    and re-add it in System Settings › Keyboard › Input Sources."
 echo "    CLI: \"$DEST/RimeLingo.app/Contents/Helpers/rimelingo\" doctor"
