@@ -12,13 +12,15 @@ bash "$ROOT/scripts/build-app.sh"
 echo "==> installing to $DEST"
 # Update the bundle in place. Deleting and recreating it makes macOS drop the input
 # source from the menu until the next login.
+# A reinstall only re-enables the input source; it must not change which one is selected.
+MODE=--enable; [[ -d "$DEST/RimeLingo.app" ]] || MODE=--install
 mkdir -p "$DEST/RimeLingo.app"
 rsync -a --delete "$ROOT/build/Release/RimeLingo.app/" "$DEST/RimeLingo.app/"
 # Make the installed copy the one LaunchServices resolves for the bundle id, so the
 # system can start it on demand (see the note at the end of build-app.sh).
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 [[ -x "$LSREGISTER" ]] && "$LSREGISTER" -f "$DEST/RimeLingo.app" >/dev/null 2>&1 || true
-"$DEST/RimeLingo.app/Contents/MacOS/RimeLingo" --install || true
+"$DEST/RimeLingo.app/Contents/MacOS/RimeLingo" "$MODE" || true
 # Restart the running input method only now that the new files are in place, and bring
 # it straight back: applications with an open text field must not be left without one.
 RUNNING="Input Methods/RimeLingo.app/Contents/MacOS/RimeLingo"
