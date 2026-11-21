@@ -13,7 +13,7 @@ struct OverviewView: View {
         PaneColumn {
             VStack(alignment: .leading, spacing: 20) {
                 hero
-                if model.pendingUpdate != nil { UpdateCard() }
+                if model.reopenForVersion != nil { UpdateCard() }
                 statusGrid
                 importCard
                 quickLinks
@@ -74,7 +74,7 @@ struct OverviewView: View {
                 StatusCard(
                     title: "输入法",
                     value: !model.isInstalled ? "未安装" : state == .ready ? "已启用" : state == .needsRelogin ? "还差一步" : "已安装",
-                    detail: !model.isInstalled ? "运行 scripts/install-dev.sh 或安装 pkg"
+                    detail: !model.isInstalled ? "运行 scripts/install-dev.sh，或从发布页下载后手动安装"
                         : state == .ready ? "按 ⌃空格 切换到灵译输入法即可输入"
                         : state == .needsRelogin ? "注销或重启一次 Mac，灵译输入法才会出现在输入法列表里"
                         : "系统设置 › 键盘 › 输入法 中添加灵译输入法",
@@ -185,49 +185,30 @@ struct Tag: View {
     }
 }
 
-/// Shown on the overview when a newer release is available.
+/// Shown when the input method was updated underneath this running settings app.
 struct UpdateCard: View {
     @Environment(SettingsModel.self) private var model
 
     var body: some View {
-        if let release = model.pendingUpdate {
+        if let version = model.reopenForVersion {
             HStack(alignment: .center, spacing: 16) {
-                Image(systemName: "arrow.down.circle.fill").font(.title).foregroundStyle(Theme.accentText)
+                Image(systemName: "arrow.triangle.2.circlepath.circle.fill").font(.title).foregroundStyle(Theme.accentText)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("新版本 \(release.appVersion.description) 可以更新").font(.headline)
-                    Text(detail(release)).font(.callout).foregroundStyle(Theme.secondaryText)
-                    if let notes = release.notes, !notes.isEmpty {
-                        Text(notes).font(.callout).foregroundStyle(Theme.secondaryText).lineLimit(3)
-                    }
-                    if let progress = model.updateProgress {
-                        ProgressView(value: progress).frame(maxWidth: 260)
-                    } else if let notice = model.updateNotice {
-                        Text(notice).font(.caption).foregroundStyle(Theme.secondaryText)
-                    }
+                    Text("输入法已更新到 \(version)").font(.headline)
+                    Text("重新打开设置以使用新版本").font(.callout).foregroundStyle(Theme.secondaryText)
                 }
                 Spacer()
-                Button("跳过此版本") { model.skipUpdate() }
-                    .disabled(model.updateProgress != nil)
-                Button("下载并安装") { Task { await model.installUpdate() } }
+                Button("重新打开") { Task { await model.reopenSettings() } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(model.updateProgress != nil)
             }
             .padding(18)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Theme.accent.opacity(0.45)))
         }
     }
-
-    private func detail(_ release: AppRelease) -> String {
-        var parts = ["当前 \(model.currentVersion.description)"]
-        if let date = release.date { parts.append("发布于 \(date)") }
-        if let size = release.installer?.size { parts.append(String(format: "%.1f MB", Double(size) / 1_000_000)) }
-        parts.append("下载后校验 SHA-256 与开发者签名，再交给系统安装器")
-        return parts.joined(separator: " · ")
-    }
 }
 
-/// Version, automatic checking and a manual check, at the bottom of the overview.
+/// Version, automatic updates, their status and the manual controls, at the bottom of the overview.
 struct VersionFooter: View {
     @Environment(SettingsModel.self) private var model
 
@@ -241,13 +222,14 @@ struct VersionFooter: View {
                 HStack(spacing: 12) {
                     version
                     Spacer(minLength: 12)
-                    if model.updatesEnabled { updateControls }
+                    updateControls
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     version
-                    if model.updatesEnabled { HStack(spacing: 12) { updateControls } }
+                    HStack(spacing: 12) { updateControls }
                 }
             }
+            if let status { Text(status).font(.caption).foregroundStyle(Theme.secondaryText) }
             HStack(spacing: 12) {
                 Button("导出诊断信息…") { exportDiagnostics() }
                     .disabled(exporting)
@@ -260,30 +242,64 @@ struct VersionFooter: View {
     }
 
     private var version: some View {
-        HStack(spacing: 12) {
-            Text("灵译输入法 \(model.currentVersion.description)\(model.isDistributionBuild ? "" : " · 开发版")")
-                .font(.caption).foregroundStyle(Theme.secondaryText)
-            if let notice = model.updateNotice, model.pendingUpdate == nil {
-                Text(notice).font(.caption).foregroundStyle(Theme.secondaryText)
+        Text("灵译输入法 \(model.currentVersion.description)\(model.isDistributionBuild ? "" : " · 开发版")")
+            .font(.caption).foregroundStyle(Theme.secondaryText)
+            .fixedSize()
+    }
+
+    private var canUpdate: Bool {
+        if case .eligible = model.updateEligibility { return true }
+        return false
+    }
+
+    /// Why there are no controls, or what the updater is doing.
+    private var status: String? {
+        switch model.updateEligibility {
+        case nil: return nil
+        case .developmentBuild: return "开发版不会自动更新"
+        case .notConfigured: return model.isDistributionBuild ? "尚未配置更新签名" : "开发版不会自动更新"
+        case .unsupportedLocation: return "当前安装位置不可写，无法自动更新"
+        case .eligible: break
+        }
+        let state = model.updateState
+        var parts: [String] = []
+        if let last = state.lastCheck {
+            parts.append("上次检查：\(last.formatted(date: .abbreviated, time: .shortened))")
+        }
+        if let notice = model.updateNotice {
+            parts.append(notice)
+        } else if let failure = state.failure?.failure {
+            parts.append("更新失败：\(failure.errorDescription ?? failure.code)")
+        } else {
+            switch state.phase {
+            case .downloading:
+                let version = state.release?.version ?? ""
+                parts.append(state.progress.map { "正在下载 \(version)（\(Int($0 * 100))%）" } ?? "正在下载 \(version)")
+            case .ready: parts.append("\(state.release?.version ?? "新版本") 已就绪，空闲时自动安装")
+            case .installing: parts.append("正在安装…")
+            case .restartPending: parts.append("\(state.installed?.version ?? "新版本") 已安装，等待输入法重新启动")
+            case .idle, .failed: if state.lastCheck != nil { parts.append("已是最新版本") }
             }
         }
-        .fixedSize()
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     @ViewBuilder private var updateControls: some View {
-        Toggle("自动检查更新", isOn: Binding(get: { model.updateState.autoCheck }, set: { model.setAutoUpdate($0) }))
-            .toggleStyle(.checkbox).font(.caption)
-            .help("每天请求一次 updates.example.com 上公开的版本清单，不发送任何输入内容")
-        Toggle("接收测试版", isOn: Binding(get: { model.updateState.receiveBeta }, set: { model.setReceiveBeta($0) }))
-            .toggleStyle(.checkbox).font(.caption)
-            .help("开启后检查测试版与正式版；关闭后只检查正式版")
-        Button {
-            Task { await model.checkForUpdates(userInitiated: true) }
-        } label: {
-            if model.updateChecking { ProgressView().controlSize(.small) } else { Text("检查更新") }
+        if canUpdate {
+            Toggle("自动更新", isOn: Binding(get: { model.updateState.automaticUpdates }, set: { model.setAutoUpdate($0) }))
+                .toggleStyle(.checkbox).font(.caption)
+                .help("每天检查一次 GitHub 上公开的版本清单，在后台下载并在输入空闲时安装；不发送任何输入内容")
+            Button {
+                Task { await model.checkForUpdates() }
+            } label: {
+                if model.updateChecking { ProgressView().controlSize(.small) } else { Text("检查更新") }
+            }
+            .controlSize(.small)
+            .disabled(model.updateChecking)
+            Button("立即安装") { Task { await model.installUpdate() } }
+                .controlSize(.small)
+                .disabled(model.updateState.phase != .ready)
         }
-        .controlSize(.small)
-        .disabled(model.updateChecking)
     }
 
     private func exportDiagnostics() {

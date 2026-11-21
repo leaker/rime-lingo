@@ -10,7 +10,7 @@ enum Locations {
            FileManager.default.fileExists(atPath: embedding.appendingPathComponent("Contents/Helpers/rimelingo").path) {
             return embedding
         }
-        // With a leftover per-user copy next to the .pkg install, use the newer one (#32).
+        // With a per-user and a system-wide copy installed, use the newer one (#32).
         return RimeLingoInstallations().preferred?.url
     }
 

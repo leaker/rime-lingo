@@ -1010,9 +1010,7 @@ final class RimeLingoInputController: IMKInputController {
         // No key equivalent: input menu shortcuts are live in every app, so ⌘, here would
         // shadow each app's own Settings shortcut (#6).
         menu.addItem(item(String(localized: "灵译输入法设置…"), #selector(openSettings(_:))))
-        if let update = engine.pendingUpdate {
-            menu.addItem(item(String(localized: "更新到 \(update.version)…"), #selector(openUpdate(_:))))
-        }
+        if let title = UpdateService.shared.menuTitle { menu.addItem(item(title, #selector(openUpdate(_:)))) }
         menu.addItem(.separator())
         menu.addItem(item(String(localized: "重新部署"), #selector(deploy(_:))))
         menu.addItem(item(String(localized: "同步用户数据"), #selector(syncUserData(_:))))

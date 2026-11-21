@@ -65,6 +65,10 @@ final class SettingsModel {
         hasPendingChanges = !ConfigLayers(paths: paths).dirtyTargets().isEmpty
         // Changes left from a previous session are applied right away.
         if hasPendingChanges { scheduleAutoDeploy() }
+        // From the start, whichever pane is shown: an update installed by the input method
+        // must not leave this app running old code unnoticed.
+        observeUpdates()
+        compareWithInstalledVersion()
     }
 
     // MARK: - Status
@@ -813,80 +817,144 @@ final class SettingsModel {
     // MARK: - App updates
 
     let currentVersion = AppVersion.current()
-    private(set) var updateState = AppUpdateState()
+    private(set) var updateState = UpdateState()
+    /// Why this build does or does not update itself; nil until first evaluated.
+    private(set) var updateEligibility: UpdateEligibility?
     private(set) var updateChecking = false
-    /// 0…1 while the installer downloads.
-    private(set) var updateProgress: Double?
     private(set) var updateNotice: String?
-    /// Ad-hoc development builds (install-dev.sh) are not offered releases.
-    let isDistributionBuild = AppVersion.isDistributionBuild()
-    /// False while self-update is switched off (`AppUpdateChecker.isEnabled`).
-    let updatesEnabled = AppUpdateChecker.isEnabled
-    var pendingUpdate: AppRelease? { updatesEnabled && isDistributionBuild ? updateState.pending(current: currentVersion) : nil }
+    /// Set when the input method on disk is newer than this running settings app.
+    private(set) var reopenForVersion: String?
+    /// Signed with the team's Developer ID certificate (a release), not a development build.
+    let isDistributionBuild = SecCodeSignatureEvaluator().evaluateRunningProcess().satisfiesDeveloperID
+    @ObservationIgnored private var observingUpdates = false
 
-    /// Reads the shared state and checks when a daily check is due (the input method
-    /// usually has done it already).
-    func refreshUpdates() async {
-        guard updatesEnabled else { return }
-        updateState = AppUpdateState.load(paths)
-        if isDistributionBuild, updateState.isDue() { await checkForUpdates(userInitiated: false) }
+    /// The input method bundle this settings app is embedded in; only that one is updated.
+    private static var embeddingBundle: URL? {
+        guard let app = Locations.inputMethodApp, Bundle.main.bundleURL.path.hasPrefix(app.path + "/") else { return nil }
+        return app
     }
 
-    func checkForUpdates(userInitiated: Bool) async {
-        guard updatesEnabled, !updateChecking else { return }
+    @ObservationIgnored private lazy var updater = UpdateCoordinator(
+        paths: paths, bundle: Self.embeddingBundle ?? Bundle.main.bundleURL,
+        bundleID: Locations.inputMethodBundleID, current: currentVersion)
+
+    private var updatesAvailable: Bool {
+        if case .eligible = updateEligibility { return true }
+        return false
+    }
+
+    private var inputMethodRunning: Bool { SystemProcessControl().isRunning(bundleID: Locations.inputMethodBundleID) }
+
+    /// Reads the shared state. The running input method does the checking, downloading and
+    /// installing; this app only does it itself when the input method is not running.
+    func refreshUpdates() async {
+        if updateEligibility == nil {
+            updateEligibility = Self.embeddingBundle == nil && UpdateConfiguration.isConfigured && isDistributionBuild
+                ? .unsupportedLocation(Bundle.main.bundleURL.path) : await updater.eligibility()
+        }
+        updateState = UpdateState.load(paths)
+        guard updatesAvailable, !inputMethodRunning, !updateChecking else { return }
         updateChecking = true
         defer { updateChecking = false }
-        if userInitiated { updateNotice = nil }
-        do {
-            let release = try await AppUpdateChecker().check(paths: paths, current: currentVersion)
-            updateState = AppUpdateState.load(paths)
-            if userInitiated, !isDistributionBuild {
-                updateNotice = release.map { "开发版：最新正式版为 \($0.appVersion.description)" } ?? "开发版：没有更新的正式版"
-            } else if userInitiated, release == nil { updateNotice = "已是最新版本" }
-        } catch {
-            if userInitiated { updateNotice = "检查失败：\(error.localizedDescription)" }
+        await updater.check(force: false)
+        updateState = await updater.downloadIfNeeded()
+    }
+
+    private func observeUpdates() {
+        guard !observingUpdates else { return }
+        observingUpdates = true
+        let center = DistributedNotificationCenter.default()
+        center.addObserver(forName: .init(UpdateNotifications.changed), object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.updateState = UpdateState.load(self.paths)
+                // Whatever the check found, it changed the state: the wait is over, and
+                // the state (a failure included) says more than an earlier notice.
+                self.updateChecking = false
+                self.updateNotice = nil
+            }
+        }
+        center.addObserver(forName: .init(UpdateNotifications.installed), object: nil, queue: .main) { [weak self] note in
+            let version = note.userInfo?["version"] as? String
+            MainActor.assumeIsolated { self?.inputMethodUpdated(to: version) }
+        }
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.compareWithInstalledVersion() }
         }
     }
 
-    func setReceiveBeta(_ on: Bool) {
-        updateState = AppUpdateState.load(paths)
-        updateState.setReceiveBeta(on)
+    /// The files this app runs from were replaced: reopen at once when nothing is being
+    /// edited or deployed, otherwise say so and let the user choose the moment.
+    private func inputMethodUpdated(to version: String?) {
+        updateState = UpdateState.load(paths)
+        guard let version, version != currentVersion.string else { return }
+        if !hasPendingChanges, !phrasesDirty, deployState != .deploying {
+            Task { await reopenSettings() }
+        } else {
+            reopenForVersion = version
+        }
+    }
+
+    /// Covers an update installed while this app was not listening.
+    private func compareWithInstalledVersion() {
+        guard let app = Self.embeddingBundle,
+              let data = try? Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let version = info["CFBundleShortVersionString"] as? String else { return }
+        let build = (info["CFBundleVersion"] as? String).flatMap { Int($0) }
+        if currentVersion < AppVersion(version, build: build) { reopenForVersion = version }
+    }
+
+    /// Quits and comes back as the version now on disk.
+    func reopenSettings() async {
+        guard await updater.relaunch(pid: getpid(), target: Bundle.main.bundleURL, background: false) else {
+            updateNotice = "无法自动重新打开，请手动退出后再打开设置"
+            return
+        }
+        NSApp.terminate(nil)
+    }
+
+    func checkForUpdates() async {
+        guard updatesAvailable, !updateChecking else { return }
         updateNotice = nil
-        do { try updateState.save(paths) }
-        catch { updateNotice = "无法保存更新通道"; updateState = AppUpdateState.load(paths) }
+        updateChecking = true
+        if inputMethodRunning {
+            DistributedNotificationCenter.default().postNotificationName(
+                .init(UpdateNotifications.check), object: nil, userInfo: nil, deliverImmediately: true)
+            // The input method answers through the shared state; stop waiting after a while.
+            try? await Task.sleep(for: .seconds(20))
+            updateState = UpdateState.load(paths)
+            updateChecking = false
+            return
+        }
+        defer { updateChecking = false }
+        await updater.check(force: true)
+        updateState = await updater.downloadIfNeeded(userRequested: true)
     }
 
     func setAutoUpdate(_ on: Bool) {
-        updateState = AppUpdateState.load(paths)
-        updateState.autoCheck = on
-        try? updateState.save(paths)
+        Task { updateState = await updater.setAutomaticUpdates(on) }
     }
 
-    func skipUpdate() {
-        guard let release = updateState.available else { return }
-        // Reload first so a newer check written by the input method is not overwritten.
-        updateState = AppUpdateState.load(paths)
-        updateState.skipped = release.appVersion.description
-        try? updateState.save(paths)
-    }
-
-    /// Downloads and verifies the installer (SHA-256 and Developer ID signature), then
-    /// hands it to macOS Installer, which asks for the administrator password.
+    /// Installs the staged update now. While the input method runs it is the one that
+    /// installs, as soon as nothing typed would be lost.
     func installUpdate() async {
-        guard let release = pendingUpdate, updateProgress == nil else { return }
-        updateNotice = nil
-        updateProgress = 0
-        defer { updateProgress = nil }
-        let paths = paths
-        do {
-            let package = try await AppUpdateChecker().download(release, paths: paths) { value in
-                Task { @MainActor [weak self] in if self?.updateProgress != nil { self?.updateProgress = value } }
-            }
-            try await Task.detached { try AppUpdateChecker.verifySignature(of: package) }.value
-            NSWorkspace.shared.open(package)
-            updateNotice = "已打开安装器，按提示完成更新"
-        } catch {
-            updateNotice = "更新失败：\(error.localizedDescription)"
+        guard updatesAvailable, updateState.phase == .ready else { return }
+        if inputMethodRunning {
+            DistributedNotificationCenter.default().postNotificationName(
+                .init(UpdateNotifications.install), object: nil, userInfo: nil, deliverImmediately: true)
+            updateNotice = "已请求安装；若正在输入，稍后自动安装"
+            return
+        }
+        updateNotice = "正在安装…"
+        let outcome = await updater.installIfReady(idle: .notAnInputMethod, userRequested: true)
+        updateState = UpdateState.load(paths)
+        switch outcome {
+        case .installed:
+            updateNotice = nil
+            await reopenSettings()
+        case let .failed(failure): updateNotice = "更新失败：\(failure.errorDescription ?? failure.code)"
+        case .deferred, .notReady: updateNotice = nil
         }
     }
 }

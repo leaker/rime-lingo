@@ -2,7 +2,7 @@ import Carbon
 import Foundation
 
 /// `RimeLingo --install`: registers, enables and selects the RimeLingo input source from the
-/// input method's own process (what an installer's postinstall step runs).
+/// input method's own process (scripts/install-dev.sh, or by hand after a first install).
 /// Text Input Sources only lets an input method select its own modes reliably from
 /// its own bundle.
 enum InputSourceInstaller {

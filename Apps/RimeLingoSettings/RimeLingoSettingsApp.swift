@@ -1,4 +1,5 @@
 import RimeLingoAI
+import RimeLingoCore
 import AppKit
 import SwiftUI
 
@@ -9,6 +10,7 @@ struct RimeLingoSettingsApp: App {
     @State private var selection: Pane? = LaunchOptions.pane ?? .overview
 
     init() {
+        Self.recoverInterruptedUpdate()
         Self.migrateLegacyDefaults()
         // The API key used to live in the login Keychain, which made macOS ask for the
         // password when the input method read it. It now lives in an owner-only file.
@@ -59,6 +61,17 @@ private struct AboutCommands: Commands {
 }
 
 extension RimeLingoSettingsApp {
+    /// An update interrupted while replacing files may have left an input method that can
+    /// no longer start and repair itself; this app then restores the previous version.
+    /// The files it runs from are part of that bundle, so it starts over afterwards.
+    static func recoverInterruptedUpdate() {
+        guard let app = Locations.inputMethodApp, Bundle.main.bundleURL.path.hasPrefix(app.path + "/"),
+              case .rolledBack = UpdateCoordinator.recoverAtLaunch(paths: .standard, bundle: app),
+              (try? SystemProcessControl().relaunchAfterExit(pid: getpid(), bundle: Bundle.main.bundleURL, background: false)) != nil
+        else { return }
+        exit(0)
+    }
+
     /// Preferences written under the previous bundle id (dev.example.rimelingo.settings) are
     /// copied once into io.github.leaker.rimelingo.settings.
     static func migrateLegacyDefaults() {

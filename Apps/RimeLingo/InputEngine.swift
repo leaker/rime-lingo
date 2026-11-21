@@ -223,6 +223,7 @@ final class InputEngine {
     /// the network — never anything typed.
     private func scheduleVocabularyUpdates() {
         guard vocabularyTimer == nil else { return }
+        UpdateService.shared.start()
         let timer = Timer(timeInterval: 3600, repeats: true) { _ in
             MainActor.assumeIsolated {
                 InputEngine.shared.checkVocabularies()
@@ -237,6 +238,24 @@ final class InputEngine {
             InputEngine.shared.checkVocabularies()
             InputEngine.shared.checkForAppUpdate()
         }
+    }
+
+    /// What an update install would interrupt right now (see `UpdateIdleSnapshot`).
+    func updateIdleSnapshot() -> UpdateIdleSnapshot {
+        let controller = activeController
+        // A secure field or the lock screen: Secure Event Input is on, nothing is installed.
+        let secure = IsSecureEventInputEnabled() || controller?.secureContext().isSecure == true
+        return UpdateIdleSnapshot(
+            secondsSinceLastKey: Date().timeIntervalSince(max(lastUserKeyAt, lastSecureKeyAt)),
+            isComposing: controller?.isComposing ?? false,
+            hasPendingInput: controller?.hasPendingInput ?? false,
+            hasDraft: controller.map { !$0.draft.isEmpty } ?? false,
+            liveSessionActive: controller?.live != nil,
+            selectionPreviewActive: selection.isActive,
+            aiActionActive: controller?.polish != nil,
+            quickMenuOpen: controller?.quickMenu != nil || controller?.menuHold.isArmed == true,
+            secureContext: secure,
+            deployInProgress: deployLock != nil || syncInProgress || vocabularyChecking)
     }
 
     func checkVocabularies() {
