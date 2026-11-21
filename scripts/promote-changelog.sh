@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Move Unreleased notes into a dated version section, retaining an empty Unreleased.
+# A changelog helper only: scripts/release.sh reads the section this writes but does not
+# call it, and releases plain X.Y.Z versions only (a prerelease section is never published).
 # By default CHANGELOG.md and CHANGELOG.en.md are promoted together (both are validated
 # before either is written) and each new section gets its release status line;
 # RIMELINGO_CHANGELOG_STATUS / RIMELINGO_CHANGELOG_STATUS_EN override the wording.
@@ -15,8 +17,8 @@ if [[ -n "${RIMELINGO_CHANGELOG_FILE:-}" ]]; then
   TARGETS=("$RIMELINGO_CHANGELOG_FILE" "${RIMELINGO_CHANGELOG_STATUS:-}")
 else
   DIR="${RIMELINGO_CHANGELOG_ROOT:-$ROOT}"
-  TARGETS=("$DIR/CHANGELOG.md" "${RIMELINGO_CHANGELOG_STATUS:-开发预览 · Developer ID 签名 · 公证处理中}"
-           "$DIR/CHANGELOG.en.md" "${RIMELINGO_CHANGELOG_STATUS_EN:-Developer preview · Developer ID signed · notarization pending}")
+  TARGETS=("$DIR/CHANGELOG.md" "${RIMELINGO_CHANGELOG_STATUS:-Developer ID 签名 · 已通过 Apple 公证}"
+           "$DIR/CHANGELOG.en.md" "${RIMELINGO_CHANGELOG_STATUS_EN:-Developer ID signed · notarized by Apple}")
 fi
 python3 - "$1" "${2:-$(date +%F)}" "${TARGETS[@]}" <<'PY'
 import datetime

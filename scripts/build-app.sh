@@ -4,7 +4,7 @@
 #   Contents/Helpers/rimelingo                    CLI (+ its resource bundle)
 #   Contents/Applications/RimeLingo Settings.app  settings
 #   Contents/Frameworks/librime + rime-plugins, Contents/SharedSupport
-# Used by install-dev.sh and package.sh. Signs ad-hoc unless RIMELINGO_SIGN_IDENTITY is set.
+# Used by install-dev.sh and release.sh. Signs ad-hoc unless RIMELINGO_SIGN_IDENTITY is set.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,21 +42,13 @@ ditto "$CLI_DIR/RimeLingoKit_RimeLingoCore.bundle" "$APP/Contents/Helpers/RimeLi
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/Helpers/rimelingo" 2>/dev/null || true
 ditto "$BUILT/RimeLingo Settings.app" "$APP/Contents/Applications/RimeLingo Settings.app"
 
-# Keep CFBundleShortVersionString numeric, but retain the full SemVer for updates.
-# This only modifies staging bundles, before signing; project/CLI versions stay unchanged.
-if [[ -n "${RIMELINGO_RELEASE_VERSION:-}" ]]; then
-  for bundle in "$APP" "$APP/Contents/Applications/RimeLingo Settings.app"; do
-    plutil -replace RimeLingoReleaseVersion -string "$RIMELINGO_RELEASE_VERSION" "$bundle/Contents/Info.plist"
-  done
-fi
-
 # Local builds are signed ad-hoc by default. Set RIMELINGO_SIGN_IDENTITY to a certificate
 # hash to use a real identity — but make sure it is not revoked: macOS treats code
 # signed with a revoked certificate as malware (kills it and moves the app to Trash).
 echo "==> signing with: $IDENTITY"
 TIMESTAMP=--timestamp
 [[ "$IDENTITY" == "-" ]] && TIMESTAMP=--timestamp=none
-# Development builds tolerate an unreachable timestamp service; release packaging sets
+# Development builds tolerate an unreachable timestamp service; release.sh sets
 # RIMELINGO_REQUIRE_TIMESTAMP=1 (notarization needs secure timestamps).
 sign() {
   codesign --force --options runtime "$TIMESTAMP" --sign "$IDENTITY" "$@" 2>/dev/null && return 0

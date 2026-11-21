@@ -1,177 +1,316 @@
 #!/usr/bin/env bash
-# Builds the release artefacts for one version into dist/release/ (or $RIMELINGO_RELEASE_DIR):
-#   RimeLingo-<version>.pkg    installer (scripts/package.sh)
-#   RimeLingo-<version>.zip    RimeLingo.app (with the CLI and RimeLingo Settings.app inside)
-#   RimeLingo-<version>-source.tar.gz  corresponding source (scripts/source-archive.sh; the pkg has GPL parts)
-#   SHA256SUMS.txt        checksums of the three files above
-#   RELEASE_NOTES.md      CHANGELOG section + signing status + checksums (not an asset)
+# Builds, notarizes and publishes one release of RimeLingo from this Mac. Run by hand:
 #
-# Usage: bash scripts/release.sh <version>      e.g. 0.2.0 or 0.2.0-beta.1 (a leading "v" is ok)
+#   RIMELINGO_SIGN_IDENTITY="Developer ID Application: <name> (FKKCZM5CBJ)" bash scripts/release.sh
 #
-# Signing follows the existing scripts: ad-hoc unless RIMELINGO_SIGN_IDENTITY (Developer ID
-# Application) is set; the pkg is signed when RIMELINGO_INSTALLER_IDENTITY (Developer ID
-# Installer) is set. Notarization runs when all of RIMELINGO_NOTARY_KEY_PATH (.p8),
-# RIMELINGO_NOTARY_KEY_ID and RIMELINGO_NOTARY_ISSUER_ID are set (App Store Connect API key).
-# Safe to run locally (writes only build/ and dist/); nothing is uploaded or published.
+# It takes no arguments: the version is MARKETING_VERSION in project.yml (and the CLI's
+# `version:`), the build number is CURRENT_PROJECT_VERSION. Both must be bumped and
+# committed first.
+#
+# What gets published, to GitHub Releases of the public repository leaker/rime-lingo:
+#   RimeLingo-<version>.zip   the signed, notarized, stapled RimeLingo.app
+#   latest.json               the manifest (version, build, size and SHA-256 of the zip)
+#   latest.json.sig           its Ed25519 signature
+# Every installed release build checks latest.json once a day, verifies the signature,
+# downloads the zip and replaces its own files in place. Publishing is therefore the same
+# as installing on every user's Mac within about a day.
+#
+# One-time setup:
+#   1. Manifest signing key (Ed25519, private half stays in the login Keychain):
+#        swift scripts/sign-manifest.swift keygen
+#      It prints the PUBLIC key. Paste it into `manifestPublicKey` in
+#      Packages/RimeLingoKit/Sources/RimeLingoCore/Update/UpdateConfiguration.swift and
+#      commit. While that constant is the placeholder, the updater in the apps is inert.
+#      Losing the private key means no installed copy can ever be updated again, and the
+#      Keychain is its only home: keep a copy offline (the commands are at the top of
+#      scripts/sign-manifest.swift, with what protects the Keychain item and what does not).
+#   2. Notarization credentials, stored by notarytool in the Keychain under a profile name:
+#        xcrun notarytool store-credentials "rimelingo-notary"
+#      Another name goes into RIMELINGO_NOTARY_PROFILE.
+#   3. `gh auth login`, and the repository leaker/rime-lingo must exist, be PUBLIC and be
+#      this clone's `origin`.
+#
+# The first install on a Mac is not done by the updater: unzip the release, put
+# RimeLingo.app into ~/Library/Input Methods, and run
+#   ~/Library/Input\ Methods/RimeLingo.app/Contents/MacOS/RimeLingo --install
+# The release notes written below say so.
+#
+# The script stops before anything leaves this Mac unless you type the version, twice:
+# once before the app is sent to Apple for notarization, once before the tag is pushed and
+# the release is created.
+#
+# The release notes start with the section of CHANGELOG.md for this version, if there is
+# one (scripts/promote-changelog.sh writes it; only plain x.y.z versions are released).
+# If publishing stops part-way, the script prints the commands that undo what was done.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="${1:?usage: scripts/release.sh <version>}"
-VERSION="${VERSION#v}"
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "invalid version: $VERSION" >&2; exit 1; }
-BASE_VERSION="${VERSION%%-*}"
-OUT="${RIMELINGO_RELEASE_DIR:-$ROOT/dist/release}"
+REPO="leaker/rime-lingo"
+TEAM="FKKCZM5CBJ"
+IDENTITY="${RIMELINGO_SIGN_IDENTITY:-}"
+NOTARY_PROFILE="${RIMELINGO_NOTARY_PROFILE:-rimelingo-notary}"
+OUT="$ROOT/dist/release"
+APP="$ROOT/build/Release/RimeLingo.app"
+CONFIGURATION="Packages/RimeLingoKit/Sources/RimeLingoCore/Update/UpdateConfiguration.swift"
+PLACEHOLDER_KEY="REPLACE_BEFORE_FIRST_RELEASE"
+# Keep identical to UpdateConfiguration.developerIDRequirement: what the updater demands
+# of a downloaded bundle is checked here before it is published.
+REQUIREMENT="anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"$TEAM\""
+# Keep identical to UpdateConfiguration.allowedHosts.
+ALLOWED_HOSTS="github.com objects.githubusercontent.com release-assets.githubusercontent.com"
 
-# The bundle and CLI versions come from the sources; the tag must agree with them.
-APP_VERSION="$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)"
-CLI_VERSION="$(awk -F'"' '/^[[:space:]]*version: "/ {print $2; exit}' Packages/RimeLingoKit/Sources/rimelingo/RimeLingo.swift)"
-if [[ "$APP_VERSION" != "$BASE_VERSION" || "$CLI_VERSION" != "$BASE_VERSION" ]]; then
-  echo "version mismatch: tag $VERSION, project.yml MARKETING_VERSION $APP_VERSION, CLI $CLI_VERSION" >&2
-  echo "update both (see docs/release-checklist.md) before tagging" >&2
-  exit 1
-fi
+die() { echo "release: $*" >&2; exit 1; }
+step() { echo "==> $*"; }
+sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
+size() { stat -f %z "$1"; }
+# Highest of dotted numeric versions on stdin.
+highest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -1; }
 
-IDENTITY="${RIMELINGO_SIGN_IDENTITY:--}"
-NOTARIZE=0
-if [[ -n "${RIMELINGO_NOTARY_KEY_PATH:-}" && -n "${RIMELINGO_NOTARY_KEY_ID:-}" && -n "${RIMELINGO_NOTARY_ISSUER_ID:-}" ]]; then
-  NOTARIZE=1
-  [[ "$IDENTITY" != "-" && -n "${RIMELINGO_INSTALLER_IDENTITY:-}" ]] \
-    || { echo "notarization needs RIMELINGO_SIGN_IDENTITY and RIMELINGO_INSTALLER_IDENTITY" >&2; exit 1; }
-fi
-if [[ "$NOTARIZE" == 1 ]]; then STATUS=notarized
-elif [[ "$IDENTITY" != "-" ]]; then STATUS=signed
-else STATUS=preview
-fi
-echo "==> RimeLingo $VERSION ($STATUS)"
-
-# Waits up to RIMELINGO_NOTARY_WAIT (default 20m). A new team's first submissions can sit in
-# Apple's queue for hours: that is not a failure. The artefacts are still signed and
-# uploaded, the submission ids land in NOTARY_PENDING.txt, and scripts/finish-notarization.sh
-# staples them once Apple accepts. Only a rejection ("Invalid") fails the release.
-PENDING="$OUT/NOTARY_PENDING.txt"
-notarize() {  # <file>: 0 accepted, 2 still in progress; exits on rejection
-  local file="$1" result id status
-  local auth=(--key "$RIMELINGO_NOTARY_KEY_PATH" --key-id "$RIMELINGO_NOTARY_KEY_ID" --issuer "$RIMELINGO_NOTARY_ISSUER_ID")
-  # Submit first, then wait: `submit --wait` prints nothing when it times out, which
-  # would lose the submission id.
-  result="$(xcrun notarytool submit "$file" "${auth[@]}" --output-format json)" || true
-  id="$(plutil -extract id raw -o - - <<<"$result" 2>/dev/null || true)"
-  [[ -n "$id" ]] || { echo "notarization upload of $(basename "$file") failed: $result" >&2; exit 1; }
-  echo "==> submitted $(basename "$file") for notarization (submission $id)"
-  result="$(xcrun notarytool wait "$id" "${auth[@]}" --timeout "${RIMELINGO_NOTARY_WAIT:-20m}" --output-format json 2>/dev/null)" || true
-  status="$(plutil -extract status raw -o - - <<<"$result" 2>/dev/null || true)"
-  [[ -n "$status" ]] || status="$(xcrun notarytool info "$id" "${auth[@]}" --output-format json 2>/dev/null \
-    | plutil -extract status raw -o - - 2>/dev/null || true)"
-  if [[ "$status" == Accepted ]]; then
-    echo "==> notarized $(basename "$file") (submission $id)"
-    return 0
-  fi
-  if [[ -z "$status" || "$status" == "In Progress" ]]; then
-    echo "==> notarization of $(basename "$file") still in progress (submission $id)"
-    printf '%s\t%s\n' "$(basename "$file")" "$id" >> "$PENDING"
-    return 2
-  fi
-  echo "notarization of $(basename "$file") failed: $result" >&2
-  xcrun notarytool log "$id" "${auth[@]}" >&2 || true
-  exit 1
+confirm() {  # <what happens next>
+  local answer
+  echo
+  read -r -p "Type the version ($VERSION) to $1, anything else to stop: " answer
+  [[ "$answer" == "$VERSION" ]] || die "not confirmed; nothing was $2"
 }
 
-RIMELINGO_RELEASE_VERSION="$VERSION" RIMELINGO_REQUIRE_TIMESTAMP=$([[ "$IDENTITY" == "-" ]] && echo 0 || echo 1) bash scripts/build-app.sh
-APP="$ROOT/build/Release/RimeLingo.app"
+# ---------------------------------------------------------------- refusals
 
-rm -rf "$OUT" && mkdir -p "$OUT"
-PKG="$OUT/RimeLingo-$VERSION.pkg"
+[[ $# -eq 0 ]] || die "takes no arguments; the version comes from project.yml"
+[[ -t 0 && -t 1 ]] || die "run it in a terminal: it asks for confirmation"
+
+VERSION="$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)"
+BUILD="$(awk -F'"' '/CURRENT_PROJECT_VERSION/ {print $2; exit}' project.yml)"
+MIN_MACOS="$(awk -F'"' '/^[[:space:]]*macOS:/ {print $2; exit}' project.yml)"
+CLI_VERSION="$(awk -F'"' '/^[[:space:]]*version: "/ {print $2; exit}' Packages/RimeLingoKit/Sources/rimelingo/RimeLingo.swift)"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "MARKETING_VERSION '$VERSION' is not x.y.z"
+[[ "$BUILD" =~ ^[1-9][0-9]*$ ]] || die "CURRENT_PROJECT_VERSION '$BUILD' is not a positive number"
+[[ "$MIN_MACOS" =~ ^[0-9]+\.[0-9]+$ ]] || die "cannot read the deployment target from project.yml"
+[[ "$CLI_VERSION" == "$VERSION" ]] || die "version mismatch: project.yml $VERSION, CLI $CLI_VERSION"
+TAG="v$VERSION"
 ZIP="$OUT/RimeLingo-$VERSION.zip"
 
-if [[ "$NOTARIZE" == 1 ]]; then
-  # Notarize and staple the app first so both the zip and the pkg carry the ticket.
-  ditto -c -k --keepParent "$APP" "$OUT/notarize-app.zip"
-  if notarize "$OUT/notarize-app.zip"; then
-    xcrun stapler staple "$APP"
-    xcrun stapler validate "$APP"
-  else
-    STATUS=pending
-  fi
-  rm -f "$OUT/notarize-app.zip"
+[[ -z "$(git status --porcelain)" ]] || die "the working tree is not clean; commit or stash first"
+[[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || die "not on main"
+ORIGIN="$(git remote get-url origin 2>/dev/null)" || die "this clone has no 'origin' remote"
+[[ "$ORIGIN" =~ github\.com[:/]leaker/rime-lingo(\.git)?/?$ ]] || die "origin ($ORIGIN) is not github.com/$REPO"
+git fetch --quiet --tags origin || die "cannot fetch from origin"
+COMMIT="$(git rev-parse HEAD)"
+[[ "$COMMIT" == "$(git rev-parse origin/main 2>/dev/null)" ]] || die "HEAD is not what origin/main points at; push first"
+
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then die "tag $TAG already exists"; fi
+LATEST="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | highest || true)"
+if [[ -n "$LATEST" ]]; then
+  [[ "$(printf '%s\n%s\n' "$LATEST" "$VERSION" | highest)" == "$VERSION" && "$LATEST" != "$VERSION" ]] \
+    || die "version $VERSION is not newer than the latest tag v$LATEST"
+  PREVIOUS_BUILD="$(git show "v$LATEST:project.yml" | awk -F'"' '/CURRENT_PROJECT_VERSION/ {print $2; exit}')"
+  [[ "$PREVIOUS_BUILD" =~ ^[0-9]+$ && "$BUILD" -gt "$PREVIOUS_BUILD" ]] \
+    || die "build $BUILD is not higher than build ${PREVIOUS_BUILD:-?} of v$LATEST"
 fi
 
-SKIP_BUILD=1 bash scripts/package.sh
-mv "dist/RimeLingo-$APP_VERSION.pkg" "$PKG"
-if [[ "$NOTARIZE" == 1 ]]; then
-  if notarize "$PKG"; then
-    xcrun stapler staple "$PKG"
-    xcrun stapler validate "$PKG"
-  else
-    STATUS=pending
-  fi
-fi
+SOURCE_KEY="$(sed -n 's/^[[:space:]]*public static let manifestPublicKey = "\(.*\)"$/\1/p' "$CONFIGURATION")"
+[[ -n "$SOURCE_KEY" ]] || die "cannot read manifestPublicKey from $CONFIGURATION"
+[[ "$SOURCE_KEY" != "$PLACEHOLDER_KEY" ]] \
+  || die "manifestPublicKey is still the placeholder; run 'swift scripts/sign-manifest.swift keygen', paste the key, commit"
+KEYCHAIN_KEY="$(swift scripts/sign-manifest.swift pubkey)" \
+  || die "no manifest signing key in the login Keychain (see the one-time setup at the top of this script)"
+[[ "$KEYCHAIN_KEY" == "$SOURCE_KEY" ]] \
+  || die "the Keychain's signing key ($KEYCHAIN_KEY) is not the one in the source ($SOURCE_KEY): installed copies would reject this release"
 
+[[ -n "$IDENTITY" ]] || die "set RIMELINGO_SIGN_IDENTITY to the Developer ID Application identity of team $TEAM"
+[[ "$IDENTITY" != "-" ]] || die "an ad-hoc signature cannot be released"
+IDENTITY_LINE="$(security find-identity -v -p codesigning | grep -F -- "$IDENTITY" | head -1 || true)"
+[[ -n "$IDENTITY_LINE" ]] || die "signing identity '$IDENTITY' is not in the Keychain (or not valid)"
+[[ "$IDENTITY_LINE" == *"Developer ID Application:"* && "$IDENTITY_LINE" == *"($TEAM)"* ]] \
+  || die "'$IDENTITY' is not a Developer ID Application certificate of team $TEAM:$IDENTITY_LINE"
+
+xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 \
+  || die "notarytool profile '$NOTARY_PROFILE' is missing or rejected (xcrun notarytool store-credentials \"$NOTARY_PROFILE\")"
+
+command -v gh >/dev/null || die "gh is required: brew install gh"
+gh auth status >/dev/null 2>&1 || die "gh is not signed in (gh auth login)"
+[[ "$(gh repo view "$REPO" --json visibility --jq .visibility 2>/dev/null)" == PUBLIC ]] \
+  || die "$REPO does not exist or is not public: the updater reads its releases without a token"
+if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then die "release $TAG already exists on GitHub"; fi
+
+# ---------------------------------------------------------------- build and verify
+
+# Fails unless the bundle, and the code inside it that the seal covers only as files, is
+# signed the way the updater will insist on.
+verify_app() {  # <RimeLingo.app>
+  local app="$1" code details
+  for code in "$app" "$app/Contents/Applications/RimeLingo Settings.app" "$app/Contents/Helpers/rimelingo"; do
+    [[ -e "$code" ]] || die "missing from the bundle: ${code#"$app"/}"
+    codesign --verify --deep --strict --test-requirement="=$REQUIREMENT" "$code" \
+      || die "not signed with a Developer ID Application certificate of team $TEAM: $code"
+    details="$(codesign --display --verbose=2 "$code" 2>&1)"
+    grep -q '^Signature=adhoc' <<<"$details" && die "ad-hoc signature: $code"
+    grep -Eq 'flags=0x[0-9a-f]+\(.*runtime.*\)' <<<"$details" || die "hardened runtime is off: $code"
+    grep -q "^TeamIdentifier=$TEAM\$" <<<"$details" || die "wrong team: $code"
+    grep -q '^Timestamp=' <<<"$details" || die "no secure timestamp: $code"
+  done
+  [[ "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" == "$VERSION" ]] || die "bundle version is not $VERSION"
+  [[ "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" == "$BUILD" ]] || die "bundle build is not $BUILD"
+}
+
+step "building RimeLingo $VERSION ($BUILD) at ${COMMIT:0:12}"
+RIMELINGO_SIGN_IDENTITY="$IDENTITY" RIMELINGO_REQUIRE_TIMESTAMP=1 bash scripts/build-app.sh
+[[ -z "$(git status --porcelain)" ]] || die "the build changed tracked files; commit them and start again"
+verify_app "$APP"
+
+cat <<EOF
+
+About to send to Apple for notarization:
+  version   $VERSION (build $BUILD), commit $COMMIT
+  signed as $IDENTITY_LINE
+  file      a zip of $APP
+  profile   $NOTARY_PROFILE
+Nothing is published by this step. Afterwards, on a second confirmation:
+  repository  https://github.com/$REPO (public)
+  tag         $TAG
+  assets      RimeLingo-$VERSION.zip, latest.json, latest.json.sig
+EOF
+confirm "submit it to Apple" "uploaded"
+
+rm -rf "$OUT" && mkdir -p "$OUT"
+WORK="$(mktemp -d -t rimelingo-release)"
+# What publishing has done so far: empty, tagged, pushed, draft, published.
+PUBLISH_STAGE=""
+on_exit() {
+  rm -rf "$WORK"
+  case "$PUBLISH_STAGE" in ""|published) return ;; esac
+  {
+    echo
+    echo "release: publishing stopped part-way (after: $PUBLISH_STAGE). Installed copies see nothing unless"
+    echo "         'gh release view $TAG --repo $REPO' shows a published release. If it is published,"
+    echo "         leave it and check its three assets by hand. Otherwise undo what was done and run"
+    echo "         this script again (it builds and notarizes again):"
+    if [[ "$PUBLISH_STAGE" == draft ]]; then
+      echo "           gh release delete $TAG --repo $REPO --yes"
+    fi
+    if [[ "$PUBLISH_STAGE" == pushed || "$PUBLISH_STAGE" == draft ]]; then
+      echo "           git push --delete origin $TAG"
+    fi
+    echo "           git tag -d $TAG"
+  } >&2
+}
+trap on_exit EXIT
+
+step "notarizing (this waits for Apple)"
+ditto -c -k --keepParent "$APP" "$WORK/notarize.zip"
+RESULT="$(xcrun notarytool submit "$WORK/notarize.zip" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json)" || true
+SUBMISSION="$(plutil -extract id raw -o - - <<<"$RESULT" 2>/dev/null || true)"
+STATUS="$(plutil -extract status raw -o - - <<<"$RESULT" 2>/dev/null || true)"
+if [[ "$STATUS" != Accepted ]]; then
+  echo "$RESULT" >&2
+  [[ -z "$SUBMISSION" ]] || xcrun notarytool log "$SUBMISSION" --keychain-profile "$NOTARY_PROFILE" >&2 || true
+  die "notarization did not succeed (status: ${STATUS:-none}); nothing was published. Fix and run again"
+fi
+xcrun stapler staple "$APP"
+xcrun stapler validate "$APP"
+
+step "packing and checking the archive as an installed copy will see it"
 ditto -c -k --keepParent "$APP" "$ZIP"
-SRC="$OUT/RimeLingo-$VERSION-source.tar.gz"
-bash scripts/source-archive.sh "$VERSION" "$OUT"
-(cd "$OUT" && shasum -a 256 "$(basename "$PKG")" "$(basename "$ZIP")" "$(basename "$SRC")" > SHA256SUMS.txt)
+ditto -x -k "$ZIP" "$WORK/extracted"
+[[ "$(ls -A "$WORK/extracted")" == "RimeLingo.app" ]] || die "the archive holds more than RimeLingo.app"
+verify_app "$WORK/extracted/RimeLingo.app"
+xcrun stapler validate "$WORK/extracted/RimeLingo.app"
+spctl --assess --type execute "$WORK/extracted/RimeLingo.app" || die "Gatekeeper rejects the archived app"
 
-# Each channel uses the same Ed25519 trust chain; stable releases update both.
-BUILD="$(awk -F'"' '/CURRENT_PROJECT_VERSION/ {print $2; exit}' project.yml)"
-bash scripts/write-update-manifests.sh "$OUT" "$VERSION" "$BUILD" "$STATUS"
+step "writing and signing the manifest"
+python3 scripts/write-release-manifest.py "$ZIP" "$VERSION" "$BUILD" "$MIN_MACOS" "$OUT"
+swift scripts/sign-manifest.swift sign "$OUT/latest.json"
+swift scripts/sign-manifest.swift verify "$OUT/latest.json" "$SOURCE_KEY"
 
-# Release notes: the CHANGELOG section for this version, else a template.
-NOTES="$OUT/RELEASE_NOTES.md"
+NOTES="$WORK/notes.md"
 SECTION="$(awk -v v="$VERSION" '
   index($0, "## [" v "]") == 1 { on = 1; next }
   on && /^## / { exit }
   on && /^\[[^]]+\]: / { next }
   on { print }' CHANGELOG.md 2>/dev/null || true)"
 {
-  if [[ -n "${SECTION//[[:space:]]/}" ]]; then
-    printf '%s\n' "$SECTION"
-  else
-    printf '## RimeLingo %s\n\n更新内容见 [CHANGELOG.md](CHANGELOG.md)。\n' "$VERSION"
-  fi
-  echo
-  echo "## 签名状态"
-  echo
-  case "$STATUS" in
-    notarized)
-      echo "已使用 Developer ID 签名（Hardened Runtime + 可信时间戳），并通过 Apple 公证、已装订票据。" ;;
-    signed)
-      echo "已使用 Developer ID 签名，**未经 Apple 公证**。" ;;
-    pending)
-      echo "已使用 Developer ID 签名；**Apple 公证处理中**，通过后会替换为装订了公证票据的安装包（文件名不变，SHA-256 会更新）。" ;;
-    preview)
-      cat <<'MD'
-**预览版：未使用 Developer ID 签名（仅 ad-hoc 签名），未经 Apple 公证。** 仅供了解风险的测试者使用。
+  if [[ -n "${SECTION//[[:space:]]/}" ]]; then printf '%s\n\n' "$SECTION"; fi
+  cat <<EOF
+## 安装与更新
 
-安装前先核对 SHA-256（见下文）。
+已安装的正式版会在一天内自动更新到此版本，无需任何操作。
 
-- **安装包 `.pkg`**：双击若被拦截，在 Finder 中右键 › 打开；新版 macOS 需到「系统设置 › 隐私与安全性」点「仍要打开」。
-  也可以只对这个文件去掉隔离属性：`xattr -d com.apple.quarantine RimeLingo-*.pkg`。
-- **压缩包 `.zip`**：解压后把 `RimeLingo.app` 放进 `~/Library/Input Methods/`，仅在信任该产物时执行
-  `xattr -dr com.apple.quarantine "$HOME/Library/Input Methods/RimeLingo.app"`。不要关闭系统全局 Gatekeeper。
-MD
-      ;;
-  esac
-  echo
-  echo "安装后在「系统设置 › 键盘 › 输入法」中添加「灵译输入法」；首次安装可能需要注销并重新登录一次。"
-  echo
-  echo "## 许可与源码"
-  echo
-  echo "RimeLingo 原创代码采用 MIT。安装包包含 GPL-3.0 组件（librime-octagram 插件、雾凇拼音方案与 Lua 脚本），因此安装包整体按 GPL-3.0 条款分发；"
-  echo "对应源码见附件 \`RimeLingo-$VERSION-source.tar.gz\`（RimeLingo、librime、三个原生插件与雾凇拼音的固定版本，来源与哈希见包内 SOURCES.txt）。"
-  echo
-  echo "最低系统：macOS 15（Apple 端侧模型需 macOS 26，旧系统可用自备接口）。输入法与设置应用为 universal（Apple Silicon + Intel）；内置的 \`rimelingo\` 命令行工具随构建机架构（当前为 Apple Silicon）。"
-  echo
-  echo "## SHA-256"
-  echo
-  echo '```'
-  cat "$OUT/SHA256SUMS.txt"
-  echo '```'
-  echo
-  # shellcheck disable=SC2016  # literal Markdown backticks
-  echo '校验：把文件和 `SHA256SUMS.txt` 放在同一目录，执行 `shasum -a 256 -c SHA256SUMS.txt`。'
+首次安装：下载 \`RimeLingo-$VERSION.zip\` 并解压，把 \`RimeLingo.app\` 放进 \`~/Library/Input Methods/\`，然后在终端执行：
+
+\`\`\`
+~/Library/Input\\ Methods/RimeLingo.app/Contents/MacOS/RimeLingo --install
+\`\`\`
+
+之后在「系统设置 › 键盘 › 输入法」中确认已添加「灵译输入法」；首次安装可能需要注销并重新登录一次。
+
+已使用 Developer ID 签名并通过 Apple 公证。最低系统：macOS $MIN_MACOS。
+
+## SHA-256
+
+\`\`\`
+$(sha256 "$ZIP")  RimeLingo-$VERSION.zip
+\`\`\`
+EOF
 } > "$NOTES"
 
-echo "$STATUS" > "$OUT/SIGNING_STATUS"
-echo "==> release artefacts in $OUT"
-ls -l "$OUT"
+cat <<EOF
+
+About to publish — this cannot be taken back once installed copies have seen it:
+  repository  https://github.com/$REPO (public)
+  tag         $TAG -> $COMMIT (pushed to origin)
+  release     "RimeLingo $VERSION", marked as latest
+EOF
+for file in "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig"; do
+  printf '  %-22s %10s bytes  sha256 %s\n' "$(basename "$file")" "$(size "$file")" "$(sha256 "$file")"
+done
+echo "  manifest key $SOURCE_KEY"
+echo "Every installed release build updates itself to $VERSION within about 24 hours."
+confirm "publish it" "published (the notarized build stays in $OUT)"
+
+# ---------------------------------------------------------------- publish
+
+step "publishing"
+git tag "$TAG" "$COMMIT"
+PUBLISH_STAGE=tagged
+git push origin "refs/tags/$TAG"
+PUBLISH_STAGE=pushed
+# A draft first: the three assets become visible together when the draft is published,
+# so no client can fetch a new latest.json next to an old latest.json.sig.
+gh release create "$TAG" --repo "$REPO" --draft --verify-tag --title "RimeLingo $VERSION" --notes-file "$NOTES" \
+  "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig" || { PUBLISH_STAGE=draft; false; }
+PUBLISH_STAGE=draft
+gh release edit "$TAG" --repo "$REPO" --draft=false --latest
+PUBLISH_STAGE=published
+
+step "checking what clients receive (GET, as the updater does)"
+BASE="https://github.com/$REPO/releases"
+PROBLEM=0
+for name in latest.json latest.json.sig; do
+  if curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors "$BASE/latest/download/$name" -o "$WORK/$name" \
+     && cmp -s "$WORK/$name" "$OUT/$name"; then
+    echo "    ok  $name"
+  else
+    echo "    MISMATCH  $BASE/latest/download/$name is not the file just published" >&2
+    PROBLEM=1
+  fi
+done
+HEADERS="$(curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -r 0-0 -D - -o /dev/null \
+  -w 'effective-url: %{url_effective}\n' "$BASE/download/$TAG/RimeLingo-$VERSION.zip" | tr -d '\r' || true)"
+TOTAL="$(awk 'tolower($1) == "content-range:" { sub(/.*\//, "", $0); total = $0 } END { print total }' <<<"$HEADERS")"
+if [[ "$TOTAL" == "$(size "$ZIP")" ]]; then
+  echo "    ok  RimeLingo-$VERSION.zip ($TOTAL bytes)"
+else
+  echo "    MISMATCH  the published zip reports ${TOTAL:-no} bytes, expected $(size "$ZIP")" >&2
+  PROBLEM=1
+fi
+# The updater follows redirects only to the hosts it knows.
+for host in $(awk 'tolower($1) == "location:" || $1 == "effective-url:" { print $2 }' <<<"$HEADERS" | sed -E 's#^https?://([^/:]+).*#\1#' | sort -u); do
+  case " $ALLOWED_HOSTS " in
+    *" $host "*) ;;
+    *) echo "    WARNING  the zip is served through $host, which UpdateConfiguration.allowedHosts does not allow:" >&2
+       echo "             installed copies cannot download it. Add the host and publish a new release." >&2
+       PROBLEM=1 ;;
+  esac
+done
+[[ "$PROBLEM" == 0 ]] || die "published, but the checks above failed: look at https://github.com/$REPO/releases/tag/$TAG now"
+step "released RimeLingo $VERSION: https://github.com/$REPO/releases/tag/$TAG"

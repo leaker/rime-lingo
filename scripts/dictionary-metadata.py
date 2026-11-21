@@ -182,8 +182,8 @@ def main():
                 with tempfile.NamedTemporaryFile(dir=output.parent, delete=False) as destination:
                     temporary = Path(destination.name)
                     destination.write(data)
-                    # This is public bundled metadata. pkgbuild changes ownership
-                    # to root, so NamedTemporaryFile's 0600 would hide it from users.
+                    # This is public bundled metadata: NamedTemporaryFile's 0600 would
+                    # keep it from being readable once it ships inside the app.
                     os.fchmod(destination.fileno(), 0o644)
                 os.replace(temporary, output)
             finally:

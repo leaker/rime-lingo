@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds RimeLingo and installs it for the current user into ~/Library/Input Methods,
-# then registers and enables the input source. For a system-wide install use the
-# package from scripts/package.sh.
+# then registers and enables the input source. This is also how a release build is
+# installed for the first time (set RIMELINGO_SIGN_IDENTITY); from then on a release
+# updates itself in place. Development builds never update themselves.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -28,14 +29,13 @@ if pkill -f "$RUNNING" 2>/dev/null; then
   for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -f "$RUNNING" >/dev/null || break; /bin/sleep 0.1; done
 fi
 pgrep -f "$RUNNING" >/dev/null || open -g "$DEST/RimeLingo.app"
-# A copy installed by the .pkg (/Library) has the same bundle id: macOS may launch
-# either one and keeps showing cached icons. Development wants exactly one.
+# A system-wide copy (/Library) has the same bundle id: macOS may launch either one and
+# keeps showing cached icons. Exactly one copy should exist.
 if [[ -d "/Library/Input Methods/RimeLingo.app" ]]; then
-  echo "warning: /Library/Input Methods/RimeLingo.app (installed by the .pkg) also exists." >&2
+  echo "warning: /Library/Input Methods/RimeLingo.app also exists." >&2
   echo "         Two copies share one bundle id; remove one, e.g.:" >&2
-  echo "         sudo rm -rf '/Library/Input Methods/RimeLingo.app' '/Applications/RimeLingo Settings.app'" >&2
+  echo "         sudo rm -rf '/Library/Input Methods/RimeLingo.app'" >&2
 fi
-echo "note: installing an RimeLingo .pkg later moves this per-user copy to the Trash (#32)." >&2
 echo "==> done. After the FIRST install the system's input method launcher, which has been"
 echo "    running since login, cannot start RimeLingo on demand (LaunchInputMethod() status"
 echo "    -50): typing does nothing and applications may misbehave. Do one of these once:"

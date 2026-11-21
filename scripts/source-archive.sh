@@ -8,7 +8,8 @@
 #   upstream/rime-ice/   the pinned rime-ice release asset as shipped (GPL-3.0)
 #   SOURCES.txt          where each part came from, with SHA-256 of every download
 #
-# The installer contains GPL-3.0 components, so every release attaches this archive.
+# The app contains GPL-3.0 components. scripts/release.sh does not attach this archive;
+# build it by hand for a tagged release and add it with `gh release upload` when wanted.
 # Usage: bash scripts/source-archive.sh <version> <out-dir> [<commit>]
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

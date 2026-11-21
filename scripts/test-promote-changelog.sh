@@ -112,8 +112,8 @@ python3 - "$RIMELINGO_CHANGELOG_ROOT" <<'PY'
 import pathlib, sys
 d = pathlib.Path(sys.argv[1])
 zh, en = (d / 'CHANGELOG.md').read_text(), (d / 'CHANGELOG.en.md').read_text()
-assert '## [0.5.0] - 2026-10-05\n\n> 开发预览 · Developer ID 签名 · 公证处理中\n\n### 新增' in zh, zh
-assert '## [0.5.0] - 2026-10-05\n\n> Developer preview · Developer ID signed · notarization pending\n\n### Added' in en, en
+assert '## [0.5.0] - 2026-10-05\n\n> Developer ID 签名 · 已通过 Apple 公证\n\n### 新增' in zh, zh
+assert '## [0.5.0] - 2026-10-05\n\n> Developer ID signed · notarized by Apple\n\n### Added' in en, en
 PY
 # If either file cannot be promoted, neither is written.
 printf '## [Unreleased]\n\n### 新增\n\n- 又一个。\n' > "$RIMELINGO_CHANGELOG_ROOT/CHANGELOG.md"
