@@ -95,6 +95,18 @@ struct TranslationPreviewPanelTests {
 
     // MARK: - State to view
 
+    @Test func selectionPreviewOffersReplaceCopyAndCancel() {
+        var state = TranslationPreviewState(targetLabel: "英语", status: .ready, text: "Hello", canSubmit: true, canCopy: true, kind: .selection)
+        #expect(View.controls(for: state).map(\.title) == ["替换选区", "复制", "取消"])
+        #expect(View.controls(for: state).map(\.control) == [.submit, .copy, .exit])
+        // Replacing became unsafe: the control stays visible but off, copy and cancel stay on.
+        state.canSubmit = false
+        state.message = "原文已变化，无法替换"
+        #expect(View.controls(for: state).map(\.isEnabled) == [false, true, true])
+        let failed = TranslationPreviewState(targetLabel: "日语", status: .failed, message: "请求失败", canRetry: true, kind: .selection)
+        #expect(View.controls(for: failed).map(\.title) == ["替换选区", "复制", "重试", "取消"])
+    }
+
     @Test func exitIsAlwaysAvailableAndRetryOnlyWhenOffered() {
         let waiting = TranslationPreviewState(targetLabel: "英语", status: .waiting, message: "等待输入")
         let controls = View.controls(for: waiting)

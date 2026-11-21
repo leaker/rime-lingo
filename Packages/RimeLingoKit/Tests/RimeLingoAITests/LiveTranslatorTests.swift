@@ -134,6 +134,22 @@ struct LiveTranslatorTests {
         #expect(result == .success("Hello\n\nSee you"))
     }
 
+    /// A selected text of several paragraphs: the blank line and the single line break
+    /// both reach the model and both survive in the result.
+    @Test func multiParagraphSelectionKeepsParagraphsAndLineBreaks() async {
+        let source = "第一段第一行\n第一段第二行\n\n第二段"
+        let backend = FakeBackend(.reply("Paragraph one, line one\nParagraph one, line two\n\nParagraph two\n"))
+        let request = TranslationRequest(tag: TranslationTag(session: 1, revision: 1, target: .english), source: source)
+        let result = await LiveTranslator(backend: backend).translate(request.source, into: request.tag.target)
+        #expect(backend.requests[0].prompt == "Translate into English:\n\n" + source)
+        #expect(result == .success("Paragraph one, line one\nParagraph one, line two\n\nParagraph two"))
+    }
+
+    /// A selection that passes the capture limit is never refused by the translator for its size.
+    @Test func selectionLimitMatchesTheTranslatorLimit() {
+        #expect(SelectionCapture.maxLength == LiveTranslator.maxSourceLength)
+    }
+
     @Test func cleanRejectsRepliesWithNoContent() {
         for reply in ["", "  \n ", "\"\"", "```\n```", "“ ”"] {
             #expect(LiveTranslator.clean(reply) == nil)

@@ -51,7 +51,8 @@ private final class ManualSleep: @unchecked Sendable {
 
 /// A translator that answers only when the test says so. It ignores cancellation on
 /// purpose (it only counts it), so late results really arrive.
-private final class ManualTranslator: @unchecked Sendable {
+/// Shared with the selection translation tests.
+final class ManualTranslator: @unchecked Sendable {
     private let lock = NSLock()
     private var received: [TranslationRequest] = []
     private var waiters: [Int: CheckedContinuation<Result<String, TranslationFailure>, Never>] = [:]

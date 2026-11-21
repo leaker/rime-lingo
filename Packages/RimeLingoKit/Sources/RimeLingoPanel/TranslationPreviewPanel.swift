@@ -1,11 +1,15 @@
 public import AppKit
 
-/// What the live translation preview shows. A plain value: the host maps its session
-/// snapshot onto it field by field.
+/// What the translation preview shows, for live translation input or for a selected-text
+/// translation. A plain value: the host maps its session snapshot onto it field by field.
 public struct TranslationPreviewState: Sendable, Equatable {
     /// `notice` is an informational stop (for example the source is over the automatic limit).
     public enum Status: Sendable, Equatable { case waiting, updating, ready, failed, notice }
+    /// Which workflow the preview belongs to. Only the control titles differ: a selection
+    /// preview offers 替换选区 / 取消 where live input offers 提交译文 / 退出.
+    public enum Kind: Sendable, Equatable { case live, selection }
 
+    public var kind: Kind
     public var targetLabel: String
     public var status: Status
     public var text: String
@@ -19,7 +23,8 @@ public struct TranslationPreviewState: Sendable, Equatable {
     public var canRetry: Bool
 
     public init(targetLabel: String, status: Status, text: String = "", isStale: Bool = false, message: String = "",
-                canSubmit: Bool = false, canCopy: Bool = false, canRetry: Bool = false) {
+                canSubmit: Bool = false, canCopy: Bool = false, canRetry: Bool = false, kind: Kind = .live) {
+        self.kind = kind
         self.targetLabel = targetLabel
         self.status = status
         self.text = text

@@ -25,32 +25,63 @@ struct TranslationShortcutsTests {
 
     private func decide(
         _ target: TranslationTarget, enabled: Bool = true, isRepeat: Bool = false, menuOrActionOpen: Bool = false,
-        hasSelection: Bool = false, sessionActive: Bool = false
+        selection: SelectionPresence = .none, previewAttached: Bool = false, sessionActive: Bool = false
     ) -> TranslationDispatch {
         TranslationDispatch.decide(
             target: target, featureEnabled: enabled, isRepeat: isRepeat, menuOrActionOpen: menuOrActionOpen,
-            hasSelection: hasSelection, sessionActive: sessionActive)
+            selection: selection, selectionPreviewAttached: previewAttached, sessionActive: sessionActive)
     }
 
     private func key(
         _ keyCode: UInt16, option: Bool = false, command: Bool = false, control: Bool = false, shift: Bool = false,
-        isComposing: Bool = false, hasValidTranslation: Bool = true
+        isComposing: Bool = false, hasValidTranslation: Bool = true, selectionPreviewOpen: Bool = false
     ) -> LiveSessionKey {
         LiveSessionKey.decision(
             keyCode: keyCode, option: option, command: command, control: control, shift: shift,
-            isComposing: isComposing, hasValidTranslation: hasValidTranslation)
+            isComposing: isComposing, hasValidTranslation: hasValidTranslation,
+            selectionPreviewOpen: selectionPreviewOpen)
+    }
+
+    /// A translation hidden under a selection preview is never inserted; the key is
+    /// still swallowed.
+    @Test func submitIsBlockedWhileASelectionPreviewOwnsThePanel() {
+        for keyCode: UInt16 in [36, 76] {
+            #expect(key(keyCode, option: true, selectionPreviewOpen: true) == .submitBlocked(.previewHidden))
+            #expect(key(keyCode, option: true, isComposing: true, selectionPreviewOpen: true) == .submitBlocked(.previewHidden))
+        }
+        #expect(LiveSubmitBlock.check(isComposing: false, hasValidTranslation: true, selectionPreviewOpen: true) == .previewHidden)
+        #expect(!LiveSubmitBlock.previewHidden.message.isEmpty)
+        // Esc is not a submit: it keeps exiting the session.
+        #expect(key(53, selectionPreviewOpen: true) == .exit)
     }
 
     @Test func dispatchIgnoresEverythingWhenTheFeatureIsOff() {
-        for bits in 0..<16 {
+        for bits in 0..<32 {
             #expect(decide(.english, enabled: false, isRepeat: bits & 1 != 0, menuOrActionOpen: bits & 2 != 0,
-                           hasSelection: bits & 4 != 0, sessionActive: bits & 8 != 0) == .ignore)
+                           selection: bits & 4 != 0 ? .new : .none, previewAttached: bits & 16 != 0,
+                           sessionActive: bits & 8 != 0) == .ignore)
         }
     }
 
-    @Test func dispatchReportsASelectionBeforeLookingAtTheSession() {
-        #expect(decide(.english, hasSelection: true, sessionActive: false) == .selectionNotSupported)
-        #expect(decide(.japanese, hasSelection: true, sessionActive: true) == .selectionNotSupported)
+    /// A non-empty selection wins over starting or retargeting a live session.
+    @Test func dispatchCapturesASelectionBeforeLookingAtTheLiveSession() {
+        for sessionActive in [false, true] {
+            #expect(decide(.english, selection: .new, sessionActive: sessionActive) == .captureSelection(.english))
+            // Also while a preview of another selection is open.
+            #expect(decide(.japanese, selection: .new, previewAttached: true, sessionActive: sessionActive)
+                == .captureSelection(.japanese))
+        }
+    }
+
+    /// With a preview open in this field the shortcut goes to it, whether the captured
+    /// text is still selected or nothing is: the live session underneath is left alone.
+    @Test func dispatchHandsTheTargetToAnOpenSelectionPreview() {
+        for sessionActive in [false, true] {
+            #expect(decide(.japanese, selection: .captured, previewAttached: true, sessionActive: sessionActive)
+                == .retargetSelection(.japanese))
+            #expect(decide(.english, selection: .none, previewAttached: true, sessionActive: sessionActive)
+                == .retargetSelection(.english))
+        }
     }
 
     @Test func dispatchStartsOrForwards() {
@@ -60,9 +91,10 @@ struct TranslationShortcutsTests {
 
     /// A held shortcut acts once: every repeat is swallowed, whatever else is going on.
     @Test func dispatchConsumesKeyRepeats() {
-        for hasSelection in [false, true] {
+        for selection in [SelectionPresence.none, .captured, .new] {
             for sessionActive in [false, true] {
-                #expect(decide(.english, isRepeat: true, hasSelection: hasSelection, sessionActive: sessionActive) == .consume)
+                #expect(decide(.english, isRepeat: true, selection: selection, previewAttached: selection == .captured,
+                               sessionActive: sessionActive) == .consume)
             }
         }
     }
@@ -70,7 +102,7 @@ struct TranslationShortcutsTests {
     @Test func dispatchConsumesTheShortcutWhileAMenuOrActionIsOpen() {
         for sessionActive in [false, true] {
             #expect(decide(.japanese, menuOrActionOpen: true, sessionActive: sessionActive) == .consume)
-            #expect(decide(.japanese, menuOrActionOpen: true, hasSelection: true, sessionActive: sessionActive) == .consume)
+            #expect(decide(.japanese, menuOrActionOpen: true, selection: .new, sessionActive: sessionActive) == .consume)
         }
     }
 

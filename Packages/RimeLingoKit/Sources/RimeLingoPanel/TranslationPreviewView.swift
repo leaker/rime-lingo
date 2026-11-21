@@ -98,12 +98,13 @@ final class TranslationPreviewView: NSView {
     /// Controls shown for `state`, in display order. Exit is always available; retry is
     /// only present when it can be used.
     nonisolated static func controls(for state: TranslationPreviewState) -> [ControlItem] {
+        let isSelection = state.kind == .selection
         var items = [
-            ControlItem(control: .submit, title: "提交译文", isEnabled: state.canSubmit),
+            ControlItem(control: .submit, title: isSelection ? "替换选区" : "提交译文", isEnabled: state.canSubmit),
             ControlItem(control: .copy, title: "复制", isEnabled: state.canCopy),
         ]
         if state.canRetry { items.append(ControlItem(control: .retry, title: "重试", isEnabled: true)) }
-        items.append(ControlItem(control: .exit, title: "退出", isEnabled: true))
+        items.append(ControlItem(control: .exit, title: isSelection ? "取消" : "退出", isEnabled: true))
         return items
     }
 
