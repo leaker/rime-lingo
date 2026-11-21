@@ -2,8 +2,9 @@ public import Foundation
 
 /// The two places an RimeLingo input method can be installed, and which one is in charge.
 ///
-/// The `.pkg` (and Homebrew, and the in-app updater) install to `/Library/Input Methods`;
-/// `scripts/install-dev.sh` and hand copies use `~/Library/Input Methods`. Both carry the
+/// Releases, `scripts/install-dev.sh` and hand copies use `~/Library/Input Methods`, the
+/// only place the updater replaces files in; a copy put into `/Library/Input Methods` by
+/// an administrator is left alone. Both carry the
 /// same bundle ID, so with both present macOS lists RimeLingo twice per kind in Input Sources
 /// (#32), and code that blindly preferred the per-user copy talked to a stale version.
 public struct RimeLingoInstallations: Sendable, Equatable {
@@ -31,8 +32,7 @@ public struct RimeLingoInstallations: Sendable, Equatable {
     /// Both copies exist with RimeLingo's bundle ID.
     public var isDuplicate: Bool { user != nil && system != nil }
 
-    /// The copy to use: the higher build; on a tie the system-wide one (what the
-    /// installer just put there). `nil` when RimeLingo is not installed.
+    /// The copy to use: the higher build; on a tie the system-wide one. `nil` when RimeLingo is not installed.
     public var preferred: Install? {
         switch (user, system) {
         case let (user?, system?): user.build > system.build ? user : system

@@ -109,21 +109,24 @@ public struct Diagnostics: Sendable {
             ["layer": name, "files": url.map { fileMetadata($0, composed: name == "composed") } ?? []] as [String: Any]
         }
         try writeJSON(info, to: directory.appendingPathComponent("system.json"))
-        // update.json can contain remote notes/URLs and unknown fields: project safe fields only.
+        // update.json can contain remote notes, paths and unknown fields: project safe fields only.
         var update: [String: Any] = [:]
         if let data = regularData(paths.rimelingoDir.appendingPathComponent("update.json")),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            for key in ["autoCheck", "receiveBeta"] { if let flag = object[key] as? Bool { update[key] = flag } }
+            if let flag = object["automaticUpdates"] as? Bool { update["automaticUpdates"] = flag }
             if let date = object["lastCheck"] as? String, ISO8601DateFormatter().date(from: date) != nil { update["lastCheck"] = date }
-            if let available = object["available"] as? [String: Any] {
+            if let phase = (object["phase"] as? String).flatMap(UpdateState.Phase.init(rawValue:)) { update["phase"] = phase.rawValue }
+            if let available = object["release"] as? [String: Any] {
                 var release: [String: Any] = [:]
                 if let version = available["version"] as? String,
-                   version.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$"#, options: .regularExpression) != nil { release["version"] = version }
+                   version.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil { release["version"] = version }
                 if let build = available["build"] as? Int { release["build"] = build }
-                if let prerelease = available["prerelease"] as? Bool { release["prerelease"] = prerelease }
-                update["available"] = release
+                update["release"] = release
             }
-            update["skipped"] = object["skipped"] == nil ? "未配置" : "已配置"
+            // Only a code this build knows: the detail may hold a path.
+            if let code = (object["failure"] as? [String: Any])?["code"] as? String, UpdateFailure(code: code) != nil {
+                update["failure"] = ["code": code]
+            }
         }
         try writeJSON(update, to: directory.appendingPathComponent("update.json"))
         for (index, (kind, log)) in Self.recentLogs(safeFiles(paths.logDir)).enumerated() {
@@ -166,7 +169,7 @@ public struct Diagnostics: Sendable {
 
     private func bundleInfo(_ url: URL) -> [String: Any] {
         guard let bundle = Bundle(url: url) else { return ["status": "未找到"] }
-        return ["version": AppVersion.current(bundle).description, "distributionBuild": AppVersion.isDistributionBuild(bundle)]
+        return ["version": AppVersion.current(bundle).description, "distributionBuild": SecCodeSignatureEvaluator.isDeveloperIDSigned(url)]
     }
 
     private static var architecture: String {

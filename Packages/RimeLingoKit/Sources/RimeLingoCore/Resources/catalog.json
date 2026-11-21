@@ -1501,13 +1501,13 @@
   ],
   "appSettings": [
     {
-      "id": "update.receiveBeta",
-      "title": "接收测试版",
+      "id": "update.automaticUpdates",
+      "title": "自动更新",
       "type": "bool",
-      "default": false,
+      "default": true,
       "storage": "rimelingo/update.json",
-      "key": "receiveBeta",
-      "doc": "docs/rime-config-reference.md#更新通道rimelingo-应用设置"
+      "key": "automaticUpdates",
+      "doc": "docs/rime-config-reference.md"
     },
     {
       "id": "ai.extraJSON",

@@ -21,7 +21,7 @@ import Testing
         try put("rimelingo/imported/default.custom.yaml", "PRIVATE_IMPORTED_SENTINEL")
         try put("user.yaml", "var:\n  previously_selected_schema: rime_ice\nprivate: PRIVATE_USER_YAML_SENTINEL\n")
         try put("rimelingo/features.json", #"{"aiBaseURL":"https://PRIVATE_BASE_SENTINEL.example/v1"}"#)
-        try put("rimelingo/update.json", #"{"autoCheck":false,"notes":"PRIVATE_NOTE_SENTINEL","available":{"version":"0.2.0","build":4,"notes":"PRIVATE_REMOTE_SENTINEL"}}"#)
+        try put("rimelingo/update.json", #"{"schema":2,"automaticUpdates":false,"phase":"failed","notes":"PRIVATE_NOTE_SENTINEL","release":{"version":"0.3.0","build":21,"notes":"PRIVATE_REMOTE_SENTINEL"},"failure":{"code":"unsupportedLocation","detail":"/Users/PRIVATE_PATH_SENTINEL"}}"#)
         try put("logs/a.log", (0..<600).map { "line-\($0)" }.joined(separator: "\n") + "\nsk-PRIVATE_LOG_KEY\nBearer PRIVATE_BEARER\nhttps://user:PRIVATE_PASS@example.com/PRIVATE_PATH?key=PRIVATE_QUERY\ninput: PRIVATE_INPUT_SENTINEL\nPRIVATE_CREDENTIAL_SENTINEL\nhttps://PRIVATE_BASE_SENTINEL.example/v1/PRIVATE_SUFFIX?secret=PRIVATE_SUFFIX_QUERY\n")
         try FileManager.default.createSymbolicLink(at: paths.logDir.appendingPathComponent("secret.log"), withDestinationURL: paths.userDataDir.appendingPathComponent("credentials.json"))
         var report = Diagnostics(paths: paths, librimeVersion: "1.17.0", settingsURL: root.appendingPathComponent("Settings.app"))
@@ -50,6 +50,10 @@ import Testing
         for file in files where file.pathExtension == "json" {
             _ = try JSONSerialization.jsonObject(with: Data(contentsOf: file))
         }
+        let update = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: unpacked.appendingPathComponent("update.json"))) as? [String: Any])
+        #expect(update["automaticUpdates"] as? Bool == false && update["phase"] as? String == "failed")
+        #expect((update["release"] as? [String: Any])?["version"] as? String == "0.3.0")
+        #expect(update["failure"] as? [String: String] == ["code": "unsupportedLocation"])
         let log = try String(contentsOf: unpacked.appendingPathComponent("log-0-a.txt"), encoding: .utf8)
         #expect(log.hasPrefix("# a\n"))
         #expect(log.split(separator: "\n").count == 501)
