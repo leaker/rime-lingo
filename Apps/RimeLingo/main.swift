@@ -5,10 +5,16 @@ import RimeLingoCore
 // RimeLingo input method server. Runs as a background agent (LSUIElement) launched by the
 // system's text input machinery; InputMethodKit instantiates RimeLingoInputController per
 // client context.
-// Installer entry points (run by scripts/install-dev.sh, or by hand after a first install).
-let arguments = CommandLine.arguments
-if arguments.contains("--install") || arguments.contains("--enable") {
-    exit(InputSourceInstaller.install(select: arguments.contains("--install")))
+//
+// The same executable has two other jobs, told apart before anything else happens:
+// registering the input source (`--install` / `--enable`, run by the installer below and by
+// scripts/install-dev.sh), and, when it is opened from anywhere but an Input Methods
+// folder (a download, a disk image), offering to install itself. A copy the system starts
+// from an Input Methods folder never gets there.
+switch LaunchContext.classify(bundle: Bundle.main.bundleURL, arguments: CommandLine.arguments) {
+case let .registerInputSource(select): exit(InputSourceInstaller.install(select: select))
+case .installer: InstallerApp.run()
+case .inputMethod: break
 }
 
 // An update that was interrupted while replacing files is undone before anything else

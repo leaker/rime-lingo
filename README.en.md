@@ -12,18 +12,28 @@ RimeLingo (灵译输入法) is a Chinese input method for macOS. It is based on 
 
 ## Installation
 
-1. Download `RimeLingo-<version>.zip` from the [Releases](https://github.com/leaker/rime-lingo/releases/latest) page and unzip it.
-2. Move `RimeLingo.app` to `~/Library/Input Methods/` (in Finder press ⇧⌘G and paste that path).
-3. Open Terminal and run:
+1. Download `RimeLingo-<version>.zip` from the [Releases](https://github.com/leaker/rime-lingo/releases/latest) page and double-click it to unzip.
+2. Double-click the unzipped app (`RimeLingo.app`, shown as "灵译输入法"). When macOS asks whether to open an app downloaded from the internet, click "Open".
+3. Click "安装" (Install) in the window that appears.
+
+The installer copies the input method into your own Input Methods folder (`~/Library/Input Methods`) and enables it. It needs no administrator password and no logout. Afterwards pick "灵译输入法" from the input menu in the menu bar, or press ⌃Space. You can delete the downloaded archive and the unzipped app.
+
+Later versions download and install themselves while the Mac is idle. You do not repeat these steps. To switch to a particular version by hand, download it and do the same; the button then reads "更新" (Update) or "重新安装" (Reinstall).
+
+### Manual installation
+
+If the installer window reports an error, or you prefer to do it yourself:
+
+1. Move `RimeLingo.app` to `~/Library/Input Methods/` (in Finder press ⇧⌘G and paste that path).
+2. Open Terminal and run:
 
    ```bash
+   xattr -dr com.apple.quarantine ~/Library/Input\ Methods/RimeLingo.app
    ~/Library/Input\ Methods/RimeLingo.app/Contents/MacOS/RimeLingo --install
    ```
 
-4. Log out and back in once.
-5. If "灵译输入法" is not in the input menu of the menu bar yet, open System Settings › Keyboard › Input Sources › Edit…, click "+", and add it under "Chinese, Simplified".
-
-Later versions download and install themselves while the Mac is idle. You do not repeat these steps.
+3. Log out and back in once.
+4. If "灵译输入法" is not in the input menu of the menu bar yet, open System Settings › Keyboard › Input Sources › Edit…, click "+", and add it under "Chinese, Simplified".
 
 ## Usage
 

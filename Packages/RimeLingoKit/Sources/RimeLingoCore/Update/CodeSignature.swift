@@ -37,14 +37,33 @@ public struct SecCodeSignatureEvaluator: CodeSignatureEvaluating {
     /// Code the bundle seal covers only as resources; checked on its own as well.
     static let nestedCode = ["Contents/Applications/RimeLingo Settings.app", "Contents/Helpers/rimelingo"]
 
-    public init() {}
+    /// How much `evaluate(bundle:)` checks. The updater keeps the default.
+    public enum Depth: Sendable {
+        /// Everything, and nothing in the bundle that a signature does not account for.
+        case strict
+        /// Every architecture, all nested code and all sealed resources, without the
+        /// strict rules. For a copy the user just moved by hand or with the installer:
+        /// Finder metadata on it is not a reason to call it damaged.
+        case complete
+    }
+
+    public var depth: Depth
+
+    public init(depth: Depth = .strict) { self.depth = depth }
+
+    private var flags: UInt32 {
+        switch depth {
+        case .strict: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate
+        case .complete: kSecCSCheckAllArchitectures | kSecCSCheckNestedCode
+        }
+    }
 
     public func evaluate(bundle: URL) -> SignatureInfo {
-        var info = Self.evaluate(path: bundle, strict: true)
+        var info = Self.evaluate(path: bundle, flags: flags)
         for relative in Self.nestedCode {
             let nested = bundle.appendingPathComponent(relative)
             guard FileManager.default.fileExists(atPath: nested.path) else { continue }
-            let inner = Self.evaluate(path: nested, strict: true)
+            let inner = Self.evaluate(path: nested, flags: flags)
             info.isValid = info.isValid && inner.isValid
             info.satisfiesDeveloperID = info.satisfiesDeveloperID && inner.satisfiesDeveloperID
         }
@@ -68,7 +87,7 @@ public struct SecCodeSignatureEvaluator: CodeSignatureEvaluating {
 
     /// A quick answer for display: the requirement is checked without hashing resources.
     public static func isDeveloperIDSigned(_ bundle: URL) -> Bool {
-        evaluate(path: bundle, strict: false).satisfiesDeveloperID
+        evaluate(path: bundle, flags: kSecCSDoNotValidateResources).satisfiesDeveloperID
     }
 
     private static var requirement: SecRequirement? {
@@ -78,11 +97,9 @@ public struct SecCodeSignatureEvaluator: CodeSignatureEvaluating {
         return requirement
     }
 
-    private static func evaluate(path: URL, strict: Bool) -> SignatureInfo {
+    private static func evaluate(path: URL, flags raw: UInt32) -> SignatureInfo {
         var code: SecStaticCode?
         guard SecStaticCodeCreateWithPath(path as CFURL, [], &code) == errSecSuccess, let code else { return .unsigned }
-        let raw = strict ? kSecCSCheckAllArchitectures | kSecCSCheckNestedCode | kSecCSStrictValidate
-            : kSecCSDoNotValidateResources
         let flags = SecCSFlags(rawValue: raw)
         let valid = SecStaticCodeCheckValidity(code, flags, nil) == errSecSuccess
         let developerID = requirement.map { SecStaticCodeCheckValidity(code, flags, $0) == errSecSuccess } ?? false

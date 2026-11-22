@@ -12,18 +12,28 @@
 
 ## 安装
 
-1. 在 [Releases](https://github.com/leaker/rime-lingo/releases/latest) 页面下载 `RimeLingo-<版本>.zip` 并解压。
-2. 把 `RimeLingo.app` 移到 `~/Library/Input Methods/`（在访达里按 ⇧⌘G，粘贴这个路径）。
-3. 打开「终端」，运行：
+1. 在 [Releases](https://github.com/leaker/rime-lingo/releases/latest) 页面下载 `RimeLingo-<版本>.zip`，双击解压。
+2. 双击解压出来的「灵译输入法」（`RimeLingo.app`）。系统询问是否打开从互联网下载的应用时，点「打开」。
+3. 在弹出的窗口里点「安装」。
+
+安装程序会把输入法复制到你个人的「输入法」文件夹（`~/Library/Input Methods`）并启用，不需要管理员密码，也不用注销。完成后点菜单栏的输入法图标选择「灵译输入法」，或者按 ⌃空格 切换。下载的压缩包和解压出来的应用可以删除。
+
+之后的新版本会自动下载并在空闲时安装，不需要重复以上步骤。想手动换成某个版本时，下载它并照同样的步骤做，窗口里的按钮会变成「更新」或「重新安装」。
+
+### 手动安装
+
+安装窗口报错，或者想自己动手时：
+
+1. 把 `RimeLingo.app` 移到 `~/Library/Input Methods/`（在访达里按 ⇧⌘G，粘贴这个路径）。
+2. 打开「终端」，运行：
 
    ```bash
+   xattr -dr com.apple.quarantine ~/Library/Input\ Methods/RimeLingo.app
    ~/Library/Input\ Methods/RimeLingo.app/Contents/MacOS/RimeLingo --install
    ```
 
-4. 注销后重新登录一次。
-5. 如果菜单栏的输入法列表里还没有「灵译输入法」，到「系统设置 › 键盘 › 输入法 › 编辑…」，点「+」，在「简体中文」里添加它。
-
-之后的新版本会自动下载并在空闲时安装，不需要重复以上步骤。
+3. 注销后重新登录一次。
+4. 如果菜单栏的输入法列表里还没有「灵译输入法」，到「系统设置 › 键盘 › 输入法 › 编辑…」，点「+」，在「简体中文」里添加它。
 
 ## 使用
 

@@ -2,9 +2,15 @@ import Carbon
 import Foundation
 
 /// `RimeLingo --install`: registers, enables and selects the RimeLingo input source from the
-/// input method's own process (scripts/install-dev.sh, or by hand after a first install).
-/// Text Input Sources only lets an input method select its own modes reliably from
-/// its own bundle.
+/// input method's own process; `--enable` does the same without selecting it. The
+/// installer window (InstallerApp.swift) runs this from the copy it has just put into the
+/// Input Methods folder, scripts/install-dev.sh from the copy it built; it can also be run
+/// by hand. Text Input Sources only lets an input method select its own modes reliably
+/// from its own bundle.
+///
+/// This alone does not make a first install usable: the system's input method launcher
+/// has to start over as well, which the installer window does and install-dev.sh leaves
+/// to its closing instructions.
 enum InputSourceInstaller {
     static let modeID = "com.leelib.inputmethod.rimelingo.hans"
 
