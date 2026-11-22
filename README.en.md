@@ -51,7 +51,7 @@ In password fields RimeLingo does nothing: key presses go straight to the system
 
 ## Configuration
 
-Click the input method icon in the menu bar and choose "设置" (Settings). The settings app is in Chinese. The most used sections:
+Click the input method icon in the menu bar and choose "灵译输入法设置…" (RimeLingo Settings). The settings app is in Chinese. The most used sections:
 
 | Section | What it does |
 | --- | --- |
