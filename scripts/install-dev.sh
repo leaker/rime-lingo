@@ -17,14 +17,14 @@ echo "==> installing to $DEST"
 MODE=--enable; [[ -d "$DEST/RimeLingo.app" ]] || MODE=--install
 mkdir -p "$DEST/RimeLingo.app"
 rsync -a --delete "$ROOT/build/Release/RimeLingo.app/" "$DEST/RimeLingo.app/"
-# rsync -a keeps the build directory's old modification time on the bundle. The system's
-# input source cache is refreshed when the bundle looks newer, so mark it as changed.
-touch "$DEST/RimeLingo.app/Contents/Info.plist" "$DEST/RimeLingo.app/Contents" "$DEST/RimeLingo.app" "$DEST"
 # Make the installed copy the one LaunchServices resolves for the bundle id, so the
 # system can start it on demand (see the note at the end of build-app.sh).
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 [[ -x "$LSREGISTER" ]] && "$LSREGISTER" -f "$DEST/RimeLingo.app" >/dev/null 2>&1 || true
-"$DEST/RimeLingo.app/Contents/MacOS/RimeLingo" "$MODE" || true
+# A failure here must not stop the script: the running input method still has to be
+# restarted below. It is reported at the end and decides the exit code.
+ENABLE_STATUS=0
+"$DEST/RimeLingo.app/Contents/MacOS/RimeLingo" "$MODE" || ENABLE_STATUS=$?
 # Restart the running input method only now that the new files are in place, and bring
 # it straight back: applications with an open text field must not be left without one.
 RUNNING="Input Methods/RimeLingo.app/Contents/MacOS/RimeLingo"
@@ -46,3 +46,8 @@ echo "      killall imklaunchagent TextInputMenuAgent TextInputSwitcher"
 echo "    or log out and back in. If RimeLingo is still missing from the input menu, remove"
 echo "    and re-add it in System Settings › Keyboard › Input Sources."
 echo "    CLI: \"$DEST/RimeLingo.app/Contents/Helpers/rimelingo\" doctor"
+if [[ "$ENABLE_STATUS" -ne 0 ]]; then
+  echo "error: the input source was installed but could not be enabled (see the lines above)." >&2
+  echo "       Add it by hand in System Settings › Keyboard › Input Sources." >&2
+  exit 1
+fi
