@@ -474,7 +474,8 @@ public actor UpdateCoordinator {
         state.progress = nil
         // The previous version is kept, without a marker, from an install until the new
         // version has confirmed that it runs. In any other phase it is a leftover (the
-        // pending restart was dropped, or the confirming process could not get the lock).
+        // pending restart was dropped, or the confirming process could not get the lock),
+        // unless a marker that could not be read is still beside it.
         if state.phase != .restartPending { installer.discardKeptBackup() }
         if state != before { try? state.save(paths) }
         return outcome

@@ -81,9 +81,12 @@ public struct UpdateInstaller: Sendable {
     /// check and still not start. It is removed by `discardKeptBackup` once the new version
     /// has confirmed that it runs, and replaced by the next install. Nothing restores it
     /// automatically: the new version confirms as soon as it has launched, so one that
-    /// dies before that never runs any code of ours. Putting it back is manual for now
-    /// (copy it over the installed bundle); the relaunch helper or the settings app could
-    /// do it later.
+    /// dies before that never runs any code of ours. Putting it back is manual for now:
+    /// copy it over the installed bundle and turn automatic updates off. The copy alone
+    /// does not last, because nothing records a version to skip: the restored version
+    /// finds the same release at its next daily check and installs it again. Updates can
+    /// go back on once a fixed release with a higher version is published. The relaunch
+    /// helper or the settings app could do all of this later.
     public func install(staged: URL, release: AppRelease, into bundle: URL, current: AppVersion, bundleID: String) throws {
         // An install that could not be undone left its marker and the only good backup
         // behind: finish that first, and never build a new backup from a mixed bundle.
@@ -200,7 +203,7 @@ public struct UpdateInstaller: Sendable {
 
     /// Removes the previous version that `install` kept, for a caller that holds
     /// `UpdateLock`. While there is a marker the backup belongs to an install that is not
-    /// over and is left alone.
+    /// over, or to one whose marker cannot be read, and is left alone.
     func discardKeptBackup() {
         guard !FileManager.default.fileExists(atPath: paths.marker.path) else { return }
         try? fs.removeItem(at: paths.backup)
@@ -231,8 +234,10 @@ public struct UpdateInstaller: Sendable {
     func recoverHoldingLock(bundle: URL, bundleID: String) -> RecoveryOutcome {
         guard FileManager.default.fileExists(atPath: paths.marker.path) else { return .none }
         guard let marker = InstallMarker.read(paths.marker) else {
-            // Unreadable: written by nothing we know. The bundle is left alone.
-            try? fs.removeItem(at: paths.marker)
+            // Unreadable: written by nothing we know. The bundle is left alone, and so is
+            // the marker: it is what keeps `discardKeptBackup` from removing a backup that
+            // may be the only copy of the previous version after an install that was cut
+            // short. The next install replaces both.
             return .none
         }
         guard URL(fileURLWithPath: marker.bundle).standardizedFileURL.path == bundle.standardizedFileURL.path else { return .none }

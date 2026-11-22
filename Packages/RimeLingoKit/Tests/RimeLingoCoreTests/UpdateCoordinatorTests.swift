@@ -640,6 +640,36 @@ final class UpdateRig {
         #expect(snapshot(rig.installed) == before)
     }
 
+    @Test func launchWithAnUnreadableMarkerKeepsTheBackup() async throws {
+        let coordinator = rig.coordinator()
+        _ = await coordinator.check(force: false)
+        _ = await coordinator.downloadIfNeeded()
+        let before = snapshot(rig.installed)
+        // An install was cut short and its marker damaged: the backup may be the only
+        // copy of the previous version.
+        try FileManager.default.createDirectory(at: rig.updates.backup, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: rig.installed, to: rig.updates.backupApp)
+        try Data("{".utf8).write(to: rig.updates.marker)
+        var state = rig.state
+        state.phase = .installing
+        try state.save(rig.paths)
+        func launch() -> RecoveryOutcome {
+            UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
+                                              fs: rig.fs, process: rig.process, keys: ManifestKeys(rig.publicKey))
+        }
+        // Not only at the launch that finds it.
+        for _ in 0..<2 {
+            #expect(launch() == .none)
+            #expect(BundleTree.entry(at: rig.updates.backupApp)?.kind == .directory)
+            #expect(snapshot(rig.installed) == before)
+        }
+        #expect(rig.state.phase == .ready)
+        // The next install starts over with a backup and a marker of its own.
+        #expect(await rig.coordinator().installIfReady(idle: rig.idle, userRequested: true) == .installed(version: "0.3.0"))
+        #expect(BundleTree.entry(at: rig.updates.marker) == nil)
+        #expect(rig.signature.evaluate(bundle: rig.updates.backupApp).version == "0.2.0")
+    }
+
     @Test func launchAfterAnInterruptedDownloadOrInstallResumes() async throws {
         let coordinator = rig.coordinator()
         _ = await coordinator.check(force: false)
