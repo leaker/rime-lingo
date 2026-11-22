@@ -11,13 +11,13 @@ public enum UpdateConfiguration {
     /// TO BE REPLACED BEFORE THE FIRST RELEASE with the output of
     /// `swift scripts/sign-manifest.swift keygen`; scripts/release.sh refuses to publish
     /// while this is the placeholder or differs from the key in the login Keychain.
-    public static let manifestPublicKey = "REPLACE_BEFORE_FIRST_RELEASE"
+    public static let manifestPublicKey = "XymJ+jHA7os8dMJ1XTX3UTjvzzczspPao3klaolabNk="
     /// Second Ed25519 public key whose private half is kept offline, so that losing or
     /// leaking the everyday key does not strand installed copies: a manifest signed by
     /// either key is trusted. TO BE REPLACED BEFORE THE FIRST RELEASE with the output of
     /// `swift scripts/sign-manifest.swift keygen --backup`; scripts/release.sh refuses to
     /// publish while this is the placeholder. On its own it does not switch the updater on.
-    public static let manifestBackupPublicKey = "REPLACE_BEFORE_FIRST_RELEASE"
+    public static let manifestBackupPublicKey = "E1aXUnUPIq8rXcZh1UrN8pNDMMmfP8EVCpzFqSHYCWY="
     /// Signature (base64) of `keyProofMessage(for: manifestBackupPublicKey)` by the backup
     /// private key. TO BE REPLACED BEFORE THE FIRST RELEASE with the output of
     /// `swift scripts/sign-manifest.swift prove --backup`, run before that key goes offline.
@@ -25,7 +25,7 @@ public enum UpdateConfiguration {
     /// private half out of reach, that the backup constant is the key that was generated
     /// here and not a mistyped or made-up one, which would otherwise only show on the day
     /// the backup key is needed.
-    public static let manifestBackupKeyProof = "REPLACE_BEFORE_FIRST_RELEASE"
+    public static let manifestBackupKeyProof = "Ua3My1k+V5SIsAOStLGea87XmGV0c6dPi/0F19AFnUxd4SEAYmuAGqEvze6KC6iI7K4JBvYfh+qz193fZqSkBQ=="
     /// What a proof signs. Not JSON, so a proof can never pass for the signature of a
     /// manifest. Keep identical to scripts/sign-manifest.swift.
     public static func keyProofMessage(for key: String) -> Data {
