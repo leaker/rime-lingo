@@ -84,8 +84,8 @@ public enum SelectionReplaceBlock: Sendable, Equatable {
         }
     }
 
-    /// Stays for the rest of the capture: the preview keeps the translation for reading
-    /// and copying, with replacement off.
+    /// Stays for the rest of the capture: the preview keeps the translation for reading,
+    /// with replacement off.
     public var isPermanent: Bool { self != .notReady }
 }
 
@@ -236,7 +236,7 @@ public struct SelectionTranslationSession: Sendable, Equatable {
         if status != .failed, let replaceBlock { message = replaceBlock.message }
         return LiveTranslationSnapshot(
             targetLabel: target.displayName, status: status, text: text ?? "", isStale: false, message: message,
-            canSubmit: text != nil && replaceBlock == nil, canCopy: text != nil, canRetry: status == .failed,
+            canSubmit: text != nil && replaceBlock == nil, canRetry: status == .failed,
             showsPanel: true)
     }
 
@@ -273,7 +273,7 @@ public enum SelectionPreviewKey: Sendable, Equatable {
     case close
     case none
 
-    /// Shown for `replaceBlocked`, by the key and by the 替换选区 control alike.
+    /// Shown for `replaceBlocked`.
     public static let pendingInputMessage = "请先完成输入"
 
     /// `hasMarkedText`: a composition or a draft of ours is pending in the field; every

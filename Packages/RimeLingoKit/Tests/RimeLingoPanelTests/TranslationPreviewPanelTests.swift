@@ -12,7 +12,7 @@ struct TranslationPreviewPanelTests {
     static let size = NSSize(width: 300, height: 90)
 
     static func ready(_ text: String = "Hello there") -> TranslationPreviewState {
-        TranslationPreviewState(targetLabel: "英语", status: .ready, text: text, canSubmit: true, canCopy: true)
+        TranslationPreviewState(targetLabel: "英语", status: .ready, text: text)
     }
 
     // MARK: - Positioning
@@ -127,30 +127,82 @@ struct TranslationPreviewPanelTests {
 
     // MARK: - State to view
 
-    @Test func selectionPreviewOffersReplaceCopyAndCancel() {
-        var state = TranslationPreviewState(targetLabel: "英语", status: .ready, text: "Hello", canSubmit: true, canCopy: true, kind: .selection)
-        #expect(View.controls(for: state).map(\.title) == ["替换选区", "复制", "取消"])
-        #expect(View.controls(for: state).map(\.control) == [.submit, .copy, .exit])
-        // Replacing became unsafe: the control stays visible but off, copy and cancel stay on.
-        state.canSubmit = false
-        state.message = "原文已变化，无法替换"
-        #expect(View.controls(for: state).map(\.isEnabled) == [false, true, true])
-        let failed = TranslationPreviewState(targetLabel: "日语", status: .failed, message: "请求失败", canRetry: true, kind: .selection)
-        #expect(View.controls(for: failed).map(\.title) == ["替换选区", "复制", "重试", "取消"])
+    static let hint = "⌥↩ 替换选区   esc 关闭"
+
+    @MainActor
+    @Test func selectionPreviewShowsItsKeyHintsAsAFootnote() {
+        let view = View()
+        view.state = TranslationPreviewState(targetLabel: "英语", status: .ready, text: "Hello", footnote: Self.hint, kind: .selection)
+        let layout = view.layout
+        #expect(!layout.footnoteRect.isEmpty)
+        #expect(layout.footnoteRect.minY >= layout.textRect.maxY)
+        // A failure has no translation; the hint is still there, under the header.
+        view.state = TranslationPreviewState(targetLabel: "日语", status: .failed, message: "请求失败",
+                                             footnote: "⌥↩ 重试   esc 关闭", kind: .selection)
+        #expect(view.layout.textRect == .zero)
+        #expect(!view.layout.footnoteRect.isEmpty)
+        #expect(view.layout.footnoteRect.minY >= view.layout.labelRect.maxY)
     }
 
-    @Test func exitIsAlwaysAvailableAndRetryOnlyWhenOffered() {
-        let waiting = TranslationPreviewState(targetLabel: "英语", status: .waiting, message: "等待输入")
-        let controls = View.controls(for: waiting)
-        #expect(controls.map(\.control) == [.submit, .copy, .exit])
-        #expect(controls.map(\.title) == ["提交译文", "复制", "退出"])
-        #expect(controls.map(\.isEnabled) == [false, false, true])
+    @MainActor
+    @Test func noFootnoteTakesNoRoom() {
+        let view = View()
+        view.state = Self.ready()
+        let plain = view.layout
+        #expect(plain.footnoteRect == .zero)
+        // Nothing but the bottom padding under the translation.
+        #expect(plain.size.height - plain.textRect.maxY == plain.labelRect.minY)
 
-        let failed = TranslationPreviewState(targetLabel: "日语", status: .failed, message: "请求失败", canRetry: true)
-        #expect(View.controls(for: failed).map(\.control) == [.submit, .copy, .retry, .exit])
-        #expect(View.controls(for: failed).first { $0.control == .retry }?.title == "重试")
+        var state = Self.ready()
+        state.footnote = Self.hint
+        view.state = state
+        let hinted = view.layout
+        #expect(hinted.size.height > plain.size.height)
+        #expect(hinted.textRect == plain.textRect)
+    }
 
-        #expect(View.controls(for: Self.ready()).map(\.isEnabled) == [true, true, true])
+    @MainActor
+    @Test func hintWithoutATranslationIsShorterThanAPreview() {
+        let view = View()
+        view.state = TranslationPreviewState(targetLabel: "英语", status: .ready, text: "Hello", footnote: Self.hint)
+        let full = view.layout
+        view.state = TranslationPreviewState(targetLabel: "英语", status: .notice, text: "", message: "实时翻译已开启", footnote: Self.hint)
+        let hint = view.layout
+        #expect(hint.textRect == .zero && hint.lineCount == 0)
+        #expect(hint.messageRect != .zero && !hint.footnoteRect.isEmpty)
+        #expect(hint.size.height < full.size.height)
+        #expect(hint.footnoteRect.minY >= hint.labelRect.maxY)
+    }
+
+    @MainActor
+    @Test func messageStartsAtTheLeftMarginWithoutATargetLabel() {
+        let view = View()
+        view.state = TranslationPreviewState(targetLabel: "英语", status: .notice, message: "已切换翻译语言")
+        let labelled = view.layout
+        view.state = TranslationPreviewState(targetLabel: "", status: .notice, message: "翻译已关闭", footnote: Self.hint)
+        let bare = view.layout
+        #expect(bare.labelRect == .zero)
+        #expect(bare.messageRect.minX == labelled.labelRect.minX)
+        #expect(bare.messageRect.minX == bare.footnoteRect.minX)
+        #expect(labelled.messageRect.minX > labelled.labelRect.maxX)
+    }
+
+    @MainActor
+    @Test func longFootnotesAreTruncatedNotWidened() {
+        let view = View()
+        var state = Self.ready()
+        state.footnote = String(repeating: Self.hint + "   ", count: 12)
+        view.state = state
+        #expect(view.layout.size.width == View.maxWidth)
+        #expect(view.layout.footnoteRect.maxX <= view.layout.size.width)
+        view.widthLimit = 260
+        #expect(view.layout.size.width <= 260)
+        #expect(view.layout.footnoteRect.maxX <= view.layout.size.width)
+        // A short one widens the panel only as far as it needs.
+        state.footnote = Self.hint
+        view.widthLimit = View.maxWidth
+        view.state = state
+        #expect(view.layout.size.width < View.maxWidth)
     }
 
     @Test func staleTranslationsAreDimmedAndMarked() {
@@ -172,25 +224,25 @@ struct TranslationPreviewPanelTests {
     }
 
     @MainActor
-    @Test func laysOutHeaderTextAndControlsWithoutOverlap() {
+    @Test func laysOutHeaderTextAndFootnoteWithoutOverlap() {
         let view = View()
         view.theme = PanelTheme(frontend: PanelTests.frontend, dark: false)
         view.state = TranslationPreviewState(targetLabel: "英语", status: .updating, text: "See you tomorrow", isStale: true,
-                                             message: "翻译中…")
+                                             message: "翻译中…", footnote: Self.hint)
         let layout = view.layout
         let bounds = NSRect(origin: .zero, size: layout.size)
         #expect(layout.size.width >= View.minWidth && layout.size.width <= View.maxWidth)
         #expect(layout.lineCount == 1)
         #expect(layout.markerRect != .zero)
-        let rects = [layout.labelRect, layout.messageRect, layout.markerRect, layout.textRect] + layout.controls.map(\.rect)
+        let rects = [layout.labelRect, layout.messageRect, layout.markerRect, layout.textRect, layout.footnoteRect]
+        #expect(rects.allSatisfy { !$0.isEmpty })
         for (index, rect) in rects.enumerated() {
             #expect(bounds.contains(rect))
             for other in rects[(index + 1)...] { #expect(!rect.intersects(other)) }
         }
-        // Header, then the translation, then the controls.
+        // Header, then the translation, then the footnote.
         #expect(layout.labelRect.maxY <= layout.textRect.minY)
-        #expect(layout.controls.allSatisfy { $0.rect.minY >= layout.textRect.maxY })
-        #expect(layout.controls.last?.control == .exit)
+        #expect(layout.footnoteRect.minY >= layout.textRect.maxY)
     }
 
     @MainActor
@@ -225,33 +277,17 @@ struct TranslationPreviewPanelTests {
         view.widthLimit = 260
         view.state = Self.ready(String(repeating: "word ", count: 60))
         #expect(view.layout.size.width <= 260)
-        #expect(view.layout.controls.allSatisfy { $0.rect.maxX <= view.layout.size.width })
+        #expect(view.layout.textRect.maxX <= view.layout.size.width)
     }
 
     @MainActor
-    @Test func clicksReachEnabledControlsOnly() {
+    @Test func previewTakesNoClicks() {
         let view = View()
-        var clicked: [View.Control] = []
-        view.onControl = { clicked.append($0) }
-        view.state = TranslationPreviewState(targetLabel: "英语", status: .failed, message: "请求失败", canRetry: true)
-        func center(_ control: View.Control) -> NSPoint {
-            let rect = view.layout.controls.first { $0.control == control }!.rect
-            return NSPoint(x: rect.midX, y: rect.midY)
-        }
-        #expect(view.click(at: center(.submit)) == nil)
-        #expect(view.click(at: center(.copy)) == nil)
-        #expect(view.click(at: NSPoint(x: 2, y: 2)) == nil)
-        #expect(clicked.isEmpty)
-        view.click(at: center(.retry))
-        view.click(at: center(.exit))
-        #expect(clicked == [.retry, .exit])
-
         view.state = Self.ready()
-        view.click(at: center(.submit))
-        view.click(at: center(.copy))
-        #expect(clicked == [.retry, .exit, .submit, .copy])
-        #expect(view.acceptsFirstMouse(for: nil))
+        #expect(!view.acceptsFirstMouse(for: nil))
         #expect(!view.acceptsFirstResponder)
+        // The window lets clicks through to the application underneath.
+        #expect(Panel().ignoresMouse)
     }
 
     @Test func paletteFollowsTheTheme() {
@@ -310,23 +346,19 @@ struct TranslationPreviewPanelTests {
     }
 
     @MainActor
-    @Test func panelControlsCallTheirCallbacks() {
+    @Test func panelFollowsTheThemeAndSizesToItsFootnote() {
         let panel = Panel()
-        var calls: [String] = []
-        panel.onSubmit = { calls.append("submit") }
-        panel.onCopy = { calls.append("copy") }
-        panel.onRetry = { calls.append("retry") }
-        panel.onExit = { calls.append("exit") }
         panel.theme = PanelTheme(frontend: PanelTests.frontend, dark: true)
         #expect(panel.contentView.theme.schemeName == "rimelingo_dark")
-        panel.show(TranslationPreviewState(targetLabel: "日语", status: .notice, text: "こんにちは", isStale: true,
-                                           message: "超过 200 字，按当前语言快捷键刷新", canRetry: true),
-                   caret: NSRect(x: 300, y: 300, width: 1, height: 20), avoiding: nil)
+        let caret = NSRect(x: 300, y: 300, width: 1, height: 20)
+        panel.show(TranslationPreviewState(targetLabel: "日语", status: .notice, text: "こんにちは", isStale: true, message: "超过 200 字"),
+                   caret: caret, avoiding: nil)
         defer { panel.hide() }
-        for item in panel.contentView.layout.controls {
-            panel.contentView.click(at: NSPoint(x: item.rect.midX, y: item.rect.midY))
-        }
-        #expect(calls == ["retry", "exit"])
+        let plain = panel.frame
+        panel.update(TranslationPreviewState(targetLabel: "日语", status: .notice, text: "こんにちは", isStale: true,
+                                             message: "超过 200 字", footnote: Self.hint))
+        #expect(panel.frame.height > plain.height)
+        #expect(panel.frame.size == panel.contentView.fittingContentSize)
     }
 
     @MainActor

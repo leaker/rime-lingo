@@ -85,7 +85,6 @@ public struct LiveTranslationSession: Sendable, Equatable {
             isStale: !text.isEmpty && (translation?.tag != currentTag || status != .ready),
             message: message,
             canSubmit: canSubmit,
-            canCopy: canSubmit,
             canRetry: status == .failed || status == .overLimit,
             showsPanel: hasSource
         )
@@ -177,7 +176,6 @@ public struct LiveTranslationSnapshot: Sendable, Equatable {
     /// the key that acts on it (`TranslationShortcutBindings.liveMessage`).
     public var message: String
     public var canSubmit: Bool
-    public var canCopy: Bool
     public var canRetry: Bool
     /// The live preview is on screen only while there is a draft: false for a live session
     /// whose source is empty or blank, always true for a selection.

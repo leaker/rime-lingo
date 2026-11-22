@@ -10,11 +10,12 @@ import InputMethodKit
 // again. Decisions live in RimeLingoCore (SelectionCapture, SelectionTranslationSession,
 // SelectionPreviewKey, TranslationDispatch); this file adapts them to the client and the
 // panel. Nothing here logs the selected text or its translation, and the pasteboard is
-// only ever written (复制), never read.
+// never touched.
 //
 // Panel ownership: there is one preview panel. While a selection capture is open it owns
-// the panel and its controls; a live translation session of the same field stays active
-// underneath without drawing, and gets the panel back when the selection preview closes.
+// the panel; a live translation session of the same field stays active underneath
+// without drawing, and gets the panel back when the selection preview closes. The
+// preview has no controls: its footnote names the keys that act on it.
 
 extension RimeLingoInputController {
     private var selectionClient: (any IMKTextInput)? { client() }
@@ -99,7 +100,7 @@ extension RimeLingoInputController {
     }
 
     /// This field was deactivated, gave up the panels or lost its client: a preview
-    /// captured here stays on screen for reading and copying, with replacing off.
+    /// captured here stays on screen for reading, with replacing off.
     func detachSelectionPreview() {
         let selection = InputEngine.shared.selection
         guard selection.session?.capture.context.owner == ObjectIdentifier(self) else { return }
@@ -150,21 +151,15 @@ extension InputEngine {
         case .overLimit: .notice
         }
         DebugLog.write("selection render status=\(status) length=\(snapshot.text.count) replace=\(snapshot.canSubmit)")
-        previewPanel.onSubmit = { [weak self] in self?.replaceSelectedText() }
-        previewPanel.onCopy = { [weak self] in self?.copySelectionTranslation() }
-        previewPanel.onExit = { [weak self] in self?.closeSelectionPreview() }
-        previewPanel.onRetry = { [weak self] in
-            guard let self, !self.selectionBlockedBySecureContext() else { return }
-            self.selection.retry()
-        }
         let state = TranslationPreviewState(
             targetLabel: snapshot.targetLabel, status: status, text: snapshot.text, isStale: snapshot.isStale,
-            message: snapshot.message, canSubmit: snapshot.canSubmit, canCopy: snapshot.canCopy,
-            canRetry: snapshot.canRetry, kind: .selection)
+            message: snapshot.message,
+            footnote: translationBindings.selectionFootnote(canReplace: snapshot.canSubmit, canRetry: snapshot.canRetry),
+            kind: .selection)
         previewPanel.show(state, caret: selectionAnchor, avoiding: panel.occupiedFrame)
     }
 
-    /// 取消, Esc, or another translation taking over: the request is cancelled, nothing
+    /// Esc, or another translation taking over: the request is cancelled, nothing
     /// is written, and a live session of the active field gets the panel back.
     func closeSelectionPreview() {
         guard selection.isActive else { return }
@@ -173,7 +168,7 @@ extension InputEngine {
         activeController?.resumeLivePreview()
     }
 
-    /// 替换选区 or ⌥↩. The field is checked again right before the write: the capture's
+    /// The submit shortcut. The field is checked again right before the write: the capture's
     /// controller is the active one with the same client, the context is not secure, and
     /// the captured range still holds exactly the captured text. Otherwise nothing is
     /// written anywhere, least of all into whatever field has the keyboard now.
@@ -200,14 +195,5 @@ extension InputEngine {
         case .discard, nil:
             break
         }
-    }
-
-    /// 复制: the translation goes to the pasteboard and the application is left alone.
-    private func copySelectionTranslation() {
-        guard !selectionBlockedBySecureContext(), let text = selection.validTranslation else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        showStatus("已复制译文")
     }
 }

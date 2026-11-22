@@ -447,7 +447,7 @@ struct TranslationShortcutSettingsTests {
     private func snapshot(_ status: LiveTranslationSnapshot.Status, _ message: String) -> LiveTranslationSnapshot {
         LiveTranslationSnapshot(
             targetLabel: "英语", status: status, text: "", isStale: false, message: message,
-            canSubmit: false, canCopy: false, canRetry: status == .failed || status == .overLimit, showsPanel: true)
+            canSubmit: false, canRetry: status == .failed || status == .overLimit, showsPanel: true)
     }
 
     @Test func theStartedHintNamesTheKeysInEffect() {

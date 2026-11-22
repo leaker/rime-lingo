@@ -61,38 +61,17 @@ extension RimeLingoInputController {
         })
         coordinator.onChange = { [weak self] snapshot in self?.renderLive(snapshot) }
         live = coordinator
-        installLivePanelControls()
         DebugLog.write("live start target=\(target.code)")
         coordinator.start(target: target)
         // A draft already pending is the first source.
         draftDidChange()
     }
 
-    private func installLivePanelControls() {
-        let panel = liveEngine.previewPanel
-        panel.onSubmit = { [weak self] in self?.livePanelAction(writesToClient: true) { $0.submitLive(client: nil) } }
-        panel.onCopy = { [weak self] in self?.livePanelAction { $0.copyLive() } }
-        panel.onExit = { [weak self] in self?.livePanelAction(writesToClient: true) { $0.exitLive(client: nil) } }
-        panel.onRetry = { [weak self] in self?.livePanelAction { $0.live?.retry() } }
-    }
-
     /// A selection preview closed: the session it covered takes the panel back and
     /// shows where it stands now.
     func resumeLivePreview() {
         guard let live else { return }
-        installLivePanelControls()
         renderLive(live.session?.snapshot)
-    }
-
-    /// Runs a preview panel control for the field that owns the panel, outside a secure context.
-    /// Controls that write the draft or the translation into the app wait, like the keys,
-    /// while the quick menu or an action on the draft is open: that action would otherwise
-    /// put its own result into the app as well.
-    private func livePanelAction(writesToClient: Bool = false, _ action: (RimeLingoInputController) -> Void) {
-        guard ownsPanel, live != nil, !liveEngine.selection.isActive, !blockedBySecureContext() else { return }
-        // Ignored without a notice: the status bubble would replace the menu or result list.
-        if writesToClient, quickMenu != nil || polish != nil { return }
-        action(self)
     }
 
     /// Ends the session and invalidates whatever is pending. State and panel only:
@@ -108,8 +87,8 @@ extension RimeLingoInputController {
         if ownsPanel, !liveEngine.selection.isActive { liveEngine.previewPanel.hide() }
     }
 
-    /// Esc with a draft, the session's own language shortcut, the 退出 control, or the
-    /// feature being switched off: the source text goes into the app and the session ends.
+    /// Esc with a draft, the session's own language shortcut, or the feature being
+    /// switched off: the source text goes into the app and the session ends.
     func exitLive(client: (any IMKTextInput)?) {
         guard live != nil else { return }
         let target = client ?? liveTextClient
@@ -135,7 +114,7 @@ extension RimeLingoInputController {
         live?.sourceChanged(draft.text)
     }
 
-    // MARK: - Submit / copy
+    // MARK: - Submit
 
     /// Replaces the draft with the translation of exactly this draft and target. The text
     /// is inserted and nothing else: no Return reaches the app.
@@ -150,14 +129,6 @@ extension RimeLingoInputController {
         DebugLog.write("live submit length=\(text.count)")
         replaceDraft(with: text, client: target)
         repositionLivePreview(client: target)
-    }
-
-    private func copyLive() {
-        guard let text = live?.validTranslation else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        liveEngine.showStatus("已复制译文")
     }
 
     // MARK: - Preview panel
@@ -182,7 +153,7 @@ extension RimeLingoInputController {
         DebugLog.write("live render status=\(status) length=\(snapshot.text.count) stale=\(snapshot.isStale)")
         let state = TranslationPreviewState(
             targetLabel: snapshot.targetLabel, status: status, text: snapshot.text, isStale: snapshot.isStale,
-            message: liveEngine.translationBindings.liveMessage(snapshot), canSubmit: snapshot.canSubmit, canCopy: snapshot.canCopy, canRetry: snapshot.canRetry)
+            message: liveEngine.translationBindings.liveMessage(snapshot), footnote: "")
         // While visible the panel stays where the last key put it (see `repositionLivePreview`);
         // the client is asked for the cursor only when the panel appears.
         panel.show(state, caret: panel.isVisible ? .zero : cursorRect(client: liveTextClient),

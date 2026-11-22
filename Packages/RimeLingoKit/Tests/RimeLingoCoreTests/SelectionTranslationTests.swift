@@ -103,7 +103,7 @@ struct SelectionTranslationSessionTests {
         #expect(effects == [.cancelPending, .start(request), .render])
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "日语", status: .updating, text: "", isStale: false, message: "翻译中…",
-            canSubmit: false, canCopy: false, canRetry: false, showsPanel: true))
+            canSubmit: false, canRetry: false, showsPanel: true))
         #expect(session.validTranslation == nil)
     }
 
@@ -114,7 +114,7 @@ struct SelectionTranslationSessionTests {
         #expect(session.validTranslation == "Hello, world")
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .ready, text: "Hello, world", isStale: false, message: "",
-            canSubmit: true, canCopy: true, canRetry: false, showsPanel: true))
+            canSubmit: true, canRetry: false, showsPanel: true))
     }
 
     @Test func resultsOfAnotherCaptureTargetOrAttemptAreDiscarded() {
@@ -144,7 +144,7 @@ struct SelectionTranslationSessionTests {
         #expect(session.capture == before)
         // The English text is not shown under the Japanese label, and cannot be used.
         #expect(session.validTranslation == nil)
-        #expect(session.snapshot.text.isEmpty && session.snapshot.targetLabel == "日语" && !session.snapshot.canCopy)
+        #expect(session.snapshot.text.isEmpty && session.snapshot.targetLabel == "日语")
         // The English answer that was still on its way is dropped.
         #expect(session.handle(.completed(TranslationTag(session: 3, revision: 1, target: .english), .success("late"))).isEmpty)
         _ = session.handle(.completed(request.tag, .success("こんにちは、世界")))
@@ -165,7 +165,7 @@ struct SelectionTranslationSessionTests {
         #expect(session.handle(.completed(request.tag, .failure(failure))) == [.render])
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .failed, text: "", isStale: false, message: failure.message,
-            canSubmit: false, canCopy: false, canRetry: true, showsPanel: true))
+            canSubmit: false, canRetry: true, showsPanel: true))
         #expect(check(session) == .blocked(.notReady))
 
         // Both the retry control and the current target's shortcut send it again.
@@ -233,7 +233,7 @@ struct SelectionTranslationSessionTests {
         #expect(!asked)
     }
 
-    /// After a refusal the translation stays for reading and copying; replacing stays off
+    /// After a refusal the translation stays for reading; replacing stays off
     /// and the preview says why.
     @Test(arguments: [SelectionReplaceBlock.sourceChanged, .contextChanged])
     func refusalKeepsCopyAndDisablesReplace(reason: SelectionReplaceBlock) {
@@ -241,7 +241,7 @@ struct SelectionTranslationSessionTests {
         #expect(session.handle(.replaceRefused(reason)) == [.render])
         let snapshot = session.snapshot
         #expect(snapshot.status == .ready && snapshot.text == "Hello, world")
-        #expect(!snapshot.canSubmit && snapshot.canCopy)
+        #expect(!snapshot.canSubmit)
         #expect(snapshot.message == reason.message)
         #expect(session.validTranslation == "Hello, world")
         // The field looks fine again: still refused, and not read.
@@ -257,11 +257,11 @@ struct SelectionTranslationSessionTests {
         #expect(!SelectionReplaceBlock.notReady.isPermanent)
     }
 
-    /// Deactivation or a client change: reading and copying go on, replacing is off.
+    /// Deactivation or a client change: reading goes on, replacing is off.
     @Test func detachingKeepsCopyButDisablesReplace() {
         var session = ready()
         #expect(session.handle(.detached) == [.render])
-        #expect(session.snapshot.canCopy && !session.snapshot.canSubmit)
+        #expect(!session.snapshot.text.isEmpty && !session.snapshot.canSubmit)
         #expect(session.snapshot.message == "输入位置已改变，无法替换")
         #expect(check(session) == .blocked(.contextChanged))
         #expect(session.handle(.detached).isEmpty)
@@ -271,7 +271,7 @@ struct SelectionTranslationSessionTests {
         _ = translating.handle(.detached)
         #expect(translating.snapshot.status == .updating && translating.snapshot.message == "输入位置已改变，无法替换")
         _ = translating.handle(.completed(request.tag, .success("Hello")))
-        #expect(translating.snapshot.canCopy && !translating.snapshot.canSubmit)
+        #expect(!translating.snapshot.text.isEmpty && !translating.snapshot.canSubmit)
         // Another target still works on the detached preview.
         #expect(translating.handle(.targetPressed(.japanese)).count == 3)
         #expect(translating.replaceBlock == .contextChanged)
@@ -524,7 +524,7 @@ struct SelectionTranslationCoordinatorTests {
         #expect(coordinator.replace(active: Fixture.field, isSecure: false) { "改过的文字" } == .blocked(.sourceChanged))
         #expect(coordinator.isActive)
         #expect(log.snapshots.last??.canSubmit == false)
-        #expect(log.snapshots.last??.canCopy == true)
+        #expect(log.snapshots.last??.text == "Hello, world")
         #expect(log.snapshots.last??.message == "原文已变化，无法替换")
         #expect(coordinator.validTranslation == "Hello, world")
     }
@@ -538,12 +538,12 @@ struct SelectionTranslationCoordinatorTests {
         #expect(log.snapshots.last??.canSubmit == true)
     }
 
-    @Test func deactivationKeepsThePreviewForCopying() async {
+    @Test func deactivationKeepsThePreviewForReading() async {
         await translated()
         coordinator.detach()
         #expect(coordinator.isActive)
         #expect(coordinator.validTranslation == "Hello, world")
-        #expect(log.snapshots.last??.canCopy == true)
+        #expect(log.snapshots.last??.text == "Hello, world")
         #expect(log.snapshots.last??.canSubmit == false)
         #expect(coordinator.replace(active: Fixture.field, isSecure: false) { "你好，世界" } == .blocked(.contextChanged))
     }

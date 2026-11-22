@@ -1,22 +1,14 @@
 import AppKit
 
-/// Content of the live translation preview: a header (target language, status line,
-/// stale marker), the translation (wrapped, at most `maxLines` lines) and a row of
-/// self-drawn controls. Everything is drawn by hand so a click never needs the panel to
-/// become key: the view only hit-tests its own control rectangles.
+/// Content of the translation preview: a header (target language, status line, stale
+/// marker), the translation (wrapped, at most `maxLines` lines) and an optional footnote
+/// of key hints. Text only, drawn by hand: there is nothing to click, the keyboard does
+/// everything.
 final class TranslationPreviewView: NSView {
-    enum Control: Sendable, Equatable, CaseIterable { case submit, copy, retry, exit }
-
-    struct ControlItem: Equatable {
-        let control: Control
-        let title: String
-        let isEnabled: Bool
-        var rect: NSRect = .zero
-    }
-
     /// Geometry of one state, in the view's flipped coordinates.
     struct Layout: Equatable {
         var size: NSSize = .zero
+        /// `.zero` when the state has no target label.
         var labelRect: NSRect = .zero
         var messageRect: NSRect = .zero
         /// `.zero` when the translation is not stale.
@@ -24,7 +16,8 @@ final class TranslationPreviewView: NSView {
         /// `.zero` when there is no translation to show.
         var textRect: NSRect = .zero
         var lineCount = 0
-        var controls: [ControlItem] = []
+        /// `.zero` when the state has no footnote.
+        var footnoteRect: NSRect = .zero
     }
 
     /// Colors derived from the candidate panel's theme, so both panels match in light
@@ -53,11 +46,9 @@ final class TranslationPreviewView: NSView {
     nonisolated static let minWidth: CGFloat = 200
     nonisolated static let maxLines = 6
     nonisolated static let staleOpacity: CGFloat = 0.45
-    nonisolated static let disabledOpacity: CGFloat = 0.35
     private static let padX: CGFloat = 12
     private static let padY: CGFloat = 10
     private static let rowGap: CGFloat = 8
-    private static let itemGap: CGFloat = 6
 
     var theme: PanelTheme = .fallback {
         didSet {
@@ -76,17 +67,13 @@ final class TranslationPreviewView: NSView {
         didSet { if widthLimit != oldValue { invalidate() } }
     }
 
-    /// Called for a click on an enabled control.
-    var onControl: ((Control) -> Void)?
-
     private var cachedLayout: Layout?
     private var fonts: [String: NSFont] = [:]
-    private var pressed: Control?
 
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
     override var acceptsFirstResponder: Bool { false }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
 
     private func invalidate() {
         cachedLayout = nil
@@ -94,19 +81,6 @@ final class TranslationPreviewView: NSView {
     }
 
     // MARK: - State mapping
-
-    /// Controls shown for `state`, in display order. Exit is always available; retry is
-    /// only present when it can be used.
-    nonisolated static func controls(for state: TranslationPreviewState) -> [ControlItem] {
-        let isSelection = state.kind == .selection
-        var items = [
-            ControlItem(control: .submit, title: isSelection ? "替换选区" : "提交译文", isEnabled: state.canSubmit),
-            ControlItem(control: .copy, title: "复制", isEnabled: state.canCopy),
-        ]
-        if state.canRetry { items.append(ControlItem(control: .retry, title: "重试", isEnabled: true)) }
-        items.append(ControlItem(control: .exit, title: isSelection ? "取消" : "退出", isEnabled: true))
-        return items
-    }
 
     /// Badge next to the status line while the shown translation no longer matches the
     /// source: a newer one is on its way, or (automatic translation stopped) it is outdated.
@@ -190,16 +164,14 @@ final class TranslationPreviewView: NSView {
         let smallHeight = lineHeight(smallFont)
         let pillHeight = smallHeight + 4
 
-        let labelWidth = width(state.targetLabel, labelFont) + 14
+        let labelWidth = state.targetLabel.isEmpty ? 0 : width(state.targetLabel, labelFont) + 14
         let messageWidth = state.message.isEmpty ? 0 : width(state.message, smallFont)
         let marker = Self.staleMarker(for: state)
         let markerWidth = marker.map { width($0, smallFont) + 12 } ?? 0
-        let headerWidth = labelWidth + (messageWidth > 0 ? 8 + messageWidth : 0) + (markerWidth > 0 ? 8 + markerWidth : 0)
-
-        var controls = Self.controls(for: state)
-        let controlWidths = controls.map { width($0.title, smallFont) + 20 }
-        let controlsWidth = controlWidths.reduce(0, +) + Self.itemGap * CGFloat(controls.count - 1)
-        let controlHeight = smallHeight + 8
+        // Header items are 8 apart.
+        let headerWidths = [labelWidth, messageWidth, markerWidth].filter { $0 > 0 }
+        let headerWidth = headerWidths.reduce(0, +) + 8 * CGFloat(max(0, headerWidths.count - 1))
+        let footnoteWidth = state.footnote.isEmpty ? 0 : width(state.footnote, smallFont)
 
         var textSize = NSSize.zero
         if !state.text.isEmpty {
@@ -210,37 +182,38 @@ final class TranslationPreviewView: NSView {
             result.lineCount = lines
         }
 
-        let contentWidth = min(limit, max(Self.minWidth - Self.padX * 2, headerWidth, controlsWidth, textSize.width))
+        let contentWidth = min(limit, max(Self.minWidth - Self.padX * 2, headerWidth, footnoteWidth, textSize.width))
         var y = Self.padY
 
         // Header: language pill, status line (truncated when short of room), stale badge.
-        result.labelRect = NSRect(x: Self.padX, y: y, width: min(labelWidth, contentWidth), height: pillHeight)
+        // Without a target label the status line starts at the left margin.
+        if labelWidth > 0 {
+            result.labelRect = NSRect(x: Self.padX, y: y, width: min(labelWidth, contentWidth), height: pillHeight)
+        }
         if markerWidth > 0 {
             result.markerRect = NSRect(x: Self.padX + contentWidth - markerWidth, y: y, width: markerWidth, height: pillHeight)
         }
-        let messageX = result.labelRect.maxX + 8
+        let messageX = labelWidth > 0 ? result.labelRect.maxX + 8 : Self.padX
         let messageEnd = Self.padX + contentWidth - (markerWidth > 0 ? markerWidth + 8 : 0)
         if messageWidth > 0, messageEnd > messageX {
             result.messageRect = NSRect(x: messageX, y: y + (pillHeight - smallHeight) / 2,
                                         width: min(messageWidth, messageEnd - messageX), height: smallHeight)
         }
-        y += pillHeight + Self.rowGap
+        y += pillHeight
 
         if textSize != .zero {
+            y += Self.rowGap
             result.textRect = NSRect(x: Self.padX, y: y, width: contentWidth, height: textSize.height)
-            y += textSize.height + Self.rowGap
+            y += textSize.height
         }
 
-        // Controls from the left; exit sits at the right edge, away from submit.
-        var x = Self.padX
-        for index in controls.indices {
-            let isLast = index == controls.count - 1
-            let originX = isLast ? max(x, Self.padX + contentWidth - controlWidths[index]) : x
-            controls[index].rect = NSRect(x: originX, y: y, width: controlWidths[index], height: controlHeight)
-            x += controlWidths[index] + Self.itemGap
+        // Key hints: one line, truncated at the tail when wider than the panel may get.
+        if footnoteWidth > 0 {
+            y += Self.rowGap
+            result.footnoteRect = NSRect(x: Self.padX, y: y, width: min(footnoteWidth, contentWidth), height: smallHeight)
+            y += smallHeight
         }
-        result.controls = controls
-        y += controlHeight + Self.padY
+        y += Self.padY
 
         result.size = NSSize(width: ceil(contentWidth + Self.padX * 2), height: ceil(y))
         return result
@@ -264,8 +237,10 @@ final class TranslationPreviewView: NSView {
                         options: Self.bodyOptions)
         }
 
-        pill(layout.labelRect, nsColor(palette.accentFill))
-        centered(line(state.targetLabel, labelFont, nsColor(palette.accentText)), in: layout.labelRect)
+        if layout.labelRect != .zero {
+            pill(layout.labelRect, nsColor(palette.accentFill))
+            centered(line(state.targetLabel, labelFont, nsColor(palette.accentText)), in: layout.labelRect)
+        }
 
         if layout.messageRect != .zero {
             // A failure reason is the main content of the panel: full-strength text.
@@ -279,52 +254,8 @@ final class TranslationPreviewView: NSView {
         if layout.textRect != .zero {
             body(state).draw(with: layout.textRect, options: Self.bodyOptions)
         }
-
-        for item in layout.controls {
-            let alpha = item.isEnabled ? 1 : Self.disabledOpacity
-            let isPressed = pressed == item.control && item.isEnabled
-            let path = NSBezierPath(roundedRect: item.rect, xRadius: 6, yRadius: 6)
-            let titleColor: NSColor
-            if item.control == .submit {
-                nsColor(palette.accentFill, alpha: alpha * (isPressed ? 0.8 : 1)).setFill()
-                titleColor = nsColor(palette.accentText, alpha: item.isEnabled ? 1 : 0.7)
-            } else {
-                nsColor(palette.text, alpha: isPressed ? 0.2 : 0.09).setFill()
-                titleColor = nsColor(palette.text, alpha: alpha)
-            }
-            path.fill()
-            centered(line(item.title, smallFont, titleColor), in: item.rect)
+        if layout.footnoteRect != .zero {
+            line(state.footnote, smallFont, nsColor(palette.secondary)).draw(with: layout.footnoteRect, options: Self.bodyOptions)
         }
-    }
-
-    // MARK: - Mouse
-
-    /// The control under `point` (view coordinates), enabled or not.
-    func control(at point: NSPoint) -> ControlItem? {
-        layout.controls.first { $0.rect.contains(point) }
-    }
-
-    /// Reports a click at `point`. Disabled controls and empty areas do nothing.
-    @discardableResult
-    func click(at point: NSPoint) -> Control? {
-        guard let item = control(at: point), item.isEnabled else { return nil }
-        onControl?(item.control)
-        return item.control
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        let item = control(at: convert(event.locationInWindow, from: nil))
-        pressed = item?.isEnabled == true ? item?.control : nil
-        if pressed != nil { needsDisplay = true }
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        let armed = pressed
-        pressed = nil
-        needsDisplay = true
-        // Fire only when the button is released over the control it went down on.
-        guard let armed, control(at: point)?.control == armed else { return }
-        click(at: point)
     }
 }

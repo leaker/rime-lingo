@@ -5,8 +5,8 @@ public import AppKit
 public struct TranslationPreviewState: Sendable, Equatable {
     /// `notice` is an informational stop (for example the source is over the automatic limit).
     public enum Status: Sendable, Equatable { case waiting, updating, ready, failed, notice }
-    /// Which workflow the preview belongs to. Only the control titles differ: a selection
-    /// preview offers 替换选区 / 取消 where live input offers 提交译文 / 退出.
+    /// Which workflow the preview belongs to. Both are drawn the same way; they differ
+    /// only in the footnote the host gives them.
     public enum Kind: Sendable, Equatable { case live, selection }
 
     public var kind: Kind
@@ -17,22 +17,18 @@ public struct TranslationPreviewState: Sendable, Equatable {
     public var isStale: Bool
     /// Status line; the reason when `status` is `failed`.
     public var message: String
-    public var canSubmit: Bool
-    public var canCopy: Bool
-    /// Shows the retry control. Exit is always available.
-    public var canRetry: Bool
+    /// One line of key hints as plain text; empty draws nothing.
+    public var footnote: String
 
     public init(targetLabel: String, status: Status, text: String = "", isStale: Bool = false, message: String = "",
-                canSubmit: Bool = false, canCopy: Bool = false, canRetry: Bool = false, kind: Kind = .live) {
+                footnote: String = "", kind: Kind = .live) {
         self.kind = kind
         self.targetLabel = targetLabel
         self.status = status
         self.text = text
         self.isStale = isStale
         self.message = message
-        self.canSubmit = canSubmit
-        self.canCopy = canCopy
-        self.canRetry = canRetry
+        self.footnote = footnote
     }
 }
 
@@ -69,11 +65,6 @@ public final class TranslationPreviewPanel {
         }
     }
 
-    public var onSubmit: (@MainActor () -> Void)?
-    public var onCopy: (@MainActor () -> Void)?
-    public var onExit: (@MainActor () -> Void)?
-    public var onRetry: (@MainActor () -> Void)?
-
     public var isVisible: Bool { window.isVisible }
     public private(set) var state: TranslationPreviewState?
     /// Screen coordinates; `.zero` while hidden.
@@ -88,6 +79,8 @@ public final class TranslationPreviewPanel {
         window.hidesOnDeactivate = false
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         window.animationBehavior = .none
+        // Nothing on the preview can be clicked: clicks go to the application underneath.
+        window.ignoresMouseEvents = true
 
         container.wantsLayer = true
         container.layer?.masksToBounds = true
@@ -101,7 +94,6 @@ public final class TranslationPreviewPanel {
             container.addSubview(subview)
         }
         window.contentView = container
-        view.onControl = { [weak self] control in self?.dispatch(control) }
         styleContainer()
     }
 
@@ -189,15 +181,8 @@ public final class TranslationPreviewPanel {
     var contentView: TranslationPreviewView { view }
     /// Whether the window could ever take keyboard focus (for tests).
     var canTakeFocus: Bool { window.canBecomeKey || window.canBecomeMain }
-
-    private func dispatch(_ control: TranslationPreviewView.Control) {
-        switch control {
-        case .submit: onSubmit?()
-        case .copy: onCopy?()
-        case .retry: onRetry?()
-        case .exit: onExit?()
-        }
-    }
+    /// Whether clicks pass through the window (for tests).
+    var ignoresMouse: Bool { window.ignoresMouseEvents }
 
     private var visibleFrame: NSRect {
         let screens = screenFrames.isEmpty ? NSScreen.screens.map { ($0.frame, $0.visibleFrame) } : screenFrames

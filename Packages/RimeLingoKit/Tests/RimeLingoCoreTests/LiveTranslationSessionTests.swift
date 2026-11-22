@@ -34,7 +34,7 @@ struct LiveTranslationSessionTests {
         #expect(session.currentTag == tag(0, .japanese))
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "日语", status: .waiting, text: "", isStale: false, message: "",
-            canSubmit: false, canCopy: false, canRetry: false, showsPanel: false))
+            canSubmit: false, canRetry: false, showsPanel: false))
     }
 
     /// The preview is on screen only while there is a draft to translate.
@@ -143,7 +143,7 @@ struct LiveTranslationSessionTests {
         #expect(session.validTranslation == "Hello")
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .ready, text: "Hello", isStale: false, message: "",
-            canSubmit: true, canCopy: true, canRetry: false, showsPanel: true))
+            canSubmit: true, canRetry: false, showsPanel: true))
     }
 
     @Test(arguments: TranslationFailure.allCases)
@@ -157,7 +157,7 @@ struct LiveTranslationSessionTests {
         #expect(snapshot.message == failure.message)
         #expect(snapshot.text.isEmpty)
         #expect(!snapshot.isStale)
-        #expect(!snapshot.canSubmit && !snapshot.canCopy && snapshot.canRetry)
+        #expect(!snapshot.canSubmit && snapshot.canRetry)
     }
 
     @Test func failureHidesTheOlderTranslation() {
@@ -177,7 +177,7 @@ struct LiveTranslationSessionTests {
         #expect(snapshot.status == .updating)
         #expect(snapshot.text == "Hello")
         #expect(snapshot.isStale)
-        #expect(!snapshot.canSubmit && !snapshot.canCopy)
+        #expect(!snapshot.canSubmit)
         _ = session.handle(.debounceFired(tag(2)))
         snapshot = session.snapshot
         #expect(snapshot.status == .updating && snapshot.text == "Hello" && snapshot.isStale)
@@ -312,7 +312,7 @@ struct LiveTranslationSessionTests {
         #expect(session.validTranslation == nil)
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .waiting, text: "", isStale: false, message: "",
-            canSubmit: false, canCopy: false, canRetry: false, showsPanel: false))
+            canSubmit: false, canRetry: false, showsPanel: false))
     }
 
     @Test func clearingDuringARequestDropsItsResult() {
@@ -345,7 +345,7 @@ struct LiveTranslationSessionTests {
         #expect(session.validTranslation == nil)
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .overLimit, text: "Hello", isStale: true, message: "超过 200 字",
-            canSubmit: false, canCopy: false, canRetry: true, showsPanel: true))
+            canSubmit: false, canRetry: true, showsPanel: true))
         #expect(session.handle(.debounceFired(tag(2))) == [])
         #expect(session.handle(.sourceChanged(long + "字")) == [.cancelPending, .render])
         #expect(session.phase == .overLimit)

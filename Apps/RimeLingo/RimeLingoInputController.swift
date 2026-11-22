@@ -296,7 +296,7 @@ final class RimeLingoInputController: IMKInputController {
         polish = nil
         endLive()
         engine.panel.hide()
-        // A selection preview stays for reading and copying; it can no longer replace.
+        // A selection preview stays for reading; it can no longer replace.
         detachSelectionPreview()
         if !engine.selection.isActive { engine.previewPanel.hide() }
     }
