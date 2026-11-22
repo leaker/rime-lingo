@@ -9,8 +9,9 @@
 //   swift scripts/sign-manifest.swift check-key <public-key-base64>   # is it a usable public key?
 //   swift scripts/sign-manifest.swift prove                # prints a signature that shows the key is held
 //   swift scripts/sign-manifest.swift check-proof <public-key-base64> <proof>
+//   swift scripts/sign-manifest.swift import <public-key-base64>      # restores a backed-up private key
 //
-// `--backup` after keygen, pubkey, sign or prove uses the backup key instead of the everyday one
+// `--backup` after keygen, pubkey, sign, prove or import uses the backup key instead of the everyday one
 // (Keychain account "ed25519-backup" instead of "ed25519"). The apps trust a manifest
 // signed by either (UpdateConfiguration.manifestBackupPublicKey), so the backup key is what
 // still reaches installed copies when the everyday key is lost or has leaked. See below.
@@ -28,10 +29,12 @@
 // Back the key up offline once, right after keygen; it exists nowhere else, and without
 // it no installed copy can be updated again. This prints the 32 private bytes as hex:
 //   security find-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519 -w
-// and this puts them back on another Mac (then `pubkey` must print the key in the source):
-//   security add-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519 \
-//     -l "RimeLingo release manifest signing key" -X <the hex>
-// Do not paste the hex anywhere that is logged or synced.
+// and this puts them back on another Mac:
+//   swift scripts/sign-manifest.swift import <manifestPublicKey from the source>
+// It asks for the hex with echo off and stores it only if it is the private half of that
+// public key, and only if no key is there yet. Do not paste the hex anywhere that is logged
+// or synced, and never put it on a command line (`security add-generic-password -X …`
+// would): it stays in the shell history and is visible to other processes while it runs.
 //
 // The backup key is generated once, before the first release, and does not stay on this Mac:
 //   swift scripts/sign-manifest.swift keygen --backup
@@ -48,16 +51,15 @@
 // and this DELETES it from the Keychain once the offline copy is checked:
 //   security delete-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519-backup
 // From then on releases are signed with the everyday key only, as before. When the backup
-// key is needed, put it back:
-//   security add-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519-backup \
-//     -l "RimeLingo release manifest backup signing key" -X <the hex>
-// check that `pubkey --backup` prints the key in the source, and sign the release with
+// key is needed, put it back, typing or pasting the hex at the prompt (never as an argument):
+//   swift scripts/sign-manifest.swift import --backup <manifestBackupPublicKey from the source>
+// and sign the release with
 // `sign --backup` (RIMELINGO_SIGN_WITH_BACKUP_KEY=1 makes scripts/release.sh do that). That
 // release should carry a new everyday key in `manifestPublicKey`; delete the backup key
 // from the Keychain again afterwards.
-// Tests only: `--ephemeral-key-file <path>` after keygen, pubkey or sign keeps the key in
-// that file instead of the Keychain, with or without `--backup`
-// (scripts/test-release-manifests.sh).
+// Tests only: `--ephemeral-key-file <path>` after keygen, pubkey, sign, prove or import
+// keeps the key in that file instead of the Keychain, with or without `--backup`; import
+// then also takes the hex from a pipe (scripts/test-release-manifests.sh).
 import CryptoKit
 import Foundation
 import Security
@@ -78,8 +80,8 @@ if let index = arguments.firstIndex(of: "--ephemeral-key-file") {
 }
 var backup = false
 if let index = arguments.firstIndex(of: "--backup") {
-    guard ["keygen", "pubkey", "sign", "prove"].contains(arguments.first ?? "") else {
-        fail("--backup goes with keygen, pubkey, sign or prove")
+    guard ["keygen", "pubkey", "sign", "prove", "import"].contains(arguments.first ?? "") else {
+        fail("--backup goes with keygen, pubkey, sign, prove or import")
     }
     backup = true
     arguments.remove(at: index)
@@ -145,10 +147,8 @@ func proofMessage(for key: String) -> Data {
     Data("RimeLingo manifest signing key, proof of possession: \(key)".utf8)
 }
 
-switch arguments.first {
-case "keygen":
-    guard arguments.count == 1 else { fail("usage: keygen\(flags)") }
-    // Anything already there is kept, readable as a key or not.
+/// Anything already there is kept, readable as a key or not.
+func refuseToReplaceAKey() {
     if let keyFile {
         guard !FileManager.default.fileExists(atPath: keyFile) else { fail("\(keyFile) already exists; refusing to replace it") }
     } else {
@@ -158,7 +158,9 @@ case "keygen":
                 : "cannot tell whether a \(keyName) already exists (status \(status))")
         }
     }
-    let key = Curve25519.Signing.PrivateKey()
+}
+
+func store(_ key: Curve25519.Signing.PrivateKey) {
     if let keyFile {
         guard FileManager.default.createFile(atPath: keyFile, contents: Data(key.rawRepresentation.base64EncodedString().utf8),
                                              attributes: [.posixPermissions: 0o600]) else { fail("cannot write \(keyFile)") }
@@ -169,7 +171,43 @@ case "keygen":
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else { fail("could not store the key in the Keychain (status \(status))") }
     }
+}
+
+/// The hex of a private key, read from the terminal with echo off: as an argument it would
+/// stay in the shell history and show in `ps`. Only the tests' key file takes it from a pipe.
+func readPrivateKeyHex() -> String {
+    if keyFile != nil, isatty(STDIN_FILENO) == 0 { return readLine() ?? "" }
+    var buffer = [CChar](repeating: 0, count: 256)
+    defer { buffer.withUnsafeMutableBytes { _ = memset_s($0.baseAddress, $0.count, 0, $0.count) } }
+    guard readpassphrase("Private half of the \(keyName) (64 hex digits, not shown): ", &buffer, buffer.count, RPP_REQUIRE_TTY) != nil else {
+        fail("import asks for the private key on the terminal, with echo off; run it in a terminal")
+    }
+    return String(cString: buffer)
+}
+
+switch arguments.first {
+case "keygen":
+    guard arguments.count == 1 else { fail("usage: keygen\(flags)") }
+    refuseToReplaceAKey()
+    let key = Curve25519.Signing.PrivateKey()
+    store(key)
     print(key.publicKey.rawRepresentation.base64EncodedString())
+case "import":
+    guard arguments.count == 2 else {
+        fail("usage: import\(flags) <public-key>   (the private key is asked for; it is never an argument)")
+    }
+    guard let expected = publicKey(arguments[1]) else { fail("not a usable Ed25519 public key: \(arguments[1])") }
+    refuseToReplaceAKey()
+    let hex = Array(readPrivateKeyHex().trimmingCharacters(in: .whitespacesAndNewlines).utf8)
+    let digits = hex.compactMap { UInt8(String(UnicodeScalar($0)), radix: 16) }
+    guard hex.count == 64, digits.count == 64 else { fail("that is not 64 hex digits; nothing was stored") }
+    let raw = Data(stride(from: 0, to: 64, by: 2).map { digits[$0] << 4 | digits[$0 + 1] })
+    guard let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw),
+          key.publicKey.rawRepresentation == expected.rawRepresentation else {
+        fail("that is not the private key of \(arguments[1]); nothing was stored")
+    }
+    store(key)
+    print("stored the \(keyName) of \(key.publicKey.rawRepresentation.base64EncodedString())")
 case "pubkey":
     guard arguments.count == 1 else { fail("usage: pubkey\(flags)") }
     print(requireKey().publicKey.rawRepresentation.base64EncodedString())
@@ -208,5 +246,5 @@ case "check-proof":
     print("proof valid")
 default:
     fail("usage: sign-manifest.swift keygen [--backup] | pubkey [--backup] | sign [--backup] <file> | verify <file> <public-key>"
-        + " | check-key <public-key> | prove [--backup] | check-proof <public-key> <proof>")
+        + " | check-key <public-key> | prove [--backup] | check-proof <public-key> <proof> | import [--backup] <public-key>")
 }

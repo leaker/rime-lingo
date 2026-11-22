@@ -127,6 +127,38 @@ if "${SIGN[@]}" prove --backup --ephemeral-key-file "$WORK/missing" > "$WORK/pro
   fail "prove --backup without a key"
 fi
 
+# Restoring a backed-up key: the hex is asked for, never an argument, and is stored only as
+# the private half of the public key named, where no key is yet.
+hex_of() { python3 -c 'import base64, sys; print(base64.b64decode(open(sys.argv[1]).read()).hex())' "$1"; }
+BACKUP_HEX="$(hex_of "$WORK/backup-key")"
+RESTORED=(--backup --ephemeral-key-file "$WORK/restored-key")
+import_refuses() {  # <what> <stdin> <arguments...>
+  local what="$1" input="$2"; shift 2
+  if "${SIGN[@]}" import "$@" > "$WORK/import.log" 2>&1 <<<"$input"; then fail "import accepted $what"; fi
+  ! grep -qF "$BACKUP_HEX" "$WORK/import.log" || fail "import printed the private key when given $what"
+}
+import_refuses "the hex as an argument" "" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY" "$BACKUP_HEX"
+import_refuses "no public key" "$BACKUP_HEX" "${RESTORED[@]}"
+import_refuses "the private key of another key" "$(hex_of "$WORK/key")" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+import_refuses "a public key the hex does not belong to" "$BACKUP_HEX" "${RESTORED[@]}" "$PUBLIC_KEY"
+import_refuses "a small-order public key" "$BACKUP_HEX" "${RESTORED[@]}" AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+import_refuses "a short key" "${BACKUP_HEX%??}" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+import_refuses "a long key" "${BACKUP_HEX}00" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+import_refuses "something that is not hex" "${BACKUP_HEX%?}g" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+import_refuses "signs among the digits" "+${BACKUP_HEX%?}" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+import_refuses "the base64 of the key" "$BACKUP_PRIVATE" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+import_refuses "nothing" "" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+[[ ! -e "$WORK/restored-key" ]] || fail "a refused import stored a key"
+"${SIGN[@]}" import "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY" > "$WORK/import.log" <<<"  $(tr 'a-f' 'A-F' <<<"$BACKUP_HEX")  "
+! grep -qiF "$BACKUP_HEX" "$WORK/import.log" || fail "import printed the private key"
+[[ "$(cat "$WORK/restored-key")" == "$BACKUP_PRIVATE" ]] || fail "import stored another key"
+[[ "$(stat -f %Lp "$WORK/restored-key")" == 600 ]] || fail "the imported key is readable by others"
+[[ "$("${SIGN[@]}" pubkey "${RESTORED[@]}")" == "$BACKUP_PUBLIC_KEY" ]] || fail "pubkey differs after import"
+import_refuses "a key where one exists" "$BACKUP_HEX" "${RESTORED[@]}" "$BACKUP_PUBLIC_KEY"
+[[ "$(cat "$WORK/restored-key")" == "$BACKUP_PRIVATE" ]] || fail "a refused import rewrote the key"
+"${SIGN[@]}" import --ephemeral-key-file "$WORK/restored-everyday" "$PUBLIC_KEY" >/dev/null <<<"$(hex_of "$WORK/key")"
+[[ "$(cat "$WORK/restored-everyday")" == "$(cat "$WORK/key")" ]] || fail "import without --backup stored another key"
+
 # Pre-release versions, wrong archive names and bad numbers are refused.
 mkdir "$WORK/bad"
 for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip 0.3.1 21 15.0" \
@@ -137,4 +169,4 @@ for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip
   fi
   [[ ! -e "$WORK/bad/latest.json" ]] || fail "wrote a manifest for: $arguments"
 done
-echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, backup key, small-order keys, key check, proof of possession, refused input'
+echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, backup key, small-order keys, key check, proof of possession, key import, refused input'

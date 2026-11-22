@@ -50,7 +50,9 @@
 # the release is created.
 #
 # Releasing with the backup key (the everyday key is lost or has leaked): restore the
-# backup private key into the Keychain, put a NEW everyday public key into
+# backup private key into the Keychain (`swift scripts/sign-manifest.swift import --backup`,
+# described at the top of that file; never with the key on a command line), put a NEW
+# everyday public key into
 # `manifestPublicKey`, commit, and run this script with RIMELINGO_SIGN_WITH_BACKUP_KEY=1.
 # The manifest is then signed with `sign --backup` and checked against
 # `manifestBackupPublicKey`; the everyday private key is not needed for that release.
