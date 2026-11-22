@@ -132,6 +132,12 @@ gh auth status >/dev/null 2>&1 || die "gh is not signed in (gh auth login)"
 [[ "$(gh repo view "$REPO" --json visibility --jq .visibility 2>/dev/null)" == PUBLIC ]] \
   || die "$REPO does not exist or is not public: the updater reads its releases without a token"
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then die "release $TAG already exists on GitHub"; fi
+# Publishing needs to push the tag and create the release: find out now, not after the
+# build has been notarized. Neither check changes anything.
+[[ "$(gh api "repos/$REPO" --jq .permissions.push 2>/dev/null)" == true ]] \
+  || die "the account gh is signed in with cannot push to $REPO (gh auth status)"
+PUSH_CHECK="$(git push --dry-run origin "$COMMIT:refs/tags/$TAG" 2>&1)" \
+  || die "git cannot push tag $TAG to origin (dry run; do the credentials git uses have write access?): $PUSH_CHECK"
 
 # ---------------------------------------------------------------- build and verify
 
@@ -286,8 +292,18 @@ step "checking what clients receive (GET, as the updater does)"
 BASE="https://github.com/$REPO/releases"
 PROBLEM=0
 for name in latest.json latest.json.sig; do
-  if curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors "$BASE/latest/download/$name" -o "$WORK/$name" \
-     && cmp -s "$WORK/$name" "$OUT/$name"; then
+  # "latest" can keep answering with the previous release for a few seconds after the
+  # new one is published, so a file that differs is fetched again before it counts.
+  MATCHED=0
+  for attempt in 1 2 3 4 5 6; do
+    if curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors "$BASE/latest/download/$name" -o "$WORK/$name" \
+       && cmp -s "$WORK/$name" "$OUT/$name"; then
+      MATCHED=1
+      break
+    fi
+    [[ "$attempt" == 6 ]] || sleep 5
+  done
+  if [[ "$MATCHED" == 1 ]]; then
     echo "    ok  $name"
   else
     echo "    MISMATCH  $BASE/latest/download/$name is not the file just published" >&2

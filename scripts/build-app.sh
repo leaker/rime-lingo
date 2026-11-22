@@ -51,7 +51,12 @@ TIMESTAMP=--timestamp
 # Development builds tolerate an unreachable timestamp service; release.sh sets
 # RIMELINGO_REQUIRE_TIMESTAMP=1 (notarization needs secure timestamps).
 sign() {
-  codesign --force --options runtime "$TIMESTAMP" --sign "$IDENTITY" "$@" 2>/dev/null && return 0
+  local output
+  output="$(codesign --force --options runtime "$TIMESTAMP" --sign "$IDENTITY" "$@" 2>&1)" && return 0
+  printf '%s\n' "$output" >&2
+  # Only a timestamp failure is worth a retry without one; anything else (a missing
+  # identity, a locked Keychain, a damaged bundle) would fail the same way again.
+  grep -qi 'timestamp' <<<"$output" || return 1
   [[ "${RIMELINGO_REQUIRE_TIMESTAMP:-0}" == 1 ]] && { echo "timestamp service unavailable" >&2; return 1; }
   codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$@"
 }
