@@ -126,10 +126,14 @@ public enum UpdateEligibility: Equatable, Sendable {
         guard running.isValid, running.satisfiesDeveloperID, running.teamID == UpdateConfiguration.teamID else {
             return .developmentBuild
         }
-        let path = bundle.path
-        guard !path.contains("/AppTranslocation/"), fs.isUserWritable(bundle),
-              fs.isUserWritable(bundle.appendingPathComponent("Contents")) else { return .unsupportedLocation(path) }
+        guard isReplaceable(bundle, fs: fs) else { return .unsupportedLocation(bundle.path) }
         return .eligible(bundle: bundle)
+    }
+
+    /// Whether the current user can replace the files of the bundle where it lies.
+    static func isReplaceable(_ bundle: URL, fs: any UpdateFileSystem) -> Bool {
+        !bundle.path.contains("/AppTranslocation/") && fs.isUserWritable(bundle)
+            && fs.isUserWritable(bundle.appendingPathComponent("Contents"))
     }
 
     public var failure: UpdateFailure? {

@@ -190,6 +190,17 @@ public struct UpdateInstaller: Sendable {
         return recoverHoldingLock(bundle: bundle, bundleID: bundleID)
     }
 
+    /// Whether an install into `bundle` stopped at a point where its files may be a mix of
+    /// two versions. Only reads the marker.
+    func wasInterruptedWhileReplacing(_ bundle: URL) -> Bool {
+        guard let marker = InstallMarker.read(paths.marker),
+              URL(fileURLWithPath: marker.bundle).standardizedFileURL.path == bundle.standardizedFileURL.path else { return false }
+        switch marker.phase {
+        case .prepare: return false
+        case .commit, .cleanup, .rollback: return true
+        }
+    }
+
     /// The recovery itself, for a caller that already holds `UpdateLock`.
     func recoverHoldingLock(bundle: URL, bundleID: String) -> RecoveryOutcome {
         guard FileManager.default.fileExists(atPath: paths.marker.path) else { return .none }

@@ -431,11 +431,80 @@ final class UpdateRig {
         rig.signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: false, teamID: UpdateConfiguration.teamID)
         #expect(launch(key: rig.publicKey) == .none)
         // or by an ad-hoc build.
-        rig.signature.running = .unsigned
+        rig.signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: false)
         #expect(launch(key: rig.publicKey) == .none)
         #expect(snapshot(rig.installed) == before && rig.fs.count(.rename) == 0 && rig.fs.count(.remove) == 0)
         #expect(BundleTree.entry(at: rig.updates.marker) != nil && rig.signature.count == 0)
         #expect(!FileManager.default.fileExists(atPath: UpdateState.file(rig.paths).path))
+    }
+
+    /// Info.plist and the seal are the new version's, the executable still the old one:
+    /// the process started from that mix has no valid signature of its own.
+    @Test func launchFromAMixedBundleRestoresDespiteTheBrokenRunningSignature() async throws {
+        let coordinator = rig.coordinator()
+        _ = await coordinator.check(force: false)
+        _ = await coordinator.downloadIfNeeded()
+        let before = snapshot(rig.installed)
+        try FileManager.default.createDirectory(at: rig.updates.backup, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: rig.installed, to: rig.updates.backupApp)
+        let replacer = BundleReplacer()
+        var plan = try replacer.plan(from: rig.updates.stagedApp, into: rig.installed)
+        try replacer.prepare(plan)
+        plan.places = Array(plan.places.prefix(3))
+        try replacer.commit(plan)
+        try InstallMarker(pid: 1, from: .init(version: "0.2.0", build: 20), to: .init(version: "0.3.0", build: 21),
+                          bundle: rig.installed.path, phase: .commit, startedAt: rig.clock.now).write(rig.updates.marker)
+        var state = rig.state
+        state.phase = .installing
+        try state.save(rig.paths)
+        rig.signature.running = SignatureInfo(isValid: false, satisfiesDeveloperID: false, teamID: UpdateConfiguration.teamID)
+        func launch(key: String? = nil) -> RecoveryOutcome {
+            UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
+                                              fs: rig.fs, process: rig.process, publicKey: key ?? rig.publicKey,
+                                              now: { [clock = rig.clock] in clock.now })
+        }
+        // Still not without a manifest key or where the bundle cannot be replaced.
+        let mixed = snapshot(rig.installed)
+        #expect(launch(key: UpdateConfiguration.placeholderPublicKey) == .none)
+        rig.fs.userWritable = false
+        #expect(launch() == .none)
+        rig.fs.userWritable = true
+        #expect(snapshot(rig.installed) == mixed && BundleTree.entry(at: rig.updates.marker) != nil)
+
+        #expect(launch() == .rolledBack(from: "0.3.0 (21)", to: "0.2.0 (20)"))
+        #expect(snapshot(rig.installed) == before)
+        #expect(BundleTree.entry(at: rig.updates.marker) == nil && BundleTree.entry(at: rig.updates.backup) == nil)
+        #expect(rig.state.phase == .failed && rig.state.failure?.code == "installFailed" && rig.state.failure?.version == "0.3.0 (21)")
+    }
+
+    @Test func aBrokenRunningSignatureRecoversOnlyAnInstallCutShortInThisBundle() throws {
+        try FileManager.default.createDirectory(at: rig.updates.backup, withIntermediateDirectories: true)
+        try makeBundle(rig.updates.backupApp, version: "0.1.0", build: 9)
+        let before = snapshot(rig.installed)
+        func launch(phase: InstallMarker.Phase, bundle: URL) throws -> RecoveryOutcome {
+            try InstallMarker(pid: 1, from: .init(version: "0.1.0", build: 9), to: .init(version: "0.2.0", build: 20),
+                              bundle: bundle.path, phase: phase, startedAt: rig.clock.now).write(rig.updates.marker)
+            return UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
+                                                     fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+        }
+        rig.signature.running = .unsigned
+        // Nothing was replaced yet: the broken signature has another cause.
+        #expect(try launch(phase: .prepare, bundle: rig.installed) == .none)
+        // The marker of an install into another copy.
+        #expect(try launch(phase: .commit, bundle: rig.scratch.url("elsewhere/RimeLingo.app")) == .none)
+        // A development build is validly signed and leaves a release's marker alone.
+        rig.signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: false, teamID: UpdateConfiguration.teamID)
+        for phase in [InstallMarker.Phase.commit, .cleanup, .rollback] {
+            #expect(try launch(phase: phase, bundle: rig.installed) == .none)
+        }
+        #expect(snapshot(rig.installed) == before && rig.signature.count == 0)
+        #expect(BundleTree.entry(at: rig.updates.marker) != nil && BundleTree.entry(at: rig.updates.backupApp) != nil)
+        #expect(!FileManager.default.fileExists(atPath: UpdateState.file(rig.paths).path))
+        // A backup that is no release of ours is not restored by anyone.
+        rig.signature.running = .unsigned
+        rig.signature.markDevelopmentSigned(rig.updates.backupApp)
+        #expect(try launch(phase: .commit, bundle: rig.installed) == .failed("untrustedBundle"))
+        #expect(snapshot(rig.installed) == before)
     }
 
     @Test func launchAfterACrashBehindACompleteInstallGoesForward() async throws {

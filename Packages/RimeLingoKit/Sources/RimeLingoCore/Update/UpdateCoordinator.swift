@@ -404,7 +404,11 @@ public actor UpdateCoordinator {
     /// install and brings the persisted state back in line with what is on disk. Like
     /// everything else here it is for release builds with a manifest key only: a
     /// development build never rewrites its own bundle, whatever an earlier release build
-    /// left in the cache.
+    /// left in the cache. The one exception is a process whose own signature is broken
+    /// while the marker says an install was cut short replacing the files of this very
+    /// bundle: that is what a release looks like when it starts from a mix of two
+    /// versions, and it is the only one left to put the previous version back. Nothing
+    /// but a backup that is a release of ours is ever restored.
     @discardableResult
     public static func recoverAtLaunch(paths: RimeLingoPaths, bundle: URL, bundleID: String = RimeLingoInstallations.bundleID,
                                        signature: any CodeSignatureEvaluating = SecCodeSignatureEvaluator(),
@@ -413,11 +417,16 @@ public actor UpdateCoordinator {
                                        publicKey: String = UpdateConfiguration.manifestPublicKey,
                                        now: @Sendable () -> Date = { Date() }) -> RecoveryOutcome {
         let updates = UpdatePaths(paths)
-        guard FileManager.default.fileExists(atPath: updates.root.path),
-              case .eligible = UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: fs, publicKey: publicKey)
-        else { return .none }
-        let outcome = UpdateInstaller(paths: updates, signature: signature, fs: fs, process: process)
-            .recoverIfNeeded(bundle: bundle, bundleID: bundleID)
+        guard FileManager.default.fileExists(atPath: updates.root.path) else { return .none }
+        let installer = UpdateInstaller(paths: updates, signature: signature, fs: fs, process: process)
+        switch UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: fs, publicKey: publicKey) {
+        case .eligible: break
+        // A valid signature that is not a release's stays a development build.
+        case .developmentBuild where !signature.evaluateRunningProcess().isValid
+            && UpdateEligibility.isReplaceable(bundle, fs: fs) && installer.wasInterruptedWhileReplacing(bundle): break
+        default: return .none
+        }
+        let outcome = installer.recoverIfNeeded(bundle: bundle, bundleID: bundleID)
         guard outcome != .busy, let lock = UpdateLock.acquire(updates) else { return outcome }
         defer { withExtendedLifetime(lock) {} }
         // Nobody holds the lock: whatever was in progress is over.
