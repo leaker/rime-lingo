@@ -21,6 +21,8 @@
     }
 
     public var isActive: Bool { session != nil }
+    /// The target of the running session.
+    public var target: TranslationTarget? { session?.target }
     public var validTranslation: String? { session?.validTranslation }
 
     /// Starts a session, ending the current one first. Ids grow monotonically within the process.

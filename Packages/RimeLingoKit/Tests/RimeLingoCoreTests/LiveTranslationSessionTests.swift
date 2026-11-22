@@ -33,8 +33,31 @@ struct LiveTranslationSessionTests {
         #expect(session.validTranslation == nil)
         #expect(session.currentTag == tag(0, .japanese))
         #expect(session.snapshot == LiveTranslationSnapshot(
-            targetLabel: "日语", status: .waiting, text: "", isStale: false, message: "等待输入",
-            canSubmit: false, canCopy: false, canRetry: false))
+            targetLabel: "日语", status: .waiting, text: "", isStale: false, message: "",
+            canSubmit: false, canCopy: false, canRetry: false, showsPanel: false))
+    }
+
+    /// The preview is on screen only while there is a draft to translate.
+    @Test func thePanelShowsOnlyWhileThereIsASource() {
+        var session = Session(id: 7, target: .english)
+        #expect(!session.snapshot.showsPanel)
+        _ = session.handle(.sourceChanged("你好"))
+        #expect(session.snapshot.showsPanel)
+        _ = session.handle(.debounceFired(tag(1)))
+        #expect(session.snapshot.showsPanel)
+        _ = session.handle(.completed(tag(1), .failure(.requestFailed)))
+        #expect(session.snapshot.showsPanel)
+        // Submitting or committing empties the draft: the panel goes away again.
+        _ = session.handle(.sourceChanged(""))
+        #expect(!session.snapshot.showsPanel)
+        _ = session.handle(.sourceChanged("谢谢"))
+        #expect(session.snapshot.showsPanel)
+        // Switching the target changes nothing about it.
+        _ = session.handle(.targetPressed(.japanese))
+        #expect(session.snapshot.showsPanel)
+        _ = session.handle(.sourceChanged(""))
+        _ = session.handle(.targetPressed(.english))
+        #expect(!session.snapshot.showsPanel)
     }
 
     /// Whitespace alone is no source: nothing is scheduled and no failure is shown.
@@ -42,6 +65,8 @@ struct LiveTranslationSessionTests {
     func blankSourceWaitsInsteadOfTranslating(blank: String) {
         var session = Session(id: 7, target: .english)
         #expect(session.handle(.sourceChanged(blank)) == [.cancelPending, .render])
+        #expect(!session.snapshot.showsPanel)
+        #expect(session.snapshot.message.isEmpty)
         #expect(session.phase == .waiting)
         #expect(session.revision == 1)
         #expect(session.snapshot.status == .waiting)
@@ -118,7 +143,7 @@ struct LiveTranslationSessionTests {
         #expect(session.validTranslation == "Hello")
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .ready, text: "Hello", isStale: false, message: "",
-            canSubmit: true, canCopy: true, canRetry: false))
+            canSubmit: true, canCopy: true, canRetry: false, showsPanel: true))
     }
 
     @Test(arguments: TranslationFailure.allCases)
@@ -286,8 +311,8 @@ struct LiveTranslationSessionTests {
         #expect(session.translation == nil)
         #expect(session.validTranslation == nil)
         #expect(session.snapshot == LiveTranslationSnapshot(
-            targetLabel: "英语", status: .waiting, text: "", isStale: false, message: "等待输入",
-            canSubmit: false, canCopy: false, canRetry: false))
+            targetLabel: "英语", status: .waiting, text: "", isStale: false, message: "",
+            canSubmit: false, canCopy: false, canRetry: false, showsPanel: false))
     }
 
     @Test func clearingDuringARequestDropsItsResult() {
@@ -319,8 +344,8 @@ struct LiveTranslationSessionTests {
         #expect(session.phase == .overLimit)
         #expect(session.validTranslation == nil)
         #expect(session.snapshot == LiveTranslationSnapshot(
-            targetLabel: "英语", status: .overLimit, text: "Hello", isStale: true, message: "超过 200 字，按当前语言快捷键刷新",
-            canSubmit: false, canCopy: false, canRetry: true))
+            targetLabel: "英语", status: .overLimit, text: "Hello", isStale: true, message: "超过 200 字",
+            canSubmit: false, canCopy: false, canRetry: true, showsPanel: true))
         #expect(session.handle(.debounceFired(tag(2))) == [])
         #expect(session.handle(.sourceChanged(long + "字")) == [.cancelPending, .render])
         #expect(session.phase == .overLimit)

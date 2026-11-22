@@ -236,7 +236,8 @@ public struct SelectionTranslationSession: Sendable, Equatable {
         if status != .failed, let replaceBlock { message = replaceBlock.message }
         return LiveTranslationSnapshot(
             targetLabel: target.displayName, status: status, text: text ?? "", isStale: false, message: message,
-            canSubmit: text != nil && replaceBlock == nil, canCopy: text != nil, canRetry: status == .failed)
+            canSubmit: text != nil && replaceBlock == nil, canCopy: text != nil, canRetry: status == .failed,
+            showsPanel: true)
     }
 
     private var isFailed: Bool {
@@ -262,6 +263,8 @@ public struct SelectionTranslationSession: Sendable, Equatable {
 public enum SelectionPreviewKey: Sendable, Equatable {
     /// Option+Return or Option+Enter: replace the selection (revalidated by the host).
     case replace
+    /// Option+Return or Option+Enter after a failed translation: translate the capture again.
+    case retry
     /// Option+Return or Option+Enter while a composition or a draft is pending: nothing
     /// is replaced, and the key is still swallowed. Passed on, it would commit the draft
     /// unasked or reach the application, where it could send a message.
@@ -276,13 +279,15 @@ public enum SelectionPreviewKey: Sendable, Equatable {
     /// `hasMarkedText`: a composition or a draft of ours is pending in the field; every
     /// key but the submit shortcut keeps its meaning there. `submitMatched`: whether the
     /// key is the configured submit shortcut; nil stands for the default, Option+Return.
+    /// `canRetry`: the translation failed.
     public static func decision(
         keyCode: UInt16, option: Bool, command: Bool, control: Bool, shift: Bool, hasMarkedText: Bool,
-        submitMatched: Bool? = nil
+        submitMatched: Bool? = nil, canRetry: Bool = false
     ) -> SelectionPreviewKey {
         if submitMatched ?? TranslationShortcutBindings.isDefaultSubmit(
             keyCode: keyCode, option: option, command: command, control: control, shift: shift) {
-            return hasMarkedText ? .replaceBlocked : .replace
+            if hasMarkedText { return .replaceBlocked }
+            return canRetry ? .retry : .replace
         }
         guard !command, !control, keyCode == 53 else { return .none }
         return option || hasMarkedText ? .none : .close

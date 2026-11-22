@@ -109,6 +109,24 @@ public enum TranslationShortcutIssue: Sendable, Equatable {
     }
 }
 
+/// A transient notice of the live translation mode: shown once when the mode changes, and
+/// gone after `duration` or at the next key press.
+public struct TranslationHint: Sendable, Equatable {
+    /// The target's display name; empty when the notice names no language.
+    public var targetLabel: String
+    public var title: String
+    /// One line of keys; empty when there is nothing to explain.
+    public var keys: String
+    public var duration: Duration
+
+    public init(targetLabel: String, title: String, keys: String, duration: Duration) {
+        self.targetLabel = targetLabel
+        self.title = title
+        self.keys = keys
+        self.duration = duration
+    }
+}
+
 /// What a key press means to the translation shortcuts.
 public enum TranslationShortcutMatch: Sendable, Equatable {
     case language(TranslationTarget)
@@ -214,10 +232,56 @@ public struct TranslationShortcutBindings: Sendable, Equatable {
 
     // MARK: - Hints
 
-    /// The hint under the draft of a live session, naming the submit shortcut in effect.
-    public var liveStatusHint: String {
-        "↩ 原文   \(HotkeyFormatter.display(self[.submit])) 译文   esc 退出"
+    private var submitKey: String { HotkeyFormatter.display(self[.submit]) }
+
+    /// Shown once when live translation is turned on. The keys name only what works at any
+    /// time: Esc is left out because with an empty draft it goes to the app.
+    public func liveStartedHint(for target: TranslationTarget) -> TranslationHint {
+        let toggle = self[.language(target)]
+        let off = toggle.isEmpty ? "esc 上屏原文并关闭" : "\(HotkeyFormatter.display(toggle)) 关闭"
+        return TranslationHint(
+            targetLabel: target.displayName, title: "实时翻译已开启",
+            keys: ["↩ 上屏原文", "\(submitKey) 上屏译文", off].joined(separator: Self.hintSeparator),
+            duration: .seconds(3))
     }
+
+    /// Shown once when live translation is turned off. `committedSource`: a draft was
+    /// pending and its source text went into the app.
+    public static func liveStoppedHint(committedSource: Bool) -> TranslationHint {
+        TranslationHint(
+            targetLabel: "", title: committedSource ? "翻译已关闭，原文已上屏" : "翻译已关闭", keys: "",
+            duration: .milliseconds(1500))
+    }
+
+    /// Shown when the target changes while the draft is empty. With a draft the preview
+    /// shows the new target itself.
+    public static func liveSwitchedHint(to target: TranslationTarget) -> TranslationHint {
+        TranslationHint(targetLabel: target.displayName, title: "已切换翻译语言", keys: "", duration: .milliseconds(1500))
+    }
+
+    /// The status line of the live preview: the snapshot's message, with the key that
+    /// acts on a failure or on a draft above the automatic limit.
+    public func liveMessage(_ snapshot: LiveTranslationSnapshot) -> String {
+        switch snapshot.status {
+        case .failed: "\(snapshot.message) · \(submitKey) 重试"
+        case .overLimit: "\(snapshot.message) · \(submitKey) 翻译"
+        case .waiting, .updating, .ready: snapshot.message
+        }
+    }
+
+    /// The line of keys under a selection preview.
+    public func selectionFootnote(canReplace: Bool, canRetry: Bool) -> String {
+        var keys: [String] = []
+        if canReplace {
+            keys.append("\(submitKey) 替换选区")
+        } else if canRetry {
+            keys.append("\(submitKey) 重试")
+        }
+        keys.append("esc 关闭")
+        return keys.joined(separator: Self.hintSeparator)
+    }
+
+    private static let hintSeparator = "   "
 
     // MARK: - Notation
 

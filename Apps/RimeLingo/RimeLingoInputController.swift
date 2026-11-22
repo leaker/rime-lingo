@@ -487,9 +487,13 @@ final class RimeLingoInputController: IMKInputController {
                 switch SelectionPreviewKey.decision(
                     keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
                     control: flags.contains(.control), shift: flags.contains(.shift),
-                    hasMarkedText: hasPendingInput, submitMatched: submitMatched) {
+                    hasMarkedText: hasPendingInput, submitMatched: submitMatched,
+                    canRetry: engine.selection.session?.snapshot.canRetry ?? false) {
                 case .replace:
                     engine.replaceSelectedText()
+                    return true
+                case .retry:
+                    engine.selection.retry()
                     return true
                 case .replaceBlocked:
                     engine.showStatus(SelectionPreviewKey.pendingInputMessage)
@@ -503,16 +507,21 @@ final class RimeLingoInputController: IMKInputController {
             }
             // A pending draft (nothing being composed): Return / Esc confirm it, ⌫ edits
             // it, navigation and shortcuts confirm it and then reach the app.
-            // A live session takes the submit shortcut and Esc (exit). The shortcut never
-            // reaches the app, composing or not: there it could send a message.
+            // A live session with a draft or a composition takes the submit shortcut and Esc
+            // (exit). The shortcut never reaches the app then: there it could send a message.
+            // With an empty draft both keys go on to the app.
             if live != nil, quickMenu == nil, polish == nil {
                 switch LiveSessionKey.decision(
                     keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
                     control: flags.contains(.control), shift: flags.contains(.shift),
                     isComposing: isComposing, hasValidTranslation: live?.validTranslation != nil,
-                    selectionPreviewOpen: engine.selection.isActive, submitMatched: submitMatched) {
+                    selectionPreviewOpen: engine.selection.isActive, submitMatched: submitMatched,
+                    draftIsEmpty: draft.isEmpty, canRetry: live?.session?.snapshot.canRetry ?? false) {
                 case .submit:
                     submitLive(client: client)
+                    return true
+                case .retry:
+                    live?.retry()
                     return true
                 case let .submitBlocked(reason):
                     engine.showStatus(reason.message)
@@ -701,8 +710,7 @@ final class RimeLingoInputController: IMKInputController {
         case .commandRight: "长按右⌘ 动作"
         case .off: "⌃⌥M 动作"
         }
-        var state = PanelState(status: live != nil
-            ? engine.translationBindings.liveStatusHint : "↩ 上屏   \(hold)")
+        var state = PanelState(status: "↩ 上屏   \(hold)")
         state.statusBadge = liveSession?.option("ascii_mode") == true ? "英" : "中"
         return state
     }
@@ -720,9 +728,9 @@ final class RimeLingoInputController: IMKInputController {
             if live != nil, quickMenu == nil, polish == nil { sync(client: textClient) }
             return
         }
-        if !draft.isEmpty, quickMenu == nil, polish == nil {
+        if !draft.isEmpty, live == nil, quickMenu == nil, polish == nil {
             engine.panel.show(draftHint, at: cursorRect(client: textClient))
-        } else if draft.isEmpty {
+        } else if draft.isEmpty || (live != nil && quickMenu == nil && polish == nil) {
             engine.panel.hide()
         }
     }
@@ -932,7 +940,8 @@ final class RimeLingoInputController: IMKInputController {
         guard quickMenu == nil, polish == nil else { return }
         guard isComposing else {
             // A pending draft shows a small hint under it (what the layer is waiting for).
-            if draft.isEmpty {
+            // The draft of a live translation session has the translation preview instead.
+            if draft.isEmpty || live != nil {
                 engine.panel.hide()
             } else {
                 engine.panel.show(draftHint, at: cursorRect(client: client))

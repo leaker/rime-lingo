@@ -10,15 +10,19 @@ public enum TranslationDispatch: Sendable, Equatable {
     /// A selection preview is open for this field: hand the target to it (retranslate the
     /// captured text, or re-show / retry). The selection is not read again.
     case retargetSelection(TranslationTarget)
-    /// No session yet: start one. Like `forward`, this closes a selection preview left
-    /// over from another field.
+    /// Live translation is off: turn it on with this target. Like `switchTarget`, this
+    /// closes a selection preview left over from another field.
     case start(TranslationTarget)
-    /// A session is active: hand the target to it (switch, or re-show / refresh).
-    case forward(TranslationTarget)
+    /// The shortcut of the active target pressed again: the source text goes into the app
+    /// and live translation turns off.
+    case stop
+    /// Live translation is on with another target: switch to this one and retranslate
+    /// the current draft.
+    case switchTarget(TranslationTarget)
 
     public static func decide(
         target: TranslationTarget, featureEnabled: Bool, isRepeat: Bool, menuOrActionOpen: Bool,
-        selection: SelectionPresence, selectionPreviewAttached: Bool, sessionActive: Bool
+        selection: SelectionPresence, selectionPreviewAttached: Bool, activeTarget: TranslationTarget?
     ) -> TranslationDispatch {
         if !featureEnabled { return .ignore }
         // A held shortcut acts once; it must not restart a request on every repeat.
@@ -29,7 +33,9 @@ public enum TranslationDispatch: Sendable, Equatable {
         case .captured: return .retargetSelection(target)
         case .none: if selectionPreviewAttached { return .retargetSelection(target) }
         }
-        return sessionActive ? .forward(target) : .start(target)
+        // A language shortcut is a toggle.
+        guard let activeTarget else { return .start(target) }
+        return activeTarget == target ? .stop : .switchTarget(target)
     }
 }
 
@@ -61,38 +67,48 @@ public enum LiveSubmitBlock: Sendable, Equatable {
     }
 }
 
-/// Keys that belong to an active live translation session. Everything else keeps the
+/// Keys that belong to an active live translation session: the submit shortcut and Esc,
+/// while there is a draft or a composition. With an empty draft and nothing being composed
+/// neither belongs to the session: live translation stays on for as long as the user
+/// wants, and must not keep these keys away from the app. Everything else keeps the
 /// existing draft / engine handling.
 public enum LiveSessionKey: Sendable, Equatable {
     /// The submit shortcut (Option+Return or Option+Enter by default) with a valid
     /// translation and nothing being composed.
     case submit
+    /// The submit shortcut after a failure or above the automatic limit: translate the
+    /// draft now.
+    case retry
     /// The submit shortcut where it must not submit. The key is still swallowed:
     /// in the app it could send a message.
     case submitBlocked(LiveSubmitBlock)
-    /// Esc while nothing is being composed.
+    /// Esc with a draft and nothing being composed: the source text goes into the app
+    /// and live translation turns off.
     case exit
-    /// Not a session key (Esc while composing belongs to the engine).
+    /// Not a session key: Esc while composing belongs to the engine, and with an empty
+    /// draft Esc and the submit shortcut belong to the app.
     case none
 
     /// `submitMatched`: whether the key is the configured submit shortcut; nil stands for
-    /// the default one.
+    /// the default one. `canRetry`: the translation failed or the draft is above the
+    /// automatic limit.
     public static func decision(
         keyCode: UInt16, option: Bool, command: Bool, control: Bool, shift: Bool,
         isComposing: Bool, hasValidTranslation: Bool, selectionPreviewOpen: Bool = false,
-        submitMatched: Bool? = nil
+        submitMatched: Bool? = nil, draftIsEmpty: Bool = false, canRetry: Bool = false
     ) -> LiveSessionKey {
         if submitMatched ?? TranslationShortcutBindings.isDefaultSubmit(
             keyCode: keyCode, option: option, command: command, control: control, shift: shift) {
+            if draftIsEmpty, !isComposing { return .none }
             if let block = LiveSubmitBlock.check(
-                isComposing: isComposing, hasValidTranslation: hasValidTranslation,
+                isComposing: isComposing, hasValidTranslation: hasValidTranslation || canRetry,
                 selectionPreviewOpen: selectionPreviewOpen) {
                 return .submitBlocked(block)
             }
-            return .submit
+            return hasValidTranslation ? .submit : .retry
         }
-        guard !command, !control, keyCode == 53 else { return .none }
-        return option || isComposing ? .none : .exit
+        guard !command, !control, !option, keyCode == 53 else { return .none }
+        return isComposing || draftIsEmpty ? .none : .exit
     }
 }
 

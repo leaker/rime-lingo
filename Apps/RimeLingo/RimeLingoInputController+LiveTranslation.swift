@@ -26,7 +26,7 @@ extension RimeLingoInputController {
         let (selection, attached) = asksClient ? selectionState() : (.none, false)
         let dispatch = TranslationDispatch.decide(
             target: target, featureEnabled: enabled, isRepeat: isRepeat, menuOrActionOpen: menuOrActionOpen,
-            selection: selection, selectionPreviewAttached: attached, sessionActive: live != nil)
+            selection: selection, selectionPreviewAttached: attached, activeTarget: live?.target)
         switch dispatch {
         case .ignore:
             return nil
@@ -40,7 +40,9 @@ extension RimeLingoInputController {
             // A selection preview left over from another field ends with a new translation.
             liveEngine.closeSelectionPreview()
             startLive(target)
-        case let .forward(target):
+        case .stop:
+            exitLive(client: client)
+        case let .switchTarget(target):
             liveEngine.closeSelectionPreview()
             live?.targetPressed(target)
         }
@@ -106,8 +108,8 @@ extension RimeLingoInputController {
         if ownsPanel, !liveEngine.selection.isActive { liveEngine.previewPanel.hide() }
     }
 
-    /// Esc, the 退出 control, or the feature being switched off: the source text goes
-    /// into the app and the session ends.
+    /// Esc with a draft, the session's own language shortcut, the 退出 control, or the
+    /// feature being switched off: the source text goes into the app and the session ends.
     func exitLive(client: (any IMKTextInput)?) {
         guard live != nil else { return }
         let target = client ?? liveTextClient
@@ -180,7 +182,7 @@ extension RimeLingoInputController {
         DebugLog.write("live render status=\(status) length=\(snapshot.text.count) stale=\(snapshot.isStale)")
         let state = TranslationPreviewState(
             targetLabel: snapshot.targetLabel, status: status, text: snapshot.text, isStale: snapshot.isStale,
-            message: snapshot.message, canSubmit: snapshot.canSubmit, canCopy: snapshot.canCopy, canRetry: snapshot.canRetry)
+            message: liveEngine.translationBindings.liveMessage(snapshot), canSubmit: snapshot.canSubmit, canCopy: snapshot.canCopy, canRetry: snapshot.canRetry)
         // While visible the panel stays where the last key put it (see `repositionLivePreview`);
         // the client is asked for the cursor only when the panel appears.
         panel.show(state, caret: panel.isVisible ? .zero : cursorRect(client: liveTextClient),

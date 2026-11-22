@@ -69,11 +69,11 @@ public struct LiveTranslationSession: Sendable, Equatable {
         let status: LiveTranslationSnapshot.Status
         let message: String
         switch phase {
-        case .waiting: (status, message) = (.waiting, "等待输入")
+        case .waiting: (status, message) = (.waiting, "")
         case .debouncing, .translating: (status, message) = (.updating, "翻译中…")
         case .ready: (status, message) = (.ready, "")
         case let .failed(failure): (status, message) = (.failed, failure.message)
-        case .overLimit: (status, message) = (.overLimit, "超过 \(Self.autoTranslateLimit) 字，按当前语言快捷键刷新")
+        case .overLimit: (status, message) = (.overLimit, "超过 \(Self.autoTranslateLimit) 字")
         }
         let showsText = status != .waiting && status != .failed
         let text = showsText ? translation?.text ?? "" : ""
@@ -86,7 +86,8 @@ public struct LiveTranslationSession: Sendable, Equatable {
             message: message,
             canSubmit: canSubmit,
             canCopy: canSubmit,
-            canRetry: status == .failed || status == .overLimit
+            canRetry: status == .failed || status == .overLimit,
+            showsPanel: hasSource
         )
     }
 
@@ -172,9 +173,13 @@ public struct LiveTranslationSnapshot: Sendable, Equatable {
     public var text: String
     /// There is text, but it does not belong to the current source and target, or it is being replaced.
     public var isStale: Bool
-    /// Status line: empty when ready, the reason after a failure.
+    /// Status line: empty when ready or waiting, the reason after a failure. The host adds
+    /// the key that acts on it (`TranslationShortcutBindings.liveMessage`).
     public var message: String
     public var canSubmit: Bool
     public var canCopy: Bool
     public var canRetry: Bool
+    /// The live preview is on screen only while there is a draft: false for a live session
+    /// whose source is empty or blank, always true for a selection.
+    public var showsPanel: Bool
 }

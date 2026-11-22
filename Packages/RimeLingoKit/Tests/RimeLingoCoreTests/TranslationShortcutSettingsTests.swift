@@ -435,10 +435,82 @@ struct TranslationShortcutSettingsTests {
 
     // MARK: - Hints
 
-    @Test func theLiveHintShowsTheConfiguredSubmitShortcut() {
-        #expect(bindings().liveStatusHint == "↩ 原文   ⌥↩ 译文   esc 退出")
-        #expect(bindings { $0[shortcut: .submit] = "Control+Return" }.liveStatusHint == "↩ 原文   ⌃↩ 译文   esc 退出")
-        #expect(bindings { $0[shortcut: .submit] = "" }.liveStatusHint == "↩ 原文   ⌥↩ 译文   esc 退出")
+    /// Bindings with the submit shortcut moved to ⌃↩, English to ⌃⌥⌘T and Japanese cleared.
+    private var customised: TranslationShortcutBindings {
+        bindings {
+            $0[shortcut: .submit] = "Control+Return"
+            $0[shortcut: .english] = "Control+Alt+Super+t"
+            $0[shortcut: .japanese] = ""
+        }
+    }
+
+    private func snapshot(_ status: LiveTranslationSnapshot.Status, _ message: String) -> LiveTranslationSnapshot {
+        LiveTranslationSnapshot(
+            targetLabel: "英语", status: status, text: "", isStale: false, message: message,
+            canSubmit: false, canCopy: false, canRetry: status == .failed || status == .overLimit, showsPanel: true)
+    }
+
+    @Test func theStartedHintNamesTheKeysInEffect() {
+        #expect(bindings().liveStartedHint(for: .english) == TranslationHint(
+            targetLabel: "英语", title: "实时翻译已开启", keys: "↩ 上屏原文   ⌥↩ 上屏译文   ⌃⌥⌘E 关闭", duration: .seconds(3)))
+        #expect(bindings().liveStartedHint(for: .japanese) == TranslationHint(
+            targetLabel: "日语", title: "实时翻译已开启", keys: "↩ 上屏原文   ⌥↩ 上屏译文   ⌃⌥⌘J 关闭", duration: .seconds(3)))
+        #expect(customised.liveStartedHint(for: .english).keys == "↩ 上屏原文   ⌃↩ 上屏译文   ⌃⌥⌘T 关闭")
+        // An empty stored submit shortcut is the default one.
+        #expect(bindings { $0[shortcut: .submit] = "" }.liveStartedHint(for: .english).keys
+            == "↩ 上屏原文   ⌥↩ 上屏译文   ⌃⌥⌘E 关闭")
+    }
+
+    /// With an empty draft Esc goes to the app, so the hint never offers it as the way
+    /// out while the language has a shortcut.
+    @Test func theStartedHintOffersEscOnlyWithoutALanguageShortcut() {
+        #expect(!bindings().liveStartedHint(for: .english).keys.contains("esc"))
+        #expect(!customised.liveStartedHint(for: .english).keys.contains("esc"))
+        #expect(customised.liveStartedHint(for: .japanese) == TranslationHint(
+            targetLabel: "日语", title: "实时翻译已开启", keys: "↩ 上屏原文   ⌃↩ 上屏译文   esc 上屏原文并关闭",
+            duration: .seconds(3)))
+        // A language that is not in the list has no shortcut either.
+        #expect(bindings().liveStartedHint(for: Self.french).keys == "↩ 上屏原文   ⌥↩ 上屏译文   esc 上屏原文并关闭")
+    }
+
+    @Test func theStoppedHintSaysWhetherTheSourceWasCommitted() {
+        #expect(TranslationShortcutBindings.liveStoppedHint(committedSource: false) == TranslationHint(
+            targetLabel: "", title: "翻译已关闭", keys: "", duration: .milliseconds(1500)))
+        #expect(TranslationShortcutBindings.liveStoppedHint(committedSource: true) == TranslationHint(
+            targetLabel: "", title: "翻译已关闭，原文已上屏", keys: "", duration: .milliseconds(1500)))
+    }
+
+    @Test func theSwitchedHintNamesTheNewTarget() {
+        #expect(TranslationShortcutBindings.liveSwitchedHint(to: .japanese) == TranslationHint(
+            targetLabel: "日语", title: "已切换翻译语言", keys: "", duration: .milliseconds(1500)))
+        #expect(TranslationShortcutBindings.liveSwitchedHint(to: Self.french).targetLabel == "法语")
+    }
+
+    @Test func theLiveMessageNamesTheKeyThatActsOnIt() {
+        #expect(bindings().liveMessage(snapshot(.failed, "请求失败")) == "请求失败 · ⌥↩ 重试")
+        #expect(bindings().liveMessage(snapshot(.overLimit, "超过 200 字")) == "超过 200 字 · ⌥↩ 翻译")
+        #expect(customised.liveMessage(snapshot(.failed, "请求失败")) == "请求失败 · ⌃↩ 重试")
+        #expect(customised.liveMessage(snapshot(.overLimit, "超过 200 字")) == "超过 200 字 · ⌃↩ 翻译")
+        // Everything else is shown as it is.
+        #expect(bindings().liveMessage(snapshot(.updating, "翻译中…")) == "翻译中…")
+        #expect(bindings().liveMessage(snapshot(.ready, "")) == "")
+        #expect(bindings().liveMessage(snapshot(.waiting, "")) == "")
+    }
+
+    /// The message of a real session above the limit, end to end.
+    @Test func theLiveMessageOfASessionAboveTheLimit() {
+        var session = LiveTranslationSession(id: 1, target: .english)
+        _ = session.handle(.sourceChanged(String(repeating: "字", count: LiveTranslationSession.autoTranslateLimit + 1)))
+        #expect(bindings().liveMessage(session.snapshot) == "超过 200 字 · ⌥↩ 翻译")
+    }
+
+    @Test func theSelectionFootnoteNamesTheKeysInEffect() {
+        #expect(bindings().selectionFootnote(canReplace: true, canRetry: false) == "⌥↩ 替换选区   esc 关闭")
+        #expect(bindings().selectionFootnote(canReplace: false, canRetry: true) == "⌥↩ 重试   esc 关闭")
+        #expect(bindings().selectionFootnote(canReplace: false, canRetry: false) == "esc 关闭")
+        #expect(customised.selectionFootnote(canReplace: true, canRetry: false) == "⌃↩ 替换选区   esc 关闭")
+        #expect(customised.selectionFootnote(canReplace: false, canRetry: true) == "⌃↩ 重试   esc 关闭")
+        #expect(customised.selectionFootnote(canReplace: false, canRetry: false) == "esc 关闭")
     }
 
     // MARK: - Session keys
@@ -459,6 +531,13 @@ struct TranslationShortcutSettingsTests {
         #expect(LiveSessionKey.decision(
             keyCode: 53, option: false, command: false, control: false, shift: false,
             isComposing: false, hasValidTranslation: true, submitMatched: false) == .exit)
+        // With an empty draft the configured shortcut goes to the app; after a failure it retries.
+        #expect(LiveSessionKey.decision(
+            keyCode: 36, option: false, command: false, control: true, shift: false,
+            isComposing: false, hasValidTranslation: false, submitMatched: true, draftIsEmpty: true) == .none)
+        #expect(LiveSessionKey.decision(
+            keyCode: 36, option: false, command: false, control: true, shift: false,
+            isComposing: false, hasValidTranslation: false, submitMatched: true, canRetry: true) == .retry)
     }
 
     @Test func selectionPreviewKeysFollowTheConfiguredSubmitShortcut() {
@@ -474,5 +553,8 @@ struct TranslationShortcutSettingsTests {
         #expect(SelectionPreviewKey.decision(
             keyCode: 53, option: false, command: false, control: false, shift: false,
             hasMarkedText: false, submitMatched: false) == .close)
+        #expect(SelectionPreviewKey.decision(
+            keyCode: 36, option: false, command: false, control: true, shift: false,
+            hasMarkedText: false, submitMatched: true, canRetry: true) == .retry)
     }
 }

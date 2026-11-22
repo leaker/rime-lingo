@@ -134,7 +134,33 @@ struct LiveTranslationCoordinatorTests {
         #expect(log.snapshots.count == 1)
         #expect(log.snapshots.last??.status == .waiting)
         #expect(log.snapshots.last??.targetLabel == "日语")
+        // Nothing typed yet: the session is on, its panel is not.
+        #expect(log.snapshots.last??.showsPanel == false)
+        #expect(log.snapshots.last??.message == "")
+        #expect(coordinator.target == .japanese)
         #expect(coordinator.validTranslation == nil)
+    }
+
+    /// The host draws the preview only for snapshots that ask for it.
+    @Test func thePanelIsShownOnlyWhileThereIsADraft() async {
+        #expect(coordinator.target == nil)
+        coordinator.start(target: .english)
+        coordinator.sourceChanged(" ")
+        #expect(log.snapshots.last??.showsPanel == false)
+        await type("你好", expectingRequests: 1)
+        #expect(log.snapshots.last??.showsPanel == true)
+        translator.answer(0, .success("Hello"))
+        await eventually { coordinator.validTranslation == "Hello" }
+        #expect(log.snapshots.last??.showsPanel == true)
+        // Submitted or committed: the draft is empty and the session goes on.
+        coordinator.sourceChanged("")
+        #expect(log.snapshots.last??.showsPanel == false)
+        #expect(coordinator.isActive)
+        coordinator.targetPressed(.japanese)
+        #expect(coordinator.target == .japanese)
+        #expect(log.snapshots.last??.showsPanel == false)
+        coordinator.end()
+        #expect(coordinator.target == nil)
     }
 
     @Test func nothingHappensWithoutASession() async {
@@ -276,6 +302,8 @@ struct LiveTranslationCoordinatorTests {
         #expect(sleeper.calls == 0)
         #expect(translator.requests.isEmpty)
         #expect(log.snapshots.last??.status == .overLimit)
+        #expect(log.snapshots.last??.message == "超过 200 字")
+        #expect(log.snapshots.last??.showsPanel == true)
 
         coordinator.targetPressed(.english)
         await eventually { translator.requests.count == 1 }

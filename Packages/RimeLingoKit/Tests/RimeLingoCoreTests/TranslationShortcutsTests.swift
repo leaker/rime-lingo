@@ -4,22 +4,27 @@ import Testing
 struct TranslationShortcutsTests {
     private func decide(
         _ target: TranslationTarget, enabled: Bool = true, isRepeat: Bool = false, menuOrActionOpen: Bool = false,
-        selection: SelectionPresence = .none, previewAttached: Bool = false, sessionActive: Bool = false
+        selection: SelectionPresence = .none, previewAttached: Bool = false, activeTarget: TranslationTarget? = nil
     ) -> TranslationDispatch {
         TranslationDispatch.decide(
             target: target, featureEnabled: enabled, isRepeat: isRepeat, menuOrActionOpen: menuOrActionOpen,
-            selection: selection, selectionPreviewAttached: previewAttached, sessionActive: sessionActive)
+            selection: selection, selectionPreviewAttached: previewAttached, activeTarget: activeTarget)
     }
 
     private func key(
         _ keyCode: UInt16, option: Bool = false, command: Bool = false, control: Bool = false, shift: Bool = false,
-        isComposing: Bool = false, hasValidTranslation: Bool = true, selectionPreviewOpen: Bool = false
+        isComposing: Bool = false, hasValidTranslation: Bool = true, selectionPreviewOpen: Bool = false,
+        draftIsEmpty: Bool = false, canRetry: Bool = false
     ) -> LiveSessionKey {
         LiveSessionKey.decision(
             keyCode: keyCode, option: option, command: command, control: control, shift: shift,
             isComposing: isComposing, hasValidTranslation: hasValidTranslation,
-            selectionPreviewOpen: selectionPreviewOpen)
+            selectionPreviewOpen: selectionPreviewOpen, draftIsEmpty: draftIsEmpty, canRetry: canRetry)
     }
+
+    private static let french = TranslationTarget(code: "fr")!
+    /// Live translation off, on with the pressed target, on with another one.
+    private static let activeTargets: [TranslationTarget?] = [nil, .english, .japanese, french]
 
     /// A translation hidden under a selection preview is never inserted; the key is
     /// still swallowed.
@@ -30,24 +35,29 @@ struct TranslationShortcutsTests {
         }
         #expect(LiveSubmitBlock.check(isComposing: false, hasValidTranslation: true, selectionPreviewOpen: true) == .previewHidden)
         #expect(!LiveSubmitBlock.previewHidden.message.isEmpty)
+        // A failure hidden under the preview is not retried either.
+        #expect(key(36, option: true, hasValidTranslation: false, selectionPreviewOpen: true, canRetry: true)
+            == .submitBlocked(.previewHidden))
         // Esc is not a submit: it keeps exiting the session.
         #expect(key(53, selectionPreviewOpen: true) == .exit)
     }
 
     @Test func dispatchIgnoresEverythingWhenTheFeatureIsOff() {
-        for bits in 0..<32 {
-            #expect(decide(.english, enabled: false, isRepeat: bits & 1 != 0, menuOrActionOpen: bits & 2 != 0,
-                           selection: bits & 4 != 0 ? .new : .none, previewAttached: bits & 16 != 0,
-                           sessionActive: bits & 8 != 0) == .ignore)
+        for bits in 0..<16 {
+            for activeTarget in Self.activeTargets {
+                #expect(decide(.english, enabled: false, isRepeat: bits & 1 != 0, menuOrActionOpen: bits & 2 != 0,
+                               selection: bits & 4 != 0 ? .new : .none, previewAttached: bits & 8 != 0,
+                               activeTarget: activeTarget) == .ignore)
+            }
         }
     }
 
-    /// A non-empty selection wins over starting or retargeting a live session.
+    /// A non-empty selection wins over starting, stopping or switching live translation.
     @Test func dispatchCapturesASelectionBeforeLookingAtTheLiveSession() {
-        for sessionActive in [false, true] {
-            #expect(decide(.english, selection: .new, sessionActive: sessionActive) == .captureSelection(.english))
+        for activeTarget in Self.activeTargets {
+            #expect(decide(.english, selection: .new, activeTarget: activeTarget) == .captureSelection(.english))
             // Also while a preview of another selection is open.
-            #expect(decide(.japanese, selection: .new, previewAttached: true, sessionActive: sessionActive)
+            #expect(decide(.japanese, selection: .new, previewAttached: true, activeTarget: activeTarget)
                 == .captureSelection(.japanese))
         }
     }
@@ -55,33 +65,39 @@ struct TranslationShortcutsTests {
     /// With a preview open in this field the shortcut goes to it, whether the captured
     /// text is still selected or nothing is: the live session underneath is left alone.
     @Test func dispatchHandsTheTargetToAnOpenSelectionPreview() {
-        for sessionActive in [false, true] {
-            #expect(decide(.japanese, selection: .captured, previewAttached: true, sessionActive: sessionActive)
+        for activeTarget in Self.activeTargets {
+            #expect(decide(.japanese, selection: .captured, previewAttached: true, activeTarget: activeTarget)
                 == .retargetSelection(.japanese))
-            #expect(decide(.english, selection: .none, previewAttached: true, sessionActive: sessionActive)
+            #expect(decide(.english, selection: .none, previewAttached: true, activeTarget: activeTarget)
                 == .retargetSelection(.english))
         }
     }
 
-    @Test func dispatchStartsOrForwards() {
-        #expect(decide(.japanese, sessionActive: false) == .start(.japanese))
-        #expect(decide(.english, sessionActive: true) == .forward(.english))
+    /// A language shortcut is a toggle: on, off with the same language, over to another one.
+    @Test func dispatchTogglesLiveTranslation() {
+        for target in [TranslationTarget.english, .japanese, Self.french] {
+            #expect(decide(target) == .start(target))
+            #expect(decide(target, activeTarget: target) == .stop)
+        }
+        #expect(decide(.english, activeTarget: .japanese) == .switchTarget(.english))
+        #expect(decide(.japanese, activeTarget: .english) == .switchTarget(.japanese))
+        #expect(decide(Self.french, activeTarget: .english) == .switchTarget(Self.french))
     }
 
     /// A held shortcut acts once: every repeat is swallowed, whatever else is going on.
     @Test func dispatchConsumesKeyRepeats() {
         for selection in [SelectionPresence.none, .captured, .new] {
-            for sessionActive in [false, true] {
+            for activeTarget in Self.activeTargets {
                 #expect(decide(.english, isRepeat: true, selection: selection, previewAttached: selection == .captured,
-                               sessionActive: sessionActive) == .consume)
+                               activeTarget: activeTarget) == .consume)
             }
         }
     }
 
     @Test func dispatchConsumesTheShortcutWhileAMenuOrActionIsOpen() {
-        for sessionActive in [false, true] {
-            #expect(decide(.japanese, menuOrActionOpen: true, sessionActive: sessionActive) == .consume)
-            #expect(decide(.japanese, menuOrActionOpen: true, selection: .new, sessionActive: sessionActive) == .consume)
+        for activeTarget in Self.activeTargets {
+            #expect(decide(.japanese, menuOrActionOpen: true, activeTarget: activeTarget) == .consume)
+            #expect(decide(.japanese, menuOrActionOpen: true, selection: .new, activeTarget: activeTarget) == .consume)
         }
     }
 
@@ -105,6 +121,36 @@ struct TranslationShortcutsTests {
             #expect(key(keyCode, option: true, isComposing: true) == .submitBlocked(.composing))
             #expect(key(keyCode, option: true, isComposing: true, hasValidTranslation: false) == .submitBlocked(.composing))
         }
+    }
+
+    /// Live translation stays on between sentences: with nothing typed the submit shortcut
+    /// and Esc are the app's keys again.
+    @Test func anEmptyDraftLeavesSubmitAndEscToTheApp() {
+        for keyCode: UInt16 in [36, 76] {
+            #expect(key(keyCode, option: true, hasValidTranslation: false, draftIsEmpty: true) == .none)
+            // Whatever else is going on.
+            #expect(key(keyCode, option: true, hasValidTranslation: false, selectionPreviewOpen: true, draftIsEmpty: true) == .none)
+            // Unfinished pinyin is input of ours: the key is swallowed with a reason.
+            #expect(key(keyCode, option: true, isComposing: true, hasValidTranslation: false, draftIsEmpty: true)
+                == .submitBlocked(.composing))
+        }
+        #expect(key(53, hasValidTranslation: false, draftIsEmpty: true) == .none)
+        #expect(key(53, isComposing: true, hasValidTranslation: false, draftIsEmpty: true) == .none)
+        // With a draft Esc commits the source and turns live translation off.
+        #expect(key(53, hasValidTranslation: false) == .exit)
+    }
+
+    /// After a failure or above the automatic limit the submit shortcut translates now.
+    @Test func submitRetriesWhenThereIsNothingValidToSubmit() {
+        for keyCode: UInt16 in [36, 76] {
+            #expect(key(keyCode, option: true, hasValidTranslation: false, canRetry: true) == .retry)
+            // Still translating, or a draft of white space only: swallowed.
+            #expect(key(keyCode, option: true, hasValidTranslation: false) == .submitBlocked(.notReady))
+            #expect(key(keyCode, option: true, isComposing: true, hasValidTranslation: false, canRetry: true)
+                == .submitBlocked(.composing))
+        }
+        // A valid translation is submitted, never retried.
+        #expect(key(36, option: true, hasValidTranslation: true, canRetry: true) == .submit)
     }
 
     @Test func submitBlocksHaveDistinctMessages() {

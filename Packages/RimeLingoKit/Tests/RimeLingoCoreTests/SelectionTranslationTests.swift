@@ -103,7 +103,7 @@ struct SelectionTranslationSessionTests {
         #expect(effects == [.cancelPending, .start(request), .render])
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "日语", status: .updating, text: "", isStale: false, message: "翻译中…",
-            canSubmit: false, canCopy: false, canRetry: false))
+            canSubmit: false, canCopy: false, canRetry: false, showsPanel: true))
         #expect(session.validTranslation == nil)
     }
 
@@ -114,7 +114,7 @@ struct SelectionTranslationSessionTests {
         #expect(session.validTranslation == "Hello, world")
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .ready, text: "Hello, world", isStale: false, message: "",
-            canSubmit: true, canCopy: true, canRetry: false))
+            canSubmit: true, canCopy: true, canRetry: false, showsPanel: true))
     }
 
     @Test func resultsOfAnotherCaptureTargetOrAttemptAreDiscarded() {
@@ -165,7 +165,7 @@ struct SelectionTranslationSessionTests {
         #expect(session.handle(.completed(request.tag, .failure(failure))) == [.render])
         #expect(session.snapshot == LiveTranslationSnapshot(
             targetLabel: "英语", status: .failed, text: "", isStale: false, message: failure.message,
-            canSubmit: false, canCopy: false, canRetry: true))
+            canSubmit: false, canCopy: false, canRetry: true, showsPanel: true))
         #expect(check(session) == .blocked(.notReady))
 
         // Both the retry control and the current target's shortcut send it again.
@@ -341,9 +341,33 @@ struct SelectionTranslationSessionTests {
     // MARK: - Keys
 
     private func key(_ keyCode: UInt16, option: Bool = false, command: Bool = false, control: Bool = false,
-                     shift: Bool = false, marked: Bool = false) -> SelectionPreviewKey {
+                     shift: Bool = false, marked: Bool = false, canRetry: Bool = false) -> SelectionPreviewKey {
         SelectionPreviewKey.decision(keyCode: keyCode, option: option, command: command, control: control,
-                                     shift: shift, hasMarkedText: marked)
+                                     shift: shift, hasMarkedText: marked, canRetry: canRetry)
+    }
+
+    /// After a failure the submit shortcut translates again; nothing else changes.
+    @Test func optionReturnRetriesAFailedTranslation() {
+        #expect(key(36, option: true, canRetry: true) == .retry)
+        #expect(key(76, option: true, canRetry: true) == .retry)
+        // Pending input still comes first: the key is swallowed with a notice.
+        #expect(key(36, option: true, marked: true, canRetry: true) == .replaceBlocked)
+        #expect(key(53, canRetry: true) == .close)
+        #expect(key(36, canRetry: true) == .none)
+    }
+
+    /// A selection preview is one-shot: it is on screen for as long as it is open.
+    @Test func theSelectionPreviewAlwaysShowsItsPanel() {
+        var (session, request) = started()
+        #expect(session.snapshot.showsPanel)
+        _ = session.handle(.completed(request.tag, .failure(.requestFailed)))
+        #expect(session.snapshot.showsPanel && session.snapshot.canRetry)
+        _ = session.handle(.retry)
+        #expect(session.snapshot.showsPanel)
+        _ = session.handle(.completed(session.currentTag, .success("Hello, world")))
+        #expect(session.snapshot.showsPanel)
+        _ = session.handle(.replaceRefused(.sourceChanged))
+        #expect(session.snapshot.showsPanel)
     }
 
     @Test func optionReturnReplacesAndEscCloses() {
