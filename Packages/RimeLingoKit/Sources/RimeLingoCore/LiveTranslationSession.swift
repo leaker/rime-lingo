@@ -110,9 +110,8 @@ public struct LiveTranslationSession: Sendable, Equatable {
             return [.cancelPending, .scheduleDebounce(currentTag), .render]
 
         case let .targetPressed(pressed):
-            guard pressed != target else {
-                return canRestart ? startNow() : [.render]
-            }
+            // The host sends a target only to switch to it; the current one changes nothing.
+            guard pressed != target else { return [] }
             target = pressed
             guard hasSource else {
                 phase = .waiting

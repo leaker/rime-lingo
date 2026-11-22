@@ -137,13 +137,13 @@ struct LiveTranslationCoordinatorTests {
         // Nothing typed yet: the session is on, its panel is not.
         #expect(log.snapshots.last??.showsPanel == false)
         #expect(log.snapshots.last??.message == "")
-        #expect(coordinator.target == .japanese)
+        #expect(coordinator.session?.target == .japanese)
         #expect(coordinator.validTranslation == nil)
     }
 
     /// The host draws the preview only for snapshots that ask for it.
     @Test func thePanelIsShownOnlyWhileThereIsADraft() async {
-        #expect(coordinator.target == nil)
+        #expect(coordinator.session == nil)
         coordinator.start(target: .english)
         coordinator.sourceChanged(" ")
         #expect(log.snapshots.last??.showsPanel == false)
@@ -157,10 +157,10 @@ struct LiveTranslationCoordinatorTests {
         #expect(log.snapshots.last??.showsPanel == false)
         #expect(coordinator.isActive)
         coordinator.targetPressed(.japanese)
-        #expect(coordinator.target == .japanese)
+        #expect(coordinator.session?.target == .japanese)
         #expect(log.snapshots.last??.showsPanel == false)
         coordinator.end()
-        #expect(coordinator.target == nil)
+        #expect(coordinator.session == nil)
     }
 
     @Test func nothingHappensWithoutASession() async {
@@ -256,20 +256,6 @@ struct LiveTranslationCoordinatorTests {
         #expect(log.snapshots.last??.targetLabel == "日语")
     }
 
-    @Test func pressingTheCurrentTargetRendersWithoutANewRequest() async {
-        coordinator.start(target: .english)
-        await type("你好", expectingRequests: 1)
-        translator.answer(0, .success("Hello"))
-        await eventually { coordinator.validTranslation == "Hello" }
-        let rendered = log.snapshots.count
-        coordinator.targetPressed(.english)
-        await settle()
-        #expect(log.snapshots.count == rendered + 1)
-        #expect(log.snapshots.last??.text == "Hello")
-        #expect(translator.requests.count == 1)
-        #expect(translator.cancellations == 0)
-    }
-
     @Test func clearingCancelsEverythingAndWaits() async {
         coordinator.start(target: .english)
         await type("你好", expectingRequests: 1)
@@ -305,7 +291,7 @@ struct LiveTranslationCoordinatorTests {
         #expect(log.snapshots.last??.message == "超过 200 字")
         #expect(log.snapshots.last??.showsPanel == true)
 
-        coordinator.targetPressed(.english)
+        coordinator.retry()
         await eventually { translator.requests.count == 1 }
         #expect(translator.requests[0].source == long)
         translator.answer(0, .success("Long"))

@@ -573,8 +573,8 @@ struct TranslationShortcutSettingsTests {
     @Test func thePanelShowsOneThingAtATime() {
         let started = bindings().liveStartedHint(for: .english)
         let stopped = TranslationShortcutBindings.liveStoppedHint(committedSource: true)
-        func content(selection: Bool = false, draft: Bool = false, _ hint: TranslationHint? = nil) -> TranslationPreviewContent {
-            .decide(selectionPreviewOpen: selection, sessionShowsPanel: draft, hint: hint)
+        func content(draft: Bool = false, _ hint: TranslationHint? = nil) -> TranslationPreviewContent {
+            .decide(sessionShowsPanel: draft, hint: hint)
         }
         // The mode is on and nothing is typed: no panel at all.
         #expect(content() == .hidden)
@@ -584,9 +584,6 @@ struct TranslationShortcutSettingsTests {
         #expect(content(draft: true, started) == .translation(footnote: started.keys))
         // Turned off: the session is gone and the notice still shows.
         #expect(content(stopped) == .hint(stopped))
-        // A selection preview owns the panel whatever else is pending.
-        #expect(content(selection: true, draft: true, started) == .selection)
-        #expect(content(selection: true, started) == .selection)
     }
 
     @Test func theLiveMessageNamesTheKeyThatActsOnIt() {
@@ -660,4 +657,10 @@ struct TranslationShortcutSettingsTests {
             keyCode: 36, option: false, command: false, control: true, shift: false,
             hasMarkedText: false, submitMatched: true, canRetry: true) == .retry)
     }
+}
+
+/// Shorthand for the two default languages, for tests only.
+extension TranslationShortcutAction {
+    static var english: Self { .language(.english) }
+    static var japanese: Self { .language(.japanese) }
 }

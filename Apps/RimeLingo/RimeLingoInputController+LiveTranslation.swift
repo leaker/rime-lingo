@@ -44,15 +44,12 @@ extension RimeLingoInputController {
         case let .retargetSelection(target):
             liveEngine.selection.targetPressed(target)
         case let .start(target):
-            // A selection preview left over from another field ends with a new translation.
-            liveEngine.closeSelectionPreview()
             startLive(target, announce: true)
         case .stop:
             exitLive(client: client)
         case .stopBlocked:
             liveEngine.showStatus(LiveSubmitBlock.composing.message)
         case let .switchTarget(target):
-            liveEngine.closeSelectionPreview()
             DebugLog.write("live switch target=\(target.code)")
             liveEngine.liveTarget = target
             live?.targetPressed(target)
@@ -183,9 +180,7 @@ extension RimeLingoInputController {
         let snapshot = live?.session?.snapshot
         let state: TranslationPreviewState
         switch TranslationPreviewContent.decide(
-            selectionPreviewOpen: false, sessionShowsPanel: snapshot?.showsPanel == true, hint: engine.translationHint) {
-        case .selection:
-            return
+            sessionShowsPanel: snapshot?.showsPanel == true, hint: engine.translationHint) {
         case .hidden:
             return panel.hide()
         case let .hint(hint):

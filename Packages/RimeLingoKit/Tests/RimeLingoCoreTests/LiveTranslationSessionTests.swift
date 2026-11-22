@@ -72,7 +72,6 @@ struct LiveTranslationSessionTests {
         #expect(session.snapshot.status == .waiting)
         #expect(!session.snapshot.canRetry)
         // Neither a target switch nor an explicit refresh sends it.
-        #expect(session.handle(.targetPressed(.english)) == [.render])
         #expect(session.handle(.retry) == [])
         #expect(session.handle(.targetPressed(.japanese)) == [.cancelPending, .render])
         #expect(session.phase == .waiting)
@@ -273,34 +272,20 @@ struct LiveTranslationSessionTests {
         #expect(session.snapshot.targetLabel == "日语")
     }
 
-    @Test func pressingTheCurrentTargetOnlyShowsThePreviewAgain() {
-        var waiting = Session(id: 7, target: .english)
-        #expect(waiting.handle(.targetPressed(.english)) == [.render])
-        #expect(waiting.phase == .waiting)
-
-        var debouncing = Session(id: 7, target: .english)
-        _ = debouncing.handle(.sourceChanged("你好"))
-        #expect(debouncing.handle(.targetPressed(.english)) == [.render])
-        #expect(debouncing.phase == .debouncing)
-
-        var translating = translatingSession()
-        #expect(translating.handle(.targetPressed(.english)) == [.render])
-        #expect(translating.phase == .translating)
-
+    /// The host sends a target only to switch to it (`TranslationDispatch`): the current
+    /// one is not a refresh and not a retry.
+    @Test func theCurrentTargetChangesNothing() {
         var ready = readySession()
-        let before = ready
-        #expect(ready.handle(.targetPressed(.english)) == [.render])
-        #expect(ready == before)
-    }
-
-    @Test func pressingTheCurrentTargetAfterAFailureTranslatesAgain() {
-        var session = translatingSession()
-        _ = session.handle(.completed(tag(1), .failure(.requestFailed)))
-        #expect(session.handle(.targetPressed(.english))
-            == [.cancelPending, .start(TranslationRequest(tag: tag(1), source: "你好")), .render])
-        #expect(session.phase == .translating)
-        #expect(session.handle(.completed(tag(1), .success("Hello"))) == [.render])
-        #expect(session.validTranslation == "Hello")
+        var failed = translatingSession()
+        _ = failed.handle(.completed(tag(1), .failure(.requestFailed)))
+        for var session in [Session(id: 7, target: .english), translatingSession(), ready, failed] {
+            let before = session
+            #expect(session.handle(.targetPressed(.english)) == [])
+            #expect(session == before)
+        }
+        // The same sessions still take a real switch.
+        #expect(ready.handle(.targetPressed(.japanese)).contains(.render))
+        #expect(failed.handle(.targetPressed(.japanese)).contains(.render))
     }
 
     @Test func clearingTheSourceClearsThePreview() {
@@ -355,17 +340,6 @@ struct LiveTranslationSessionTests {
         var session = Session(id: 7, target: .english)
         _ = session.handle(.sourceChanged(String(repeating: "😀", count: 200)))
         #expect(session.phase == .debouncing)
-    }
-
-    @Test func pressingTheCurrentTargetRefreshesAboveTheLimit() {
-        var session = Session(id: 7, target: .english)
-        let long = String(repeating: "字", count: 250)
-        _ = session.handle(.sourceChanged(long))
-        #expect(session.handle(.targetPressed(.english)) == [.cancelPending, .start(TranslationRequest(tag: tag(1), source: long)), .render])
-        #expect(session.handle(.completed(tag(1), .success("Long text"))) == [.render])
-        #expect(session.validTranslation == "Long text")
-        #expect(session.snapshot.status == .ready)
-        #expect(session.handle(.targetPressed(.english)) == [.render])
     }
 
     @Test func switchingTheTargetAboveTheLimitTranslates() {

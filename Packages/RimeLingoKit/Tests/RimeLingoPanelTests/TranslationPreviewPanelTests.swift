@@ -248,7 +248,8 @@ struct TranslationPreviewPanelTests {
     @MainActor
     @Test func waitingStateHasNoTextArea() {
         let view = View()
-        view.state = TranslationPreviewState(targetLabel: "英语", status: .waiting, message: "等待输入")
+        // A session without a source has no message of its own.
+        view.state = TranslationPreviewState(targetLabel: "英语", status: .waiting)
         #expect(view.layout.textRect == .zero)
         #expect(view.layout.lineCount == 0)
         #expect(view.layout.markerRect == .zero)

@@ -10,8 +10,9 @@ public enum TranslationDispatch: Sendable, Equatable {
     /// A selection preview is open for this field: hand the target to it (retranslate the
     /// captured text, or re-show / retry). The selection is not read again.
     case retargetSelection(TranslationTarget)
-    /// Live translation is off: turn it on with this target. Like `switchTarget`, this
-    /// closes a selection preview left over from another field.
+    /// Live translation is off: turn it on with this target. Like `stop` and
+    /// `switchTarget` it is reached only without a selection preview in this field, and a
+    /// preview never outlives the field it was captured in.
     case start(TranslationTarget)
     /// The shortcut of the active target pressed again: the source text goes into the app
     /// and live translation turns off.
