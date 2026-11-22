@@ -16,13 +16,19 @@ public enum TranslationDispatch: Sendable, Equatable {
     /// The shortcut of the active target pressed again: the source text goes into the app
     /// and live translation turns off.
     case stop
+    /// The shortcut of the active target while candidates are open: nothing changes and a
+    /// notice says why (`LiveSubmitBlock.composing`). Turning off writes the draft into
+    /// the app, and with the caret inside the draft that would leave the unfinished
+    /// pinyin behind the text it was typed into.
+    case stopBlocked
     /// Live translation is on with another target: switch to this one and retranslate
     /// the current draft.
     case switchTarget(TranslationTarget)
 
     public static func decide(
         target: TranslationTarget, featureEnabled: Bool, isRepeat: Bool, menuOrActionOpen: Bool,
-        selection: SelectionPresence, selectionPreviewAttached: Bool, activeTarget: TranslationTarget?
+        selection: SelectionPresence, selectionPreviewAttached: Bool, activeTarget: TranslationTarget?,
+        isComposing: Bool = false
     ) -> TranslationDispatch {
         if !featureEnabled { return .ignore }
         // A held shortcut acts once; it must not restart a request on every repeat.
@@ -35,7 +41,8 @@ public enum TranslationDispatch: Sendable, Equatable {
         }
         // A language shortcut is a toggle.
         guard let activeTarget else { return .start(target) }
-        return activeTarget == target ? .stop : .switchTarget(target)
+        guard activeTarget == target else { return .switchTarget(target) }
+        return isComposing ? .stopBlocked : .stop
     }
 }
 

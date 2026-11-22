@@ -32,7 +32,8 @@ extension RimeLingoInputController {
             target: target, featureEnabled: enabled, isRepeat: isRepeat, menuOrActionOpen: menuOrActionOpen,
             selection: selection, selectionPreviewAttached: attached,
             activeTarget: LiveFieldPolicy.toggleTarget(
-                mode: liveEngine.liveTarget, sessionActive: live != nil, appExempt: draftLayerExempt))
+                mode: liveEngine.liveTarget, sessionActive: live != nil, appExempt: draftLayerExempt),
+            isComposing: isComposing)
         switch dispatch {
         case .ignore:
             return nil
@@ -48,6 +49,8 @@ extension RimeLingoInputController {
             startLive(target, announce: true)
         case .stop:
             exitLive(client: client)
+        case .stopBlocked:
+            liveEngine.showStatus(LiveSubmitBlock.composing.message)
         case let .switchTarget(target):
             liveEngine.closeSelectionPreview()
             DebugLog.write("live switch target=\(target.code)")

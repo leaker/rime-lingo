@@ -133,6 +133,23 @@ struct TranslationShortcutsTests {
         #expect(decide(Self.french, activeTarget: .english) == .switchTarget(Self.french))
     }
 
+    /// Turning off writes the draft into the app; with candidates open that would move
+    /// the unfinished pinyin behind the text it was typed into. The toggle is refused with
+    /// the notice the submit shortcut gives there; starting and switching write nothing.
+    @Test func dispatchRefusesToTurnOffWhileComposing() {
+        func composing(_ target: TranslationTarget, active: TranslationTarget?) -> TranslationDispatch {
+            TranslationDispatch.decide(
+                target: target, featureEnabled: true, isRepeat: false, menuOrActionOpen: false,
+                selection: .none, selectionPreviewAttached: false, activeTarget: active, isComposing: true)
+        }
+        for target in [TranslationTarget.english, .japanese, Self.french] {
+            #expect(composing(target, active: target) == .stopBlocked)
+            #expect(composing(target, active: nil) == .start(target))
+        }
+        #expect(composing(.japanese, active: .english) == .switchTarget(.japanese))
+        #expect(LiveSubmitBlock.composing.message == "请先完成选词")
+    }
+
     /// A held shortcut acts once: every repeat is swallowed, whatever else is going on.
     @Test func dispatchConsumesKeyRepeats() {
         for selection in [SelectionPresence.none, .captured, .new] {
