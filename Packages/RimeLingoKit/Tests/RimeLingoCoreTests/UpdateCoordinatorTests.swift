@@ -134,7 +134,8 @@ final class UpdateRig {
         #expect(snapshot(rig.installed) == snapshot(rig.published) && inode(rig.installed) == bundleInode)
         #expect(rig.state.phase == .restartPending && rig.state.installed?.notified == false && rig.state.release == nil)
         #expect(rig.process.registered == [rig.installed])
-        #expect((try? BundleTree.children(of: rig.updates.root)) == ["lock"], "archive, staging and backup are gone")
+        #expect((try? BundleTree.children(of: rig.updates.root))?.sorted() == ["backup", "lock"], "archive and staging are gone")
+        #expect(snapshot(rig.updates.backupApp)["Contents/MacOS/RimeLingo"] == "file 755 executable 0.2.0")
 
         // Until the restart happened, the answer stays the same and nothing is fetched.
         rig.process.refuseRelaunch = true
@@ -144,6 +145,7 @@ final class UpdateRig {
         _ = await restarted.check(force: true)
         #expect(rig.state.phase == .restartPending && rig.transport.requestCount(UpdateConfiguration.manifestURL) == 2)
         #expect(await restarted.confirmRelaunch() == nil, "the old process is not the new version")
+        #expect(BundleTree.entry(at: rig.updates.backupApp) != nil, "and the previous version stays until the new one runs")
         rig.process.refuseRelaunch = false
         #expect(await restarted.relaunch(pid: 77, background: true))
         #expect(rig.process.relaunches == [.init(pid: 77, bundle: rig.installed, background: true)])
@@ -154,8 +156,10 @@ final class UpdateRig {
         var pending = rig.state
         pending.phase = .restartPending
         try pending.save(rig.paths)
+        #expect(BundleTree.entry(at: rig.updates.backupApp) != nil)
         #expect(await relaunched.confirmRelaunch() == "0.3.0")
         #expect(rig.state.phase == .idle && rig.state.installed?.notified == true)
+        #expect(BundleTree.entry(at: rig.updates.backup) == nil, "the new version runs: the previous one is given up")
         #expect(await relaunched.confirmRelaunch() == nil)
         let final = await relaunched.check(force: true)
         #expect(final.phase == .idle && final.release == nil && final.failure == nil)
@@ -526,11 +530,36 @@ final class UpdateRig {
         #expect(snapshot(rig.installed) == snapshot(rig.published))
         #expect(rig.state.phase == .restartPending && rig.state.failure == nil && rig.state.release == nil)
         #expect(rig.state.installed == .init(version: "0.3.0", build: 21, at: rig.clock.now, notified: false))
-        #expect((try? BundleTree.children(of: rig.updates.root)) == ["lock"])
+        #expect((try? BundleTree.children(of: rig.updates.root))?.sorted() == ["backup", "lock"])
         // The process that starts now is the new version and says so once.
         let relaunched = rig.coordinator(current: AppVersion("0.3.0", build: 21))
         #expect(await relaunched.confirmRelaunch() == "0.3.0")
         #expect(rig.state.phase == .idle)
+        #expect((try? BundleTree.children(of: rig.updates.root)) == ["lock"])
+    }
+
+    /// Between an install and the first launch of the new version the backup has no marker.
+    @Test func launchKeepsTheBackupOfAnUnconfirmedInstallAndRemovesAStaleOne() async throws {
+        let coordinator = rig.coordinator()
+        _ = await coordinator.check(force: false)
+        _ = await coordinator.downloadIfNeeded()
+        #expect(await coordinator.installIfReady(idle: rig.idle, userRequested: false) == .installed(version: "0.3.0"))
+        let bundle = snapshot(rig.installed), kept = snapshot(rig.updates.backupApp)
+        func launch() -> RecoveryOutcome {
+            UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
+                                              fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+        }
+        #expect(launch() == .none)
+        #expect(rig.state.phase == .restartPending && snapshot(rig.installed) == bundle && snapshot(rig.updates.backupApp) == kept)
+        // While another process holds the lock the new version confirms without removing it…
+        var other: UpdateLock? = try #require(UpdateLock.acquire(rig.updates))
+        #expect(await rig.coordinator(current: AppVersion("0.3.0", build: 21)).confirmRelaunch() == "0.3.0")
+        #expect(rig.state.phase == .idle && BundleTree.entry(at: rig.updates.backupApp) != nil)
+        withExtendedLifetime(other) {}
+        other = nil
+        // …and the next launch does, the restart being over.
+        #expect(launch() == .none)
+        #expect(BundleTree.entry(at: rig.updates.backup) == nil && snapshot(rig.installed) == bundle)
     }
 
     /// No room for the backup, an install cut short: the release is not to blame.

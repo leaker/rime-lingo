@@ -44,6 +44,7 @@ public enum RecoveryOutcome: Equatable, Sendable {
     /// Interrupted while replacing; the previous version was restored.
     case rolledBack(from: String, to: String)
     /// Interrupted after the new version was completely in place and verified; finished.
+    /// The backup is kept as after any other install.
     case completed(version: String, build: Int?)
     case failed(String)
 }
@@ -74,6 +75,15 @@ public struct UpdateInstaller: Sendable {
     /// Throws an `UpdateFailure`. On `.installFailed` the previous version is back in
     /// place; on `.backupFailed`, `.notNewer` and the verification failures nothing was
     /// touched; on `.rollbackFailed` the marker and the backup are kept for the next launch.
+    ///
+    /// After a successful install the previous version stays in `paths.backupApp`
+    /// (`updates/backup` in the cache) without a marker: a release can pass every signature
+    /// check and still not start. It is removed by `discardKeptBackup` once the new version
+    /// has confirmed that it runs, and replaced by the next install. Nothing restores it
+    /// automatically: the new version confirms as soon as it has launched, so one that
+    /// dies before that never runs any code of ours. Putting it back is manual for now
+    /// (copy it over the installed bundle); the relaunch helper or the settings app could
+    /// do it later.
     public func install(staged: URL, release: AppRelease, into bundle: URL, current: AppVersion, bundleID: String) throws {
         // An install that could not be undone left its marker and the only good backup
         // behind: finish that first, and never build a new backup from a mixed bundle.
@@ -142,8 +152,8 @@ public struct UpdateInstaller: Sendable {
         }
 
         process.registerWithLaunchServices(bundle)
+        // The backup stays until the new version has confirmed that it runs.
         try? fs.removeItem(at: paths.marker)
-        try? fs.removeItem(at: paths.backup)
         try? fs.removeItem(at: paths.staged)
         if let name = release.archive?.name { try? fs.removeItem(at: paths.archive(name)) }
     }
@@ -188,8 +198,17 @@ public struct UpdateInstaller: Sendable {
         process.registerWithLaunchServices(bundle)
     }
 
+    /// Removes the previous version that `install` kept, for a caller that holds
+    /// `UpdateLock`. While there is a marker the backup belongs to an install that is not
+    /// over and is left alone.
+    func discardKeptBackup() {
+        guard !FileManager.default.fileExists(atPath: paths.marker.path) else { return }
+        try? fs.removeItem(at: paths.backup)
+    }
+
     /// Called at launch, before anything else uses the bundle. Does nothing while another
-    /// process holds the lock.
+    /// process holds the lock. A backup without a marker is the previous version kept by
+    /// `install`, not an interrupted install, and is not touched here.
     public func recoverIfNeeded(bundle: URL, bundleID: String) -> RecoveryOutcome {
         guard FileManager.default.fileExists(atPath: paths.marker.path) else { return .none }
         guard let lock = UpdateLock.acquire(paths) else { return .busy }
@@ -230,8 +249,8 @@ public struct UpdateInstaller: Sendable {
             replacer.cleanTemporaries(in: bundle)
             if (try? Self.requireRelease(signature.evaluate(bundle: bundle), bundleID: bundleID, version: marker.to)) != nil {
                 process.registerWithLaunchServices(bundle)
+                // As after any other install, the backup is kept until the new version runs.
                 try? fs.removeItem(at: paths.marker)
-                try? fs.removeItem(at: paths.backup)
                 try? fs.removeItem(at: paths.staged)
                 return .completed(version: marker.to.version, build: marker.to.build)
             }

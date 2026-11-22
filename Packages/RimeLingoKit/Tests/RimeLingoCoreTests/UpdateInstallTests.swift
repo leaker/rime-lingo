@@ -155,13 +155,38 @@ import Testing
     func exists(_ url: URL) -> Bool { BundleTree.entry(at: url) != nil }
 
     @Test func installsInPlaceAndCleansUp() throws {
-        let expected = snapshot(paths.stagedApp)
+        let expected = snapshot(paths.stagedApp), previous = snapshot(installed)
         let bundleInode = inode(installed)
         #expect(install() == nil)
         #expect(snapshot(installed) == expected)
         #expect(inode(installed) == bundleInode)
         #expect(process.registered == [installed])
-        #expect(!exists(paths.marker) && !exists(paths.backup) && !exists(paths.staged) && !exists(paths.archive("RimeLingo-0.3.0.zip")))
+        #expect(!exists(paths.marker) && !exists(paths.staged) && !exists(paths.archive("RimeLingo-0.3.0.zip")))
+        #expect(snapshot(paths.backupApp) == previous, "the previous version is kept until the new one has started")
+    }
+
+    /// A version that never confirmed leaves its backup behind; the next install must not
+    /// be stopped by it, nor keep it in place of the version it replaces.
+    @Test func theNextInstallReplacesABackupKeptByTheLastOne() throws {
+        #expect(install() == nil)
+        #expect(snapshot(paths.backupApp)["Contents/MacOS/RimeLingo"] == "file 755 executable 0.2.0")
+        let previous = snapshot(installed)
+        try makeBundle(paths.stagedApp, version: "0.4.0", build: 22)
+        let next = AppRelease(version: "0.4.0", build: 22, files: ["zip": .init(name: "RimeLingo-0.4.0.zip", size: 1, sha256: "x")])
+        try installer.install(staged: paths.stagedApp, release: next, into: installed, current: AppVersion("0.3.0", build: 21),
+                              bundleID: fixtureBundleID)
+        #expect(snapshot(installed)["Contents/MacOS/RimeLingo"] == "file 755 executable 0.4.0")
+        #expect(snapshot(paths.backupApp) == previous && !exists(paths.marker))
+    }
+
+    @Test func aKeptBackupIsDiscardedOnlyWhenNoInstallIsUnfinished() throws {
+        try backUp()
+        try marker(.commit)
+        installer.discardKeptBackup()
+        #expect(exists(paths.backupApp), "with a marker it is what a rollback needs")
+        try FileManager.default.removeItem(at: paths.marker)
+        installer.discardKeptBackup()
+        #expect(!exists(paths.backup))
     }
 
     /// A colour tag or custom icon given in Finder: strict validation refuses a bundle
@@ -328,7 +353,7 @@ import Testing
         #expect(install() == nil)
         #expect(snapshot(installed) == expected)
         #expect(process.registered == [installed, installed], "restored, then installed")
-        #expect(!exists(paths.marker) && !exists(paths.backup))
+        #expect(!exists(paths.marker) && snapshot(paths.backupApp) == before)
     }
 
     // MARK: Crash recovery
@@ -342,6 +367,17 @@ import Testing
     @Test func noMarkerMeansNothingToRecover() {
         #expect(installer.recoverIfNeeded(bundle: installed, bundleID: fixtureBundleID) == .none)
         #expect(!exists(paths.lock), "a launch without an interrupted install touches nothing")
+    }
+
+    /// What a finished install leaves until the new version has started: not an
+    /// interrupted install, and nothing to restore or remove.
+    @Test func aBackupWithoutAMarkerIsLeftAlone() throws {
+        #expect(install() == nil)
+        let bundle = snapshot(installed), kept = snapshot(paths.backupApp)
+        fs.reset()
+        #expect(installer.recoverIfNeeded(bundle: installed, bundleID: fixtureBundleID) == .none)
+        #expect(snapshot(installed) == bundle && snapshot(paths.backupApp) == kept)
+        #expect(fs.count(.remove) == 0 && fs.count(.rename) == 0 && signature.count == 3, "nothing evaluated after the install")
     }
 
     @Test func aCrashWhilePreparingOnlyNeedsCleaning() throws {
@@ -382,7 +418,8 @@ import Testing
         try marker(.cleanup)
         #expect(installer.recoverIfNeeded(bundle: installed, bundleID: fixtureBundleID) == .completed(version: "0.3.0", build: 21))
         #expect(snapshot(installed) == expected && process.registered == [installed])
-        #expect(!exists(paths.marker) && !exists(paths.backup) && !exists(paths.staged))
+        #expect(!exists(paths.marker) && !exists(paths.staged))
+        #expect(snapshot(paths.backupApp)["Contents/MacOS/RimeLingo"] == "file 755 executable 0.2.0", "kept as after any install")
     }
 
     @Test func aCompleteLookingBundleWithABrokenSealIsStillUndone() throws {

@@ -355,7 +355,8 @@ public actor UpdateCoordinator {
 
     /// Called by the freshly started input method. When it is the version that was just
     /// installed, the pending restart is over and the version is returned exactly once,
-    /// for the "updated" notification.
+    /// for the "updated" notification. This is also where the previous version kept by the
+    /// install is given up: a process that got here did start.
     public func confirmRelaunch() -> String? {
         let state = UpdateState.load(paths)
         guard let installed = state.installed, runsInstalledVersion(state) else { return nil }
@@ -367,7 +368,15 @@ public actor UpdateCoordinator {
                 announce = installed.version
             }
         }
+        discardKeptBackup()
         return announce
+    }
+
+    /// Skipped while anyone holds the lock; the next launch removes it then.
+    private func discardKeptBackup() {
+        guard FileManager.default.fileExists(atPath: updates.backup.path), let lock = UpdateLock.acquire(updates) else { return }
+        defer { withExtendedLifetime(lock) {} }
+        UpdateInstaller(paths: updates, signature: signature, fs: fs, process: process, now: now).discardKeptBackup()
     }
 
     private func runsInstalledVersion(_ state: UpdateState) -> Bool {
@@ -463,6 +472,10 @@ public actor UpdateCoordinator {
             if state.phase == .ready, !stagedExists { state.phase = state.release == nil ? .idle : .downloading }
         }
         state.progress = nil
+        // The previous version is kept, without a marker, from an install until the new
+        // version has confirmed that it runs. In any other phase it is a leftover (the
+        // pending restart was dropped, or the confirming process could not get the lock).
+        if state.phase != .restartPending { installer.discardKeptBackup() }
         if state != before { try? state.save(paths) }
         return outcome
     }
