@@ -112,6 +112,31 @@ public enum LiveSessionKey: Sendable, Equatable {
     }
 }
 
+/// Swallows the auto-repeats of a key press that a translation session consumed.
+///
+/// The session keys (the submit shortcut and Esc) stop belonging to the session the moment
+/// they act: a submit empties the draft, a replace closes the selection preview. Holding the
+/// key a little too long would hand its repeats to the app, where the submit shortcut can
+/// send a message. A repeat therefore goes wherever its press went: swallowed when the
+/// press was consumed, passed on when the press was passed on.
+public struct ConsumedKeyRepeat: Sendable, Equatable {
+    private var consumedKeyCode: UInt16?
+
+    public init() {}
+
+    /// Call for every key down before it is handled. True when the event repeats a press
+    /// recorded with `consumed(keyCode:)`: it must be swallowed without acting again.
+    /// Any new press forgets the record.
+    public mutating func swallows(keyCode: UInt16, isRepeat: Bool) -> Bool {
+        if isRepeat { return consumedKeyCode == keyCode }
+        consumedKeyCode = nil
+        return false
+    }
+
+    /// A translation session consumed this key down.
+    public mutating func consumed(keyCode: UInt16) { consumedKeyCode = keyCode }
+}
+
 extension DraftBuffer {
     /// The draft of a live translation session is at its limit: the host takes no more
     /// typed keys into it (and starts no new composition) until the user submits or commits.

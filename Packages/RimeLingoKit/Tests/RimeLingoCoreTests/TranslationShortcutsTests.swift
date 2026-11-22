@@ -209,4 +209,43 @@ struct TranslationShortcutsTests {
         #expect(stillFull)
         #expect(draft.text == head + "明天下午开会😀")
     }
+
+    /// `#expect` cannot hold a mutating call.
+    private func swallows(_ gate: inout ConsumedKeyRepeat, _ keyCode: UInt16, isRepeat: Bool) -> Bool {
+        gate.swallows(keyCode: keyCode, isRepeat: isRepeat)
+    }
+
+    /// Submitting empties the draft, so the held submit shortcut no longer belongs to the
+    /// session by the time it repeats. The repeats are swallowed all the same: in the app
+    /// they would add a line break or send the message.
+    @Test func repeatsOfAConsumedSubmitDoNotReachTheApp() {
+        for keyCode: UInt16 in [36, 76] {
+            var gate = ConsumedKeyRepeat()
+            // The press: a draft with a finished translation.
+            #expect(!swallows(&gate, keyCode, isRepeat: false))
+            #expect(key(keyCode, option: true) == .submit)
+            gate.consumed(keyCode: keyCode)
+            // The repeats: the draft is empty and the session lets the key go.
+            #expect(key(keyCode, option: true, hasValidTranslation: false, draftIsEmpty: true) == .none)
+            #expect(swallows(&gate, keyCode, isRepeat: true))
+            #expect(swallows(&gate, keyCode, isRepeat: true))
+            // Released and pressed again with nothing drafted: the key is the app's.
+            #expect(!swallows(&gate, keyCode, isRepeat: false))
+            #expect(!swallows(&gate, keyCode, isRepeat: true))
+        }
+    }
+
+    /// A press the session did not take keeps repeating in the app, and a record never
+    /// covers another key or outlives the next press.
+    @Test func onlyRepeatsOfTheConsumedPressAreSwallowed() {
+        var gate = ConsumedKeyRepeat()
+        #expect(!swallows(&gate, 36, isRepeat: false))
+        #expect(!swallows(&gate, 36, isRepeat: true))
+
+        gate.consumed(keyCode: 53) // Esc closed a preview or turned live translation off
+        #expect(swallows(&gate, 53, isRepeat: true))
+        #expect(!swallows(&gate, 36, isRepeat: true))
+        #expect(!swallows(&gate, 0, isRepeat: false))
+        #expect(!swallows(&gate, 53, isRepeat: true))
+    }
 }

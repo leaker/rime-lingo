@@ -461,6 +461,9 @@ final class RimeLingoInputController: IMKInputController {
             // A hint of the translation mode goes with the next key. Not with a repeat:
             // holding the shortcut that raised it would clear it at once.
             if !event.isARepeat { engine.dismissTranslationHint() }
+            // The repeats of a submit shortcut or Esc that a translation session took: by now
+            // the draft is empty or the preview closed, and the key would reach the app.
+            if engine.sessionKeyRepeat.swallows(keyCode: event.keyCode, isRepeat: event.isARepeat) { return true }
             // Live translation is on and this field has no session yet.
             resumeLiveIfNeeded(client: client)
             // Translation shortcuts as configured in Settings (⌃⌥⌘E / ⌃⌥⌘J / ⌥↩ by default),
@@ -495,11 +498,13 @@ final class RimeLingoInputController: IMKInputController {
             // swallowed with a notice. Every other key, typing included, goes on as usual
             // and the preview stays.
             if quickMenu == nil, polish == nil, selectionPreviewIsAttached {
-                switch SelectionPreviewKey.decision(
+                let key = SelectionPreviewKey.decision(
                     keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
                     control: flags.contains(.control), shift: flags.contains(.shift),
                     hasMarkedText: hasPendingInput, submitMatched: submitMatched,
-                    canRetry: engine.selection.session?.snapshot.canRetry ?? false) {
+                    canRetry: engine.selection.session?.snapshot.canRetry ?? false)
+                if key != .none { engine.sessionKeyRepeat.consumed(keyCode: event.keyCode) }
+                switch key {
                 case .replace:
                     engine.replaceSelectedText()
                     return true
@@ -522,12 +527,14 @@ final class RimeLingoInputController: IMKInputController {
             // (exit). The shortcut never reaches the app then: there it could send a message.
             // With an empty draft both keys go on to the app.
             if live != nil, quickMenu == nil, polish == nil {
-                switch LiveSessionKey.decision(
+                let key = LiveSessionKey.decision(
                     keyCode: event.keyCode, option: flags.contains(.option), command: flags.contains(.command),
                     control: flags.contains(.control), shift: flags.contains(.shift),
                     isComposing: isComposing, hasValidTranslation: live?.validTranslation != nil,
                     selectionPreviewOpen: engine.selection.isActive, submitMatched: submitMatched,
-                    draftIsEmpty: draft.isEmpty, canRetry: live?.session?.snapshot.canRetry ?? false) {
+                    draftIsEmpty: draft.isEmpty, canRetry: live?.session?.snapshot.canRetry ?? false)
+                if key != .none { engine.sessionKeyRepeat.consumed(keyCode: event.keyCode) }
+                switch key {
                 case .submit:
                     submitLive(client: client)
                     return true

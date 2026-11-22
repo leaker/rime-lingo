@@ -64,6 +64,9 @@ final class InputEngine {
     /// When the user last pressed a key. Option-change bubbles are shown only for
     /// changes the user just caused, never for ones RimeLingo makes itself (app options).
     var lastUserKeyAt = Date.distantPast
+    /// The session key (submit shortcut or Esc) a translation session consumed last, so
+    /// that its auto-repeats do not reach the app once the session has let go of the key.
+    var sessionKeyRepeat = ConsumedKeyRepeat()
     /// When a key last passed through in a secure context. A time and nothing else; it
     /// only keeps a background redeploy from running while a password is being typed.
     var lastSecureKeyAt = Date.distantPast
