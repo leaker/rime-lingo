@@ -1,6 +1,7 @@
 #!/usr/bin/env swift
 // Renders the picture behind the icons in the release disk image's Finder window:
-//   scripts/dmg/background.tiff   one TIFF holding the 1x and the 2x rendering
+//   Apps/RimeLingo/Resources/DiskImageBackground.tiff   one TIFF holding the 1x and 2x rendering
+// It ships inside the app, so the disk image holds nothing but the app.
 //
 // The picture says what to do with the image: double-click the app, then click Install.
 // It is committed, so a release does not need the fonts; run this again only when the
@@ -19,7 +20,7 @@ import ImageIO
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
 let output = CommandLine.arguments.count > 1
     ? URL(fileURLWithPath: CommandLine.arguments[1])
-    : root.appendingPathComponent("scripts/dmg/background.tiff")
+    : root.appendingPathComponent("Apps/RimeLingo/Resources/DiskImageBackground.tiff")
 
 let window = CGSize(width: 640, height: 400)
 let iconCentre = CGPoint(x: 144, y: 196)

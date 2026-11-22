@@ -3,7 +3,7 @@
 
 Run through dmg_layout in scripts/release-functions.sh, which pins the two libraries:
 
-  dmg-layout.py write <mounted volume> --app NAME --background PATH
+  dmg-layout.py write <mounted volume> --app NAME --background PATH --chrome N
                       --icon X Y --window WIDTH HEIGHT [--icon-size N] [--text-size N]
   dmg-layout.py read <.DS_Store>     prints what the file says, as JSON
   dmg-layout.py selftest             proves the libraries load and a layout round-trips
@@ -26,11 +26,9 @@ except ImportError as error:  # pragma: no cover - reported to the release scrip
 
 # Where the window opens on the screen; Finder moves it if that is off-screen.
 WINDOW_ORIGIN = (200, 120)
-# WindowBounds is the whole window. Without a toolbar the title bar takes this much.
-TITLE_BAR = 28
 
 
-def write_store(store_path, app, icon, window, icon_size, text_size, alias=None, bookmark=None):
+def write_store(store_path, app, icon, window, icon_size, text_size, chrome, alias=None, bookmark=None):
     width, height = window
     window_settings = {
         "ContainerShowSidebar": False,
@@ -41,7 +39,7 @@ def write_store(store_path, app, icon, window, icon_size, text_size, alias=None,
         "ShowTabView": False,
         "ShowToolbar": False,
         "SidebarWidth": 0,
-        "WindowBounds": f"{{{{{WINDOW_ORIGIN[0]}, {WINDOW_ORIGIN[1]}}}, {{{width}, {height + TITLE_BAR}}}}}",
+        "WindowBounds": f"{{{{{WINDOW_ORIGIN[0]}, {WINDOW_ORIGIN[1]}}}, {{{width}, {height + chrome}}}}}",
     }
     icon_view = {
         "viewOptionsVersion": 1,
@@ -95,7 +93,7 @@ def write(args):
     toc[kBookmarkVolumePath] = mounted_as
     toc[kBookmarkVolumeURL] = URL("file://" + mounted_as)
     write_store(os.path.join(volume, ".DS_Store"), args.app, args.icon, args.window,
-                args.icon_size, args.text_size, alias, bookmark)
+                args.icon_size, args.text_size, args.chrome, alias, bookmark)
 
 
 def text(value):
@@ -138,10 +136,10 @@ def describe(store_path):
 def selftest(_args):
     with tempfile.TemporaryDirectory() as folder:
         store = os.path.join(folder, ".DS_Store")
-        write_store(store, "RimeLingo.app", (144, 196), (640, 400), 128, 13)
+        write_store(store, "RimeLingo.app", (144, 196), (640, 400), 128, 13, 56)
         found = describe(store)
     if found["icons"] != {"RimeLingo.app": [144, 196]} or found["view"] != "icnv" \
-            or found["window"]["WindowBounds"] != f"{{{{200, 120}}, {{640, {400 + TITLE_BAR}}}}}" \
+            or found["window"]["WindowBounds"] != f"{{{{200, 120}}, {{640, 456}}}}" \
             or found["icon_view"]["iconSize"] != 128.0:
         sys.exit(f"dmg-layout: a layout did not survive being written and read: {found}")
     print("dmg-layout: ok")
@@ -158,6 +156,8 @@ def main():
     writing.add_argument("--window", required=True, nargs=2, type=int, metavar=("WIDTH", "HEIGHT"))
     writing.add_argument("--icon-size", type=int, default=128)
     writing.add_argument("--text-size", type=int, default=13)
+    # WindowBounds is the whole window: the content plus this much (title bar, path bar).
+    writing.add_argument("--chrome", required=True, type=int)
     writing.set_defaults(run=write)
     reading = commands.add_parser("read")
     reading.add_argument("store")

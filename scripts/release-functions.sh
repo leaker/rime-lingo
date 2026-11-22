@@ -12,13 +12,17 @@ DMG_MOUNT=""
 # The Finder window of the opened image, in points from the top-left corner of its
 # content. scripts/gen-dmg-background.swift draws the background for these numbers.
 RELEASE_SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DMG_BACKGROUND="$RELEASE_SCRIPTS/dmg/background.tiff"
-DMG_BACKGROUND_IN_IMAGE=".background/background.tiff"
-DMG_ICON_SOURCE="$RELEASE_SCRIPTS/../Apps/Shared/Assets.xcassets/AppIcon.appiconset"
+# The picture lives inside the app, so the image holds nothing but the app: a file of its
+# own at the top would show in Finder for anyone who has hidden files shown.
+DMG_BACKGROUND="$RELEASE_SCRIPTS/../Apps/RimeLingo/Resources/DiskImageBackground.tiff"
+DMG_BACKGROUND_IN_APP="Contents/Resources/DiskImageBackground.tiff"
+DMG_BACKGROUND_IN_IMAGE="RimeLingo.app/$DMG_BACKGROUND_IN_APP"
 DMG_WINDOW_WIDTH=640
 DMG_WINDOW_HEIGHT=400
-# The window's title bar, which its saved size includes (scripts/dmg-layout.py adds it).
-DMG_TITLE_BAR=28
+# What the saved window size adds to the content: the title bar, and room for the path bar
+# Finder shows at the bottom when it is turned on for every window (the window's own
+# setting does not hide it). Without a path bar the picture just shows a little more paper.
+DMG_WINDOW_CHROME=56
 DMG_ICON_X=144
 DMG_ICON_Y=196
 DMG_ICON_SIZE=128
@@ -67,7 +71,7 @@ check_dmg_layout() {  # <mount point>
     || die "the disk image's window does not show $DMG_BACKGROUND_IN_IMAGE as its background"
   [[ "$(layout_value background.volume)" == "$DMG_VOLUME_NAME" ]] || die "the background is looked for on another volume than $DMG_VOLUME_NAME"
   bounds="$(layout_value window.WindowBounds)"
-  [[ "$bounds" == *", {$DMG_WINDOW_WIDTH, $((DMG_WINDOW_HEIGHT + DMG_TITLE_BAR))}}" ]] || die "the disk image's window is $bounds, not $DMG_WINDOW_WIDTH x $DMG_WINDOW_HEIGHT"
+  [[ "$bounds" == *", {$DMG_WINDOW_WIDTH, $((DMG_WINDOW_HEIGHT + DMG_WINDOW_CHROME))}}" ]] || die "the disk image's window is $bounds, not $DMG_WINDOW_WIDTH x $DMG_WINDOW_HEIGHT"
   [[ "$(layout_value window.ShowToolbar)$(layout_value window.ShowSidebar)$(layout_value window.ShowStatusBar)$(layout_value window.ShowPathbar)" == falsefalsefalsefalse ]] \
     || die "the disk image's window shows a toolbar, sidebar, status bar or path bar"
   size="$(layout_value icon_view.iconSize)"
@@ -79,18 +83,15 @@ check_dmg_layout() {  # <mount point>
 # Writes a compressed, read-only disk image whose Finder window shows the app over a
 # picture that says what to do: double-click it, then click Install. The app installs
 # itself when it is opened from there, so there is no Applications shortcut. The picture,
-# the layout and the volume's icon are files Finder does not show.
+# which is inside the app, and the layout, which Finder never shows.
 # The image is not signed here: release.sh does that, scripts/make-dmg.sh does not.
 build_dmg() {  # <RimeLingo.app> <image to write> <scratch directory>
   local app="$1" dmg="$2" staging="$3/dmg-root" writable="$3/dmg-writable.dmg" mount="$3/dmg-writable"
-  local iconset="$3/VolumeIcon.iconset" icon listing
-  rm -rf "$staging" "$writable" "$mount" "$iconset" && mkdir -p "$staging/.background" "$mount" "$iconset"
+  local listing
+  cmp -s "$DMG_BACKGROUND" "$app/$DMG_BACKGROUND_IN_APP" \
+    || die "$app does not carry the disk image's background ($DMG_BACKGROUND_IN_APP); build it again from this tree"
+  rm -rf "$staging" "$writable" "$mount" && mkdir -p "$staging" "$mount"
   ditto "$app" "$staging/RimeLingo.app"
-  cp "$DMG_BACKGROUND" "$staging/$DMG_BACKGROUND_IN_IMAGE"
-  for icon in "$DMG_ICON_SOURCE"/icon_*.png; do
-    cp "$icon" "$iconset/$(basename "${icon/@1x/}")"
-  done
-  iconutil --convert icns --output "$staging/.VolumeIcon.icns" "$iconset" || die "cannot make the disk image's icon"
   # Room for the layout, which can only be written once the files are on the volume: it
   # refers to the background by the numbers the volume gave it.
   dd if=/dev/zero of="$staging/.DS_Store" bs=1024 count=64 2>/dev/null
@@ -103,16 +104,13 @@ build_dmg() {  # <RimeLingo.app> <image to write> <scratch directory>
   rm -f "$mount/.DS_Store"
   dmg_layout write "$mount" --app RimeLingo.app --background "$DMG_BACKGROUND_IN_IMAGE" \
     --icon "$DMG_ICON_X" "$DMG_ICON_Y" --window "$DMG_WINDOW_WIDTH" "$DMG_WINDOW_HEIGHT" \
-    --icon-size "$DMG_ICON_SIZE" --text-size "$DMG_TEXT_SIZE" || die "cannot write the disk image's window layout"
+    --icon-size "$DMG_ICON_SIZE" --text-size "$DMG_TEXT_SIZE" --chrome "$DMG_WINDOW_CHROME" || die "cannot write the disk image's window layout"
   check_dmg_layout "$mount"
-  # The "has a custom icon" bit of the volume's own Finder flags makes .VolumeIcon.icns count.
-  xattr -wx com.apple.FinderInfo "0000000000000000040000000000000000000000000000000000000000000000" "$mount" \
-    || die "cannot give the disk image its icon"
-  chflags hidden "$mount/.background" "$mount/.DS_Store" "$mount/.VolumeIcon.icns" || die "cannot hide the layout files"
+  chflags hidden "$mount/.DS_Store" || die "cannot hide the layout file"
   # What macOS leaves on a volume it could write to.
   rm -rf "$mount/.fseventsd" "$mount/.Trashes"
   listing="$(/bin/ls -A "$mount" | LC_ALL=C sort | tr '\n' ' ')"
-  [[ "$listing" == ".DS_Store .VolumeIcon.icns .background RimeLingo.app " ]] || die "unexpected files on the disk image: $listing"
+  [[ "$listing" == ".DS_Store RimeLingo.app " ]] || die "unexpected files on the disk image: $listing"
   detach_dmg
   [[ -z "$DMG_MOUNT" ]] || die "cannot close the disk image after laying it out"
 
@@ -153,11 +151,10 @@ check_dmg() {  # <image> <mount point>
   hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$mount" "$dmg" \
     || die "cannot open $(basename "$dmg")"
   DMG_MOUNT="$mount"
-  # The app is the only thing Finder shows. The rest is the window's layout, hidden.
-  listing="$(/bin/ls -A "$mount" | grep -vxF -e .DS_Store -e .VolumeIcon.icns -e .background || true)"
+  # The app is the only thing Finder shows, also with hidden files shown: the window's
+  # layout (.DS_Store) is the one file Finder never lists.
+  listing="$(/bin/ls -A "$mount" | grep -vxF .DS_Store || true)"
   [[ "$listing" == "RimeLingo.app" ]] || die "the disk image holds more than RimeLingo.app: $(tr '\n' ' ' <<<"$listing")"
-  [[ ! -e "$mount/.background" || "$(/bin/ls -A "$mount/.background")" == "$(basename "$DMG_BACKGROUND_IN_IMAGE")" ]] \
-    || die "the disk image's .background holds more than the background"
   name="$(diskutil info -plist "$mount" | plutil -extract VolumeName raw -o - - 2>/dev/null || true)"
   [[ "$name" == "$DMG_VOLUME_NAME" ]] || die "the disk image is named '${name:-?}', not '$DMG_VOLUME_NAME'"
   verify_app "$mount/RimeLingo.app"
@@ -165,9 +162,7 @@ check_dmg() {  # <image> <mount point>
   spctl --assess --type execute "$mount/RimeLingo.app" || die "Gatekeeper rejects the app in the disk image"
   cmp -s "$DMG_BACKGROUND" "$mount/$DMG_BACKGROUND_IN_IMAGE" || die "the disk image's background is not $DMG_BACKGROUND"
   check_dmg_layout "$mount"
-  for name in .DS_Store .VolumeIcon.icns .background; do
-    [[ "$(stat -f %Sf "$mount/$name" 2>/dev/null)" == *hidden* ]] || die "$name is not hidden in the disk image"
-  done
+  [[ "$(stat -f %Sf "$mount/.DS_Store" 2>/dev/null)" == *hidden* ]] || die ".DS_Store is not hidden in the disk image"
   detach_dmg
 }
 

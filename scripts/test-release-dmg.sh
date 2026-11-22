@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs the disk image steps of scripts/release.sh (scripts/release-functions.sh) on a
-# fixture folder in a temporary directory. hdiutil, ditto, diskutil and iconutil are the
+# fixture folder in a temporary directory. hdiutil, ditto and diskutil are the
 # real ones, and so is the layout tool (uv fetches its two pinned libraries from PyPI the
 # first time); codesign, xcrun (notarytool, stapler), spctl and curl are stand-ins that
 # record how they were called. No Keychain, nothing signed, sent to Apple or published.
@@ -70,6 +70,9 @@ printf 'fixture plist\n' > "$WORK/build/RimeLingo.app/Contents/Info.plist"
 printf '#!/bin/sh\n' > "$WORK/build/RimeLingo.app/Contents/MacOS/RimeLingo"
 chmod +x "$WORK/build/RimeLingo.app/Contents/MacOS/RimeLingo"
 ln -s MacOS/RimeLingo "$WORK/build/RimeLingo.app/Contents/link"
+# A built app carries the disk image's background; the image refers to it there.
+mkdir -p "$WORK/build/RimeLingo.app/Contents/Resources"
+cp "$DMG_BACKGROUND" "$WORK/build/RimeLingo.app/$DMG_BACKGROUND_IN_APP"
 DMG="$WORK/RimeLingo-0.3.0.dmg"
 
 # Building: compressed and read-only, holding the app as it was, under the product's name.
@@ -95,41 +98,36 @@ diff -r "$WORK/build/RimeLingo.app" "$WORK/look/RimeLingo.app" || fail "the app 
 [[ -x "$WORK/look/RimeLingo.app/Contents/MacOS/RimeLingo" ]] || fail "the executable bit was not kept"
 if touch "$WORK/look/written" 2>/dev/null; then fail "the mounted image is writable"; fi
 
-# The window: the app is the only thing Finder shows. The background, the layout and the
-# volume's icon are there and hidden, and there is no shortcut to Applications, where an
-# input method does not work.
-[[ "$(/bin/ls -A "$WORK/look" | LC_ALL=C sort | tr '\n' ' ')" == ".DS_Store .VolumeIcon.icns .background RimeLingo.app " ]] \
+# The window: the app is the only thing on the image besides the layout, which Finder never
+# lists, so nothing else shows even with hidden files shown. The background is inside the
+# app. There is no shortcut to Applications, where an input method does not work.
+[[ "$(/bin/ls -A "$WORK/look" | LC_ALL=C sort | tr '\n' ' ')" == ".DS_Store RimeLingo.app " ]] \
   || fail "the image holds: $(/bin/ls -A "$WORK/look" | tr '\n' ' ')"
 [[ "$(/bin/ls "$WORK/look")" == "RimeLingo.app" ]] || fail "more than the app is visible in the image"
 [[ ! -e "$WORK/look/Applications" && ! -L "$WORK/look/Applications" ]] || fail "the image has an Applications shortcut"
 [[ -z "$(find "$WORK/look" -maxdepth 1 -type l)" ]] || fail "the image has a link at its top"
-for hidden in .DS_Store .VolumeIcon.icns .background; do
-  [[ "$(stat -f %Sf "$WORK/look/$hidden")" == *hidden* ]] || fail "$hidden is not flagged hidden"
-done
+[[ "$(stat -f %Sf "$WORK/look/.DS_Store")" == *hidden* ]] || fail ".DS_Store is not flagged hidden"
 [[ "$(stat -f %Sf "$WORK/look/RimeLingo.app")" != *hidden* ]] || fail "the app is hidden"
-cmp "$ROOT/scripts/dmg/background.tiff" "$WORK/look/.background/background.tiff" || fail "the background in the image is not the tracked one"
-[[ "$(/bin/ls -A "$WORK/look/.background")" == "background.tiff" ]] || fail ".background holds more than the background"
-[[ "$(xattr -px com.apple.FinderInfo "$WORK/look" | tr -d ' \n' | cut -c17-18)" == 04 ]] || fail "the volume does not use its own icon"
-sips -g format "$WORK/look/.VolumeIcon.icns" 2>/dev/null | grep -q 'format: icns' || fail "the volume icon is not an icns"
+cmp "$DMG_BACKGROUND" "$WORK/look/$DMG_BACKGROUND_IN_IMAGE" || fail "the background in the image is not the tracked one"
 # What the layout file itself says, read back with the tool that wrote it.
 LAYOUT="$(dmg_layout read "$WORK/look/.DS_Store")"
 says() { plutil -extract "$1" raw -o - - <<<"$LAYOUT"; }
 [[ "$(says view)" == icnv ]] || fail "the window is not an icon view"
 [[ "$(says 'icons.RimeLingo\.app.0') $(says 'icons.RimeLingo\.app.1')" == "$DMG_ICON_X $DMG_ICON_Y" ]] || fail "the icon is at $(says 'icons.RimeLingo\.app')"
 [[ "$(plutil -extract icons raw -o - - <<<"$LAYOUT")" == RimeLingo.app ]] || fail "the layout places more than the app"
-[[ "$(says background.path)" == /.background/background.tiff ]] || fail "the layout's background is $(says background.path)"
-[[ "$(says background.carbon_path)" == "$DMG_VOLUME_NAME:.background:background.tiff" ]] || fail "the background alias is $(says background.carbon_path)"
+[[ "$(says background.path)" == "/$DMG_BACKGROUND_IN_IMAGE" ]] || fail "the layout's background is $(says background.path)"
+[[ "$(says background.carbon_path)" == "$DMG_VOLUME_NAME:RimeLingo.app:Contents:Resources:DiskImageBackground.tiff" ]] || fail "the background alias is $(says background.carbon_path)"
 [[ "$(says background.volume_path)" == "/Volumes/$DMG_VOLUME_NAME" ]] || fail "the background alias remembers the build's mount point"
-[[ "$(says bookmark.path)" == .background/background.tiff ]] || fail "the layout's bookmark is $(says bookmark.path)"
+[[ "$(says bookmark.path)" == "$DMG_BACKGROUND_IN_IMAGE" ]] || fail "the layout's bookmark is $(says bookmark.path)"
 [[ "$(says bookmark.volume_path)" == "/Volumes/$DMG_VOLUME_NAME" ]] || fail "the bookmark remembers the build's mount point"
 [[ "$(says icon_view.backgroundType)" == 2 ]] || fail "the window's background is not a picture"
-[[ "$(says window.WindowBounds)" == "{{200, 120}, {640, 428}}" ]] || fail "the window is $(says window.WindowBounds)"
+[[ "$(says window.WindowBounds)" == "{{200, 120}, {640, 456}}" ]] || fail "the window is $(says window.WindowBounds)"
 [[ "$(says window.ShowToolbar) $(says window.ShowSidebar) $(says window.ShowStatusBar)" == "false false false" ]] || fail "the window shows a bar"
 [[ "$(says icon_view.labelOnBottom) $(says icon_view.arrangeBy)" == "true none" ]] || fail "the icons are not placed by hand with names below"
 # The picture is drawn for the same numbers, at both resolutions.
 grep -qF "let iconCentre = CGPoint(x: $DMG_ICON_X, y: $DMG_ICON_Y)" "$ROOT/scripts/gen-dmg-background.swift" || fail "the background is drawn for another icon position"
 grep -qF "let window = CGSize(width: $DMG_WINDOW_WIDTH, height: $DMG_WINDOW_HEIGHT)" "$ROOT/scripts/gen-dmg-background.swift" || fail "the background is drawn for another window"
-[[ "$(tiffutil -info "$ROOT/scripts/dmg/background.tiff" 2>&1 | grep -c 'Resolution: \(72, 72\|144, 144\)')" == 2 ]] || fail "the background is not a 1x and a 2x rendering"
+[[ "$(tiffutil -info "$DMG_BACKGROUND" 2>&1 | grep -c 'Resolution: \(72, 72\|144, 144\)')" == 2 ]] || fail "the background is not a 1x and a 2x rendering"
 detach_dmg
 ! mounted "$WORK/look" || fail "detach_dmg left the image mounted"
 detach_dmg  # nothing mounted: must be harmless
@@ -158,17 +156,15 @@ STUB_GATEKEEPER_REJECTS=1 refuses "an app Gatekeeper rejects" "Gatekeeper reject
 ! mounted "$WORK/mount" || fail "a refused image stayed mounted"
 # An image without the designed window is not released, nor one whose layout was changed.
 hdiutil create -quiet -volname "$DMG_VOLUME_NAME" -srcfolder "$WORK/build" -fs HFS+ -format UDZO "$WORK/bare.dmg"
-refuses "an image without the background" "background is not" check_dmg "$WORK/bare.dmg" "$WORK/mount-bare"
+refuses "an image without a layout" "has no window layout" check_dmg "$WORK/bare.dmg" "$WORK/mount-bare"
 ! mounted "$WORK/mount-bare" || fail "a refused image stayed mounted"
-mkdir -p "$WORK/moved/.background"
-ditto "$WORK/build/RimeLingo.app" "$WORK/moved/RimeLingo.app"
-cp "$ROOT/scripts/dmg/background.tiff" "$WORK/moved/.background/"
-hdiutil create -quiet -volname "$DMG_VOLUME_NAME" -srcfolder "$WORK/moved" -fs HFS+ -format UDZO "$WORK/unlaid.dmg"
-refuses "an image without a layout" "has no window layout" check_dmg "$WORK/unlaid.dmg" "$WORK/mount-unlaid"
 ( DMG_ICON_X=300; refuses "an image with the icon elsewhere" "icon is not at 300" check_dmg "$DMG" "$WORK/mount" )
-touch "$WORK/moved/.background/other.png"
-hdiutil create -quiet -volname "$DMG_VOLUME_NAME" -srcfolder "$WORK/moved" -fs HFS+ -format UDZO -ov "$WORK/unlaid.dmg"
-refuses "an image with more in .background" "holds more than the background" check_dmg "$WORK/unlaid.dmg" "$WORK/mount-unlaid"
+( DMG_WINDOW_CHROME=28; refuses "an image whose window has no room for a path bar" "the disk image's window is" check_dmg "$DMG" "$WORK/mount" )
+# An app built before the background was part of it cannot make the image.
+ditto "$WORK/build/RimeLingo.app" "$WORK/old/RimeLingo.app"
+rm "$WORK/old/RimeLingo.app/$DMG_BACKGROUND_IN_APP"
+refuses "an app without the background" "does not carry the disk image's background" build_dmg "$WORK/old/RimeLingo.app" "$WORK/old.dmg" "$WORK/old"
+[[ ! -e "$WORK/old.dmg" ]] || fail "an image was written for an app without the background"
 refuses "a file that is not an image" "cannot open" check_dmg "$WORK/build/RimeLingo.app/Contents/Info.plist" "$WORK/mount"
 
 # Signing: the release identity, a secure timestamp, and the same requirement as the app.
@@ -234,4 +230,4 @@ done < <(grep -n '^notarize ' "$ROOT/scripts/release.sh")
 
 [[ -z "$(hdiutil info | grep -F "$WORK" || true)" ]] || fail "an image of this test is still attached"
 
-echo 'PASS: image built compressed and read-only with the app in the designed window (background, layout, icon; hidden; no Applications link), make-dmg.sh, contents and name checked on the mount, detached on failure, signing, notarization, stapling, Gatekeeper, download probe, release.sh order'
+echo 'PASS: image built compressed and read-only with the app in the designed window (background inside the app, layout hidden, nothing else on the image, room for a path bar, no Applications link), make-dmg.sh, contents and name checked on the mount, detached on failure, signing, notarization, stapling, Gatekeeper, download probe, release.sh order'
