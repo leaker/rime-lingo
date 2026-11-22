@@ -115,7 +115,7 @@ Click the input method icon in the menu bar and choose "灵译输入法设置…
 | Section | What it does |
 | --- | --- |
 | 翻译 (Translation) | Turn live translation on or off; add, remove and reorder target languages; give each language a shortcut; change the "insert translation" shortcut; choose the translation service |
-| AI 助手 (AI assistant) | Configure the translation service: the on-device model, or any online service with an OpenAI-compatible API (enter its address and key) |
+| AI 助手 (AI assistant) | Configure the translation service: the on-device model, or any online service with an OpenAI-compatible API (enter its address and key, then allow text to be sent to it) |
 | 输入方案 (Schemas) | Full pinyin, double pinyin and other schemas |
 | 输入习惯, 中英切换, 模糊音与拼写 | Number of candidates, switching keys, fuzzy pinyin |
 | 外观 (Appearance) | Colours, fonts, horizontal or vertical candidates |
