@@ -56,6 +56,10 @@ struct InstallerView: View {
         }
     }
 
+    /// The name the input menu shows for the input source in the system's language
+    /// (InfoPlist.strings: 灵译输入法 in Chinese, RimeLingo elsewhere).
+    private static let inputSourceName = Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String ?? "灵译输入法"
+
     private var title: String {
         switch model.phase {
         case .ready: model.offer.title
@@ -95,7 +99,7 @@ struct InstallerView: View {
             VStack(spacing: 8) {
                 Label("灵译输入法已经可以使用", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(InstallerPalette.success)
-                Text("点菜单栏的输入法图标选择「灵译输入法」，或者按 ⌃空格 切换。")
+                Text("点菜单栏的输入法图标选择「\(Self.inputSourceName)」，或者按 ⌃空格 切换。")
                     .foregroundStyle(InstallerPalette.secondaryText)
             }
         case let .failed(failure):
