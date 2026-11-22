@@ -182,6 +182,18 @@ struct AIAssistantView: View {
         }
     }
 
+    private static let providerIDs: Set<String> = ["apple", "openai"]
+
+    /// Pushes the model settings of this pane to the features file.
+    private func writeFeatures(provider: String) {
+        model.updateFeatures {
+            $0.aiProvider = provider
+            $0.aiBaseURL = baseURL
+            $0.aiModel = modelName
+            $0.aiExtraJSON = extraJSON
+        }
+    }
+
     private var provider: any AIProvider {
         if providerID == "openai", let url = URL(string: baseURL) {
             return OpenAICompatibleProvider(baseURL: url, model: modelName, extraFieldsJSON: extraJSON)
@@ -288,15 +300,17 @@ struct AIAssistantView: View {
             .task(id: providerID) { availability = await provider.availability() }
             // Address or model changed: the previous check no longer says anything.
             .onChange(of: [baseURL, modelName, extraJSON]) { check = .idle }
-            .onChange(of: [providerID, baseURL, modelName, extraJSON], initial: true) {
-                // The input method reads the provider from rimelingo/features.json.
-                model.updateFeatures {
-                    $0.aiProvider = providerID
-                    $0.aiBaseURL = baseURL
-                    $0.aiModel = modelName
-                    $0.aiExtraJSON = extraJSON
-                }
+            .onAppear {
+                // The input method reads rimelingo/features.json, and the 翻译 pane shows
+                // and changes the provider there. A provider that differs from the one
+                // stored here is taken over, never overwritten: opening this pane must
+                // not revert a choice. The endpoint fields are edited here only.
+                let used = model.features.aiProvider
+                let current = Self.providerIDs.contains(used) ? used : providerID
+                if providerID != current { providerID = current }
+                writeFeatures(provider: current)
             }
+            .onChange(of: [providerID, baseURL, modelName, extraJSON]) { writeFeatures(provider: providerID) }
 
             Section {
                 let features = model.features

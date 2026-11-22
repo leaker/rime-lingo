@@ -7,8 +7,8 @@ import SwiftUI
 struct TranslationView: View {
     @Environment(SettingsModel.self) private var model
     @Binding var selection: Pane?
-    /// The AI assistant pane keeps the provider here and pushes it to the features file
-    /// when it appears, so a change made on this pane is written to both.
+    /// The AI assistant pane keeps the provider here too, so a change made on this pane
+    /// is written to both; when the two differ, that pane takes over the features value.
     @AppStorage("ai.provider") private var storedProvider = "apple"
     /// Why the last recording or restore of a shortcut was refused.
     @State private var refusals: [TranslationShortcutAction: String] = [:]
