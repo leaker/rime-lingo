@@ -88,8 +88,9 @@ final class InstallerModel {
         case failed(InstallFailure)
     }
 
-    /// `README.md`, section 「手动安装」.
-    static let manualInstallURL = URL(string: "https://github.com/\(UpdateConfiguration.repository)#%E6%89%8B%E5%8A%A8%E5%AE%89%E8%A3%85")!
+    /// `README.md`, the collapsed section 「手动安装」: the anchor is an explicit
+    /// `<a id="manual-install">` there (and in `README.en.md`), not a heading.
+    static let manualInstallURL = URL(string: "https://github.com/\(UpdateConfiguration.repository)#manual-install")!
 
     let source = Bundle.main.bundleURL
     let destination = RimeLingoInstallations.userURL()

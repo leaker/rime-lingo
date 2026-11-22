@@ -11,9 +11,12 @@
 #   RimeLingo-<version>.zip   the signed, notarized, stapled RimeLingo.app
 #   latest.json               the manifest (version, build, size and SHA-256 of the zip)
 #   latest.json.sig           its Ed25519 signature
+#   RimeLingo-<version>.dmg   the same app in a signed, notarized, stapled disk image
 # Every installed release build checks latest.json once a day, verifies the signature,
 # downloads the zip and replaces its own files in place. Publishing is therefore the same
 # as installing on every user's Mac within about a day.
+# The disk image is for people: it is what a first install is downloaded as. The manifest
+# does not mention it and the updater never fetches it.
 #
 # One-time setup:
 #   1. Manifest signing key (Ed25519, private half stays in the login Keychain):
@@ -40,14 +43,14 @@
 #   3. `gh auth login`, and the repository leaker/rime-lingo must exist, be PUBLIC and be
 #      this clone's `origin`.
 #
-# The first install on a Mac is not done by the updater: unzip the release, put
-# RimeLingo.app into ~/Library/Input Methods, and run
-#   ~/Library/Input\ Methods/RimeLingo.app/Contents/MacOS/RimeLingo --install
-# The release notes written below say so.
+# The first install on a Mac is not done by the updater: the user opens the disk image and
+# double-clicks the app, which offers to install itself into ~/Library/Input Methods
+# (Apps/RimeLingo/InstallerApp.swift). The release notes written below say so; README.md
+# keeps the manual way under 「手动安装」.
 #
 # The script stops before anything leaves this Mac unless you type the version, twice:
-# once before the app is sent to Apple for notarization, once before the tag is pushed and
-# the release is created.
+# once before the app and then the disk image are sent to Apple for notarization, once
+# before the tag is pushed and the release is created.
 #
 # Releasing with the backup key (the everyday key is lost or has leaked): restore the
 # backup private key into the Keychain (`swift scripts/sign-manifest.swift import --backup`,
@@ -108,6 +111,7 @@ CLI_VERSION="$(awk -F'"' '/^[[:space:]]*version: "/ {print $2; exit}' Packages/R
 [[ "$CLI_VERSION" == "$VERSION" ]] || die "version mismatch: project.yml $VERSION, CLI $CLI_VERSION"
 TAG="v$VERSION"
 ZIP="$OUT/RimeLingo-$VERSION.zip"
+DMG="$OUT/RimeLingo-$VERSION.dmg"
 
 [[ -z "$(git status --porcelain)" ]] || die "the working tree is not clean; commit or stash first"
 [[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || die "not on main"
@@ -189,6 +193,9 @@ PUSH_CHECK="$(git push --dry-run origin "$COMMIT:refs/tags/$TAG" 2>&1)" \
 
 # ---------------------------------------------------------------- build and verify
 
+# notarize, the disk image steps and probe_download.
+source "$ROOT/scripts/release-functions.sh"
+
 # Fails unless the bundle, and the code inside it that the seal covers only as files, is
 # signed the way the updater will insist on.
 verify_app() {  # <RimeLingo.app>
@@ -217,27 +224,29 @@ cat <<EOF
 About to send to Apple for notarization:
   version   $VERSION (build $BUILD), commit $COMMIT
   signed as $IDENTITY_LINE
-  file      a zip of $APP
+  files     a zip of $APP,
+            then a disk image of the notarized app (a second submission)
   profile   $NOTARY_PROFILE
 Nothing is published by this step. Afterwards, on a second confirmation:
   repository  https://github.com/$REPO (public)
   tag         $TAG
-  assets      RimeLingo-$VERSION.zip, latest.json, latest.json.sig
+  assets      RimeLingo-$VERSION.zip, latest.json, latest.json.sig, RimeLingo-$VERSION.dmg
 EOF
-confirm "submit it to Apple" "uploaded"
+confirm "submit them to Apple" "uploaded"
 
 rm -rf "$OUT" && mkdir -p "$OUT"
 WORK="$(mktemp -d -t rimelingo-release)"
 # What publishing has done so far: empty, tagged, pushed, draft, published.
 PUBLISH_STAGE=""
 on_exit() {
+  detach_dmg
   rm -rf "$WORK"
   case "$PUBLISH_STAGE" in ""|published) return ;; esac
   {
     echo
     echo "release: publishing stopped part-way (after: $PUBLISH_STAGE). Installed copies see nothing unless"
     echo "         'gh release view $TAG --repo $REPO' shows a published release. If it is published,"
-    echo "         leave it and check its three assets by hand. Otherwise undo what was done and run"
+    echo "         leave it and check its four assets by hand. Otherwise undo what was done and run"
     echo "         this script again (it builds and notarizes again):"
     if [[ "$PUBLISH_STAGE" == draft ]]; then
       echo "           gh release delete $TAG --repo $REPO --yes"
@@ -252,14 +261,7 @@ trap on_exit EXIT
 
 step "notarizing (this waits for Apple)"
 ditto -c -k --keepParent "$APP" "$WORK/notarize.zip"
-RESULT="$(xcrun notarytool submit "$WORK/notarize.zip" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json)" || true
-SUBMISSION="$(plutil -extract id raw -o - - <<<"$RESULT" 2>/dev/null || true)"
-STATUS="$(plutil -extract status raw -o - - <<<"$RESULT" 2>/dev/null || true)"
-if [[ "$STATUS" != Accepted ]]; then
-  echo "$RESULT" >&2
-  [[ -z "$SUBMISSION" ]] || xcrun notarytool log "$SUBMISSION" --keychain-profile "$NOTARY_PROFILE" >&2 || true
-  die "notarization did not succeed (status: ${STATUS:-none}); nothing was published. Fix and run again"
-fi
+notarize "$WORK/notarize.zip"
 xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
 
@@ -270,6 +272,16 @@ ditto -x -k "$ZIP" "$WORK/extracted"
 verify_app "$WORK/extracted/RimeLingo.app"
 xcrun stapler validate "$WORK/extracted/RimeLingo.app"
 spctl --assess --type execute "$WORK/extracted/RimeLingo.app" || die "Gatekeeper rejects the archived app"
+
+# Built from the stapled app, so the copy inside opens without asking Apple. The image
+# carries its own signature and ticket: Gatekeeper judges it before anything inside.
+step "building, signing and notarizing the disk image (this waits for Apple again)"
+build_dmg "$APP" "$DMG" "$WORK"
+sign_dmg "$DMG"
+notarize "$DMG"
+staple_dmg "$DMG"
+step "checking the disk image as a new user will open it"
+check_dmg "$DMG" "$WORK/mount"
 
 step "writing and signing the manifest"
 python3 scripts/write-release-manifest.py "$ZIP" "$VERSION" "$BUILD" "$MIN_MACOS" "$OUT"
@@ -289,19 +301,16 @@ SECTION="$(awk -v v="$VERSION" '
 
 已安装的正式版会在一天内自动更新到此版本，无需任何操作。
 
-首次安装：下载 \`RimeLingo-$VERSION.zip\` 并解压，把 \`RimeLingo.app\` 放进 \`~/Library/Input Methods/\`，然后在终端执行：
+首次安装：下载 \`RimeLingo-$VERSION.dmg\`，打开后双击「灵译输入法」，点「安装」。不需要管理员密码，也不用注销。
 
-\`\`\`
-~/Library/Input\\ Methods/RimeLingo.app/Contents/MacOS/RimeLingo --install
-\`\`\`
-
-之后在「系统设置 › 键盘 › 输入法」中确认已添加「灵译输入法」；首次安装可能需要注销并重新登录一次。
+\`RimeLingo-$VERSION.zip\` 是已安装的版本自动更新时下载的文件，首次安装不需要它。
 
 已使用 Developer ID 签名并通过 Apple 公证。最低系统：macOS $MIN_MACOS。
 
 ## SHA-256
 
 \`\`\`
+$(sha256 "$DMG")  RimeLingo-$VERSION.dmg
 $(sha256 "$ZIP")  RimeLingo-$VERSION.zip
 \`\`\`
 EOF
@@ -314,7 +323,7 @@ About to publish — this cannot be taken back once installed copies have seen i
   tag         $TAG -> $COMMIT (pushed to origin)
   release     "RimeLingo $VERSION", marked as latest
 EOF
-for file in "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig"; do
+for file in "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig" "$DMG"; do
   printf '  %-22s %10s bytes  sha256 %s\n' "$(basename "$file")" "$(size "$file")" "$(sha256 "$file")"
 done
 echo "  manifest key $SIGNING_KEY ($SIGNING_KEY_NAME)"
@@ -328,10 +337,10 @@ git tag "$TAG" "$COMMIT"
 PUBLISH_STAGE=tagged
 git push origin "refs/tags/$TAG"
 PUBLISH_STAGE=pushed
-# A draft first: the three assets become visible together when the draft is published,
+# A draft first: the four assets become visible together when the draft is published,
 # so no client can fetch a new latest.json next to an old latest.json.sig.
 gh release create "$TAG" --repo "$REPO" --draft --verify-tag --title "RimeLingo $VERSION" --notes-file "$NOTES" \
-  "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig" || { PUBLISH_STAGE=draft; false; }
+  "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig" "$DMG" || { PUBLISH_STAGE=draft; false; }
 PUBLISH_STAGE=draft
 gh release edit "$TAG" --repo "$REPO" --draft=false --latest
 PUBLISH_STAGE=published
@@ -358,17 +367,20 @@ for name in latest.json latest.json.sig; do
     PROBLEM=1
   fi
 done
-HEADERS="$(curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -r 0-0 -D - -o /dev/null \
-  -w 'effective-url: %{url_effective}\n' "$BASE/download/$TAG/RimeLingo-$VERSION.zip" | tr -d '\r' || true)"
-TOTAL="$(awk 'tolower($1) == "content-range:" { sub(/.*\//, "", $0); total = $0 } END { print total }' <<<"$HEADERS")"
-if [[ "$TOTAL" == "$(size "$ZIP")" ]]; then
-  echo "    ok  RimeLingo-$VERSION.zip ($TOTAL bytes)"
-else
-  echo "    MISMATCH  the published zip reports ${TOTAL:-no} bytes, expected $(size "$ZIP")" >&2
-  PROBLEM=1
-fi
+# The disk image first, so that REMOTE_HEADERS is left describing the zip for the check
+# of the hosts below.
+for file in "$DMG" "$ZIP"; do
+  name="$(basename "$file")"
+  probe_download "$BASE/download/$TAG/$name"
+  if [[ "$REMOTE_SIZE" == "$(size "$file")" ]]; then
+    echo "    ok  $name ($REMOTE_SIZE bytes)"
+  else
+    echo "    MISMATCH  the published $name reports ${REMOTE_SIZE:-no} bytes, expected $(size "$file")" >&2
+    PROBLEM=1
+  fi
+done
 # The updater follows redirects only to the hosts it knows.
-for host in $(awk 'tolower($1) == "location:" || $1 == "effective-url:" { print $2 }' <<<"$HEADERS" | sed -E 's#^https?://([^/:]+).*#\1#' | sort -u); do
+for host in $(awk 'tolower($1) == "location:" || $1 == "effective-url:" { print $2 }' <<<"$REMOTE_HEADERS" | sed -E 's#^https?://([^/:]+).*#\1#' | sort -u); do
   case " $ALLOWED_HOSTS " in
     *" $host "*) ;;
     *) echo "    WARNING  the zip is served through $host, which UpdateConfiguration.allowedHosts does not allow:" >&2

@@ -74,7 +74,7 @@ struct OverviewView: View {
                 StatusCard(
                     title: "输入法",
                     value: !model.isInstalled ? "未安装" : state == .ready ? "已启用" : state == .needsRelogin ? "还差一步" : "已安装",
-                    detail: !model.isInstalled ? "运行 scripts/install-dev.sh，或从发布页下载后手动安装"
+                    detail: !model.isInstalled ? "运行 scripts/install-dev.sh，或从发布页下载后双击安装"
                         : state == .ready ? "按 ⌃空格 切换到灵译输入法即可输入"
                         : state == .needsRelogin ? "注销或重启一次 Mac，灵译输入法才会出现在输入法列表里"
                         : "系统设置 › 键盘 › 输入法 中添加灵译输入法",

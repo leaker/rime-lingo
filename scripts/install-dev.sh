@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Builds RimeLingo and installs it for the current user into ~/Library/Input Methods,
-# then registers and enables the input source. This is also how a release build is
-# installed for the first time (set RIMELINGO_SIGN_IDENTITY); from then on a release
-# updates itself in place. Development builds never update themselves.
+# then registers and enables the input source. Development builds never update themselves.
+#
+# Users do not need this script: opening RimeLingo.app from anywhere else (the release's
+# disk image, or build/Release after scripts/build-app.sh) shows a window that installs it
+# and restarts the system's input method launcher by itself. That is also the way to try
+# the installer window during development.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
