@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -72,9 +73,8 @@ def embed(source_root, app):
                          for path, data in sorted(payload.items())]}
     payload["packaging-receipt.json"] = (json.dumps(receipt, indent=2) + "\n").encode()
     destination = app / "Contents/Resources/LicenseMaterials"
-    if NOTICES not in payload:
-        # An incremental build must not keep a copy the receipt no longer lists.
-        (destination / NOTICES).unlink(missing_ok=True)
+    # An incremental build must not keep files the receipt no longer lists.
+    shutil.rmtree(destination, ignore_errors=True)
     for path, data in sorted(payload.items()):
         target = destination / path
         target.parent.mkdir(parents=True, exist_ok=True)
