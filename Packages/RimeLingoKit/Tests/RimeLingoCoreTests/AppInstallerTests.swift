@@ -318,6 +318,11 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
             #expect(failure?.reason == .copy && failure?.bundle == .untouched, "copy \(index)")
             #expect(snapshot(destination) == before && leftovers.isEmpty, "copy \(index)")
         }
+        // The rename that gives the finished backup its name.
+        fs.fail(.rename, at: 0)
+        let failure = failure(of: installer())
+        #expect(failure?.reason == .copy && failure?.bundle == .untouched)
+        #expect(snapshot(destination) == before && leftovers.isEmpty)
         #expect(system.calls.allSatisfy { $0 == "running" })
     }
 
@@ -325,7 +330,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         try installOld()
         let before = snapshot(destination)
         let bundleInode = inode(destination)
-        for index in [0, 1, 3, 6] {
+        for index in [1, 2, 4, 7] {
             fs.fail(.rename, at: index)
             let failure = failure(of: installer())
             #expect(failure?.reason == .copy && failure?.bundle == .restored, "rename \(index)")
@@ -354,19 +359,101 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         #expect(system.calls == ["running"])
     }
 
+    /// Replaces a part of the installed copy and then fails that replacement and its
+    /// rollback. Returns where the previous version was kept.
+    func damage() throws -> URL {
+        // Rename 0 names the backup; the bundle is mixed after the next two.
+        fs.fail(.rename, at: 3, persistent: true)
+        let failure = failure(of: installer())
+        fs.reset()
+        guard case let .damaged(backup)? = failure?.bundle else {
+            Issue.record("expected a damaged bundle, got \(String(describing: failure))")
+            throw CocoaError(.featureUnsupported)
+        }
+        #expect(failure?.message.contains("请点「重试」") == true)
+        return URL(fileURLWithPath: backup)
+    }
+
     @Test func aRollbackThatFailsKeepsTheBackupAndARetryRepairs() throws {
         try installOld()
         let before = snapshot(destination)
-        fs.fail(.rename, at: 2, persistent: true)
-        let failure = failure(of: installer())
-        guard case let .damaged(backup)? = failure?.bundle else {
-            Issue.record("expected a damaged bundle, got \(String(describing: failure))")
-            return
-        }
-        #expect(snapshot(URL(fileURLWithPath: backup)) == before, "the previous version is still there to put back")
-        fs.reset()
+        let backup = try damage()
+        #expect(snapshot(destination) != before, "the fixture has to leave a mixed bundle")
+        #expect(snapshot(backup) == before, "the previous version is still there to put back")
         try installer().install()
         #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty && temporaries(in: destination).isEmpty)
+    }
+
+    @Test func aRetryThatFailsAgainNeverLosesThePreviousVersion() throws {
+        try installOld()
+        let before = snapshot(destination)
+        let backup = try damage()
+
+        // Nothing can be moved into place: neither the previous version nor the new one.
+        fs.fail(.rename, at: 0, persistent: true)
+        var failure = failure(of: installer())
+        fs.reset()
+        #expect(failure?.bundle == .damaged(backup: backup.path), "the same copy is kept, not a copy of the mixed bundle")
+        #expect(snapshot(backup) == before)
+        #expect(leftovers == [backup.deletingLastPathComponent().lastPathComponent])
+
+        // The new version cannot even be prepared, and the previous one cannot be put back.
+        fs.fail(.copy, at: 0, persistent: true)
+        failure = self.failure(of: installer())
+        fs.reset()
+        #expect(failure?.bundle == .damaged(backup: backup.path) && failure?.step == .copyFiles)
+        #expect(snapshot(backup) == before)
+
+        try installer().install()
+        #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty && temporaries(in: destination).isEmpty)
+    }
+
+    @Test func aRetryPutsThePreviousVersionBackBeforeAnythingElse() throws {
+        try installOld()
+        let before = snapshot(destination)
+        _ = try damage()
+        // The retry fails its check: what it rolls back to is the previous version, not
+        // the mixed bundle the first attempt left.
+        signature.breakEvaluation(0)
+        var failure = failure(of: installer())
+        #expect(failure?.reason == .signature && failure?.bundle == .restored)
+        #expect(snapshot(destination) == before && leftovers.isEmpty && temporaries(in: destination).isEmpty)
+
+        // The same when the retry does not get as far as replacing anything.
+        _ = try damage()
+        try Data("x".utf8).write(to: source.appendingPathComponent("Contents/.rlu-not-installable"))
+        failure = self.failure(of: installer())
+        #expect(failure?.reason == .copy && failure?.bundle == .restored)
+        #expect(snapshot(destination) == before && leftovers.isEmpty && temporaries(in: destination).isEmpty)
+    }
+
+    @Test func aRetryInstallsEvenWhenThePreviousVersionCannotBePutBackFirst() throws {
+        try installOld()
+        _ = try damage()
+        // Only the restore is refused (its first copy); the install after it goes through.
+        fs.fail(.copy, at: 0)
+        try installer().install()
+        #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty && temporaries(in: destination).isEmpty)
+    }
+
+    @Test func aBackupThatWasCutShortIsNeverPutBack() throws {
+        try installOld()
+        let before = snapshot(destination)
+        try makeBundle(folder.appendingPathComponent(".rimelingo-install-OLD/previous.partial"), version: "0.1.0", build: 10)
+        signature.breakEvaluation(0)
+        let failure = failure(of: installer())
+        #expect(failure?.bundle == .restored && snapshot(destination) == before && leftovers.isEmpty)
+    }
+
+    @Test func aKeptCopyOutlivesAFirstInstallThatFails() throws {
+        // The user removed the damaged bundle by hand; the copy of the previous version
+        // is all that is left of it.
+        try makeBundle(folder.appendingPathComponent(".rimelingo-install-OLD/previous"), version: "0.2.0", build: 20)
+        signature.breakEvaluation(0)
+        let failure = failure(of: installer())
+        #expect(failure?.bundle == .untouched && leftovers == [".rimelingo-install-OLD"])
+        try installer().install()
+        #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty)
     }
 
     @Test func laterFailuresKeepTheInstalledFilesAndStop() throws {

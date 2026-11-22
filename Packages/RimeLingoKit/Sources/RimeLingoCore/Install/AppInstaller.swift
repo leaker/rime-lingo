@@ -130,6 +130,8 @@ public struct AppInstaller: Sendable {
     /// Working directories beside the destination. Not named `*.app`: nothing may take
     /// what is staged in them for an installed input method.
     static let workPrefix = ".rimelingo-install-"
+    /// The copy of the previous version inside a working directory, once it is complete.
+    static let backupName = "previous"
 
     public var source: URL
     public var destination: URL
@@ -240,19 +242,39 @@ public struct AppInstaller: Sendable {
         return lock
     }
 
-    private func place() throws -> Placement {
-        func untouched(_ error: any Error) -> InstallFailure {
-            InstallFailure(step: .copyFiles, reason: .copy, detail: Self.describe(error), bundle: .untouched)
-        }
-        let folder = destination.deletingLastPathComponent()
-        // Left by an install that was cut short. The source is complete, so whatever such
-        // an install did to the destination is replaced below.
+    /// A complete copy of the previous version that an earlier install left in `folder`
+    /// because it could not put it back, with its working directory. The newest one when
+    /// there are several.
+    private func keptBackup(in folder: URL) -> (work: URL, backup: URL)? {
+        var newest: (work: URL, backup: URL, date: Date)?
         for name in (try? BundleTree.children(of: folder)) ?? [] where name.hasPrefix(Self.workPrefix) {
+            let work = folder.appendingPathComponent(name, isDirectory: true)
+            let backup = work.appendingPathComponent(Self.backupName, isDirectory: true)
+            guard BundleTree.entry(at: backup)?.kind == .directory else { continue }
+            let date = (try? FileManager.default.attributesOfItem(atPath: backup.path)[.modificationDate] as? Date) ?? .distantPast
+            if newest == nil || date > newest!.date { newest = (work, backup, date) }
+        }
+        return newest.map { ($0.work, $0.backup) }
+    }
+
+    /// Removes the working directories of earlier installs, except `keeping`.
+    private func removeWorkDirectories(in folder: URL, keeping: URL? = nil) {
+        for name in (try? BundleTree.children(of: folder)) ?? [] where name.hasPrefix(Self.workPrefix) && name != keeping?.lastPathComponent {
             try? fs.removeItem(at: folder.appendingPathComponent(name))
         }
-        let work = folder.appendingPathComponent(Self.workPrefix + UUID().uuidString, isDirectory: true)
+    }
+
+    private func place() throws -> Placement {
+        let folder = destination.deletingLastPathComponent()
+        // An install that could not put the previous version back left its copy of it
+        // here. That copy may be the only intact one: it is used, never removed, until a
+        // new version has passed its check (`finish`).
+        let kept = keptBackup(in: folder)
 
         guard BundleTree.entry(at: destination) != nil else {
+            // Whatever else an install that was cut short left behind is of no use.
+            removeWorkDirectories(in: folder, keeping: kept?.work)
+            let work = folder.appendingPathComponent(Self.workPrefix + UUID().uuidString, isDirectory: true)
             do {
                 // Copied beside the destination and moved into place in one step: the
                 // system never sees a bundle that is half there.
@@ -262,23 +284,55 @@ public struct AppInstaller: Sendable {
                 try fs.rename(payload, to: destination)
             } catch {
                 try? fs.removeItem(at: work)
-                throw untouched(error)
+                throw InstallFailure(step: .copyFiles, reason: .copy, detail: Self.describe(error), bundle: .untouched)
             }
             return .created(work: work)
         }
 
         let replacer = BundleReplacer(fs: fs)
-        let backup = work.appendingPathComponent("previous", isDirectory: true)
+        let work: URL, backup: URL
+        // Whether the destination is a complete previous version at this point.
+        var intact = true
+        var detail = ""
+        if let kept {
+            (work, backup) = kept
+            removeWorkDirectories(in: folder, keeping: work)
+            // The destination is whatever the failed install and its failed rollback made
+            // of it. It is taken back to the previous version first; when that still is
+            // not possible, the kept copy stays what a failure below rolls back to.
+            do {
+                try replacer.replace(from: backup, into: destination)
+            } catch {
+                intact = false
+                detail = "; restore: \(Self.describe(error))"
+            }
+        } else {
+            removeWorkDirectories(in: folder)
+            work = folder.appendingPathComponent(Self.workPrefix + UUID().uuidString, isDirectory: true)
+            backup = work.appendingPathComponent(Self.backupName, isDirectory: true)
+        }
         let plan: BundleReplacer.Plan
         do {
-            try fs.createDirectory(at: work)
             replacer.cleanTemporaries(in: destination)
-            try fs.copyItem(at: destination, to: backup)
+            if kept == nil {
+                // Under its final name only once it is complete: a copy that was cut
+                // short is never taken for the previous version.
+                let partial = work.appendingPathComponent(Self.backupName + ".partial", isDirectory: true)
+                try fs.createDirectory(at: work)
+                try fs.copyItem(at: destination, to: partial)
+                try fs.rename(partial, to: backup)
+            }
             plan = try replacer.plan(from: source, into: destination)
             try replacer.prepare(plan)
         } catch {
-            try? fs.removeItem(at: work)
-            throw untouched(error)
+            var failure = InstallFailure(step: .copyFiles, reason: .copy, detail: Self.describe(error) + detail, bundle: .untouched)
+            if !intact {
+                failure.bundle = .damaged(backup: backup.path)
+            } else {
+                try? fs.removeItem(at: work)
+                if kept != nil { failure.bundle = .restored }
+            }
+            throw failure
         }
         let placement = Placement.replaced(work: work, backup: backup)
         do {
@@ -309,6 +363,7 @@ public struct AppInstaller: Sendable {
                 try? fs.removeItem(at: work)
                 failure.bundle = .restored
             } catch {
+                // The copy stays where it is: the next install starts by putting it back.
                 failure.detail += "; restore: \(Self.describe(error))"
                 failure.bundle = .damaged(backup: backup.path)
             }
@@ -316,10 +371,17 @@ public struct AppInstaller: Sendable {
         return failure
     }
 
+    /// The new version is in place and has passed its check: the copies of the previous
+    /// one are no longer needed.
     private func finish(_ placement: Placement, holdingUpdateLock: Bool) {
-        switch placement {
-        case let .created(work), let .replaced(work, _): try? fs.removeItem(at: work)
+        if case let .replaced(work, backup) = placement {
+            // First made unusable as a backup in one step, in case removing the tree is
+            // cut short: what is left must never be put back over the new version.
+            if (try? fs.rename(backup, to: work.appendingPathComponent("discarded", isDirectory: true))) == nil {
+                try? fs.removeItem(at: backup)
+            }
         }
+        removeWorkDirectories(in: destination.deletingLastPathComponent())
         // An update that was interrupted would be "recovered" at the next launch by
         // putting its backup over the copy that was just installed and verified.
         guard holdingUpdateLock, let updates else { return }
