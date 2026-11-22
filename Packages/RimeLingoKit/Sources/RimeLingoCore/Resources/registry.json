@@ -153,29 +153,6 @@
       "size": 5887319,
       "advanced": true,
       "audience": "只有声明 use_preset_vocabulary 的方案才用得到，雾凇不需要。"
-    },
-    {
-      "id": "wanxiang-lts-zh-hans",
-      "title": "万象 · 简体整句模型",
-      "summary": "通过本机语法模型调整整句候选排序；按需下载，不进行联网推理。",
-      "homepage": "https://github.com/amzxyz/RIME-LMDG",
-      "license": "CC-BY-4.0",
-      "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
-      "attribution": "amzxyz and RIME-LMDG contributors",
-      "kind": "model",
-      "schemas": [],
-      "requires": [
-        "octagram"
-      ],
-      "source": {
-        "type": "raw",
-        "url": "https://models.example.com/models/wanxiang-lts-zh-hans/c330bca73a4102b097fd6b239e6d10097a41995864f13004dec06e8cec98f2cc/wanxiang-lts-zh-hans.gram",
-        "tag": "LTS-2026-10-06",
-        "filename": "wanxiang-lts-zh-hans.gram"
-      },
-      "sha256": "c330bca73a4102b097fd6b239e6d10097a41995864f13004dec06e8cec98f2cc",
-      "size": 398309420,
-      "audience": "适合经常输入长句、希望改善整句首选的人；约 398 MB，安装后需在整句设置中启用。"
     }
   ]
 }

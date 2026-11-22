@@ -231,7 +231,7 @@
       "id": "grammar.language",
       "group": "general",
       "title": "整句语言模型",
-      "description": "本机模型改善长句选词，可在「词库」下载万象模型；不发送输入内容。",
+      "description": "本机模型改善长句选词；把 .gram 模型文件放进用户目录后在此选用，不发送输入内容。",
       "file": "schema",
       "keypath": "grammar/language",
       "type": "gramModel",

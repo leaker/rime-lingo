@@ -305,14 +305,31 @@ private struct LanguageModelsSection: View {
     @Environment(SettingsModel.self) private var model
 
     var body: some View {
+        let packages = model.registry.packages.filter { $0.kind == .model }
+        let found = model.gramModels
         Section {
-            ForEach(model.registry.packages.filter { $0.kind == .model }) { package in
+            ForEach(packages) { package in
                 AddonRow(package: package)
+            }
+            // No model is offered for download: say what is on disk and where a file goes.
+            if packages.isEmpty {
+                LabeledContent {
+                    Button { NSWorkspace.shared.open(model.paths.userDataDir) } label: { Label("打开用户目录", systemImage: "folder") }
+                        .controlSize(.small)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(found.isEmpty ? "尚未放入语言模型" : "已找到 \(found.count) 个语言模型").font(.body.weight(.medium))
+                        Text(found.isEmpty ? "RimeLingo 不提供模型下载；可自行获取 RIME 的 .gram 语言模型文件。" : found.joined(separator: "、"))
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         } header: {
             Text("整句语言模型 · 可选")
         } footer: {
-            Text("下载后在「输入习惯 → 整句语言模型」中选用。整句选词在本机完成；默认关闭。")
+            Text(packages.isEmpty
+                 ? "把 .gram 文件放进用户目录后，在「输入习惯 → 整句语言模型」中选用。整句选词在本机完成；默认关闭。"
+                 : "下载后在「输入习惯 → 整句语言模型」中选用。整句选词在本机完成；默认关闭。")
         }
     }
 }

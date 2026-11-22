@@ -159,22 +159,16 @@ private actor PackageFileDownloadStub {
 }
 
 extension PackageManagerTests {
-    @Test func immutableModelAssetIsPinnedAndUsesBinaryAcceptHeader() throws {
-        // Upstream replaces LTS assets in place, so the registry pins RimeLingo's own copy.
-        let pkg = try #require(DictionaryRegistry.bundled.package("wanxiang-lts-zh-hans"))
-        #expect(pkg.kind == .model && pkg.schemas.isEmpty)
-        #expect(pkg.source.type == "raw" && pkg.version == "LTS-2026-10-06")
-        #expect(pkg.size == 398309420)
-        #expect(pkg.sha256 == "c330bca73a4102b097fd6b239e6d10097a41995864f13004dec06e8cec98f2cc")
-        #expect(pkg.source.downloadURL?.absoluteString == "https://models.example.com/models/wanxiang-lts-zh-hans/\(pkg.sha256)/wanxiang-lts-zh-hans.gram")
-        #expect(pkg.source.filename == "wanxiang-lts-zh-hans.gram")
-        #expect(pkg.license == "CC-BY-4.0" && pkg.attribution?.isEmpty == false)
-
-        var asset = pkg
-        asset.source = .init(type: "github-release-asset", repo: "amzxyz/RIME-LMDG", tag: "LTS", assetID: 607935157)
+    @Test func releaseAssetSourceUsesBinaryAcceptHeader() throws {
+        let payload = root.appendingPathComponent("model.gram")
+        try Data("model fixture".utf8).write(to: payload)
+        let asset = try model(archive: payload)
+        #expect(asset.kind == .model && asset.schemas.isEmpty)
         #expect(asset.version == "asset-607935157")
         #expect(asset.source.downloadURL?.absoluteString == "https://api.github.com/repos/amzxyz/RIME-LMDG/releases/assets/607935157")
         #expect(asset.source.downloadRequest?.value(forHTTPHeaderField: "Accept") == "application/octet-stream")
+        // The bundled registry offers no language model download.
+        #expect(DictionaryRegistry.bundled.packages.allSatisfy { $0.kind != .model })
 
         let oldSource = try JSONDecoder().decode(DictionaryPackage.Source.self, from: Data(#"{"type":"raw","url":"https://example.com/essay.txt","filename":"essay.txt"}"#.utf8))
         #expect(oldSource.assetID == nil)
