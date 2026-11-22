@@ -707,7 +707,13 @@ private struct PracticeStep: View {
             }
             .font(.callout)
         }
-        .onAppear { focused = true }
+        // Each task has its own field (`.id(index)`), which exists only after its transition
+        // has started: ask for focus once now and once when the field has settled.
+        .task(id: index) {
+            focused = true
+            try? await Task.sleep(for: .milliseconds(450))
+            focused = true
+        }
         .onChange(of: text) { _, value in evaluate(value) }
         .onChange(of: menuOpened) { _, opened in if opened { evaluate(text) } }
         .onReceive(DistributedNotificationCenter.default().publisher(for: Notification.Name("com.leelib.rimelingo.menu.opened"))) { _ in
