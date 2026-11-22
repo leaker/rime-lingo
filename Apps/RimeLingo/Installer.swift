@@ -44,12 +44,16 @@ enum InputSourceInstaller {
         for source in found {
             print("enable \(sourceID(source)): \(TISEnableInputSource(source))")
         }
-        // The call's status alone does not prove anything: ask the system again.
-        var allEnabled = true
+        // The call's status alone does not prove anything: ask the system again. The new
+        // state can take a moment to show up, so allow it a short while.
+        var allEnabled = false
+        for attempt in 0..<10 {
+            if attempt > 0 { usleep(200_000) }
+            allEnabled = sources().allSatisfy(isEnabled)
+            if allEnabled { break }
+        }
         for source in sources() {
-            let enabled = isEnabled(source)
-            print("enabled \(sourceID(source)): \(enabled)")
-            allEnabled = allEnabled && enabled
+            print("enabled \(sourceID(source)): \(isEnabled(source))")
         }
         guard select else { return allEnabled ? 0 : 1 }
         guard let mode = sources().first(where: { sourceID($0) == modeID }) else {
