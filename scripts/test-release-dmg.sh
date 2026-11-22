@@ -212,20 +212,22 @@ if bash "$ROOT/scripts/make-dmg.sh" "$WORK/build" "$WORK/no.dmg" 2>/dev/null; th
 [[ ! -e "$WORK/no.dmg" ]] || fail "make-dmg.sh wrote an image for something that is not an app"
 # release.sh proves the layout tool runs before anything is sent to Apple.
 TOOLS_CHECK="$(grep -n '^check_dmg_tools$' "$ROOT/scripts/release.sh" | cut -d: -f1)"
-[[ -n "$TOOLS_CHECK" && "$TOOLS_CHECK" -lt "$(grep -n '^confirm "submit' "$ROOT/scripts/release.sh" | cut -d: -f1)" ]] \
-  || fail "release.sh does not check the layout tool before the first confirmation"
+[[ -n "$TOOLS_CHECK" && "$TOOLS_CHECK" -lt "$(grep -n '^notarize ' "$ROOT/scripts/release.sh" | head -1 | cut -d: -f1)" ]] \
+  || fail "release.sh does not check the layout tool before anything is sent to Apple"
 ( PATH="$STUBS:/usr/bin:/bin"; refuses "a Mac without uv" "uv is required" check_dmg_tools )
 
 # release.sh publishes the image and checks it, but the manifest must not learn about it.
 grep -qF '"$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig" "$DMG" ||' "$ROOT/scripts/release.sh" || fail "release.sh does not upload the disk image"
 grep -qF 'write-release-manifest.py "$ZIP" "$VERSION" "$BUILD" "$MIN_MACOS" "$OUT"' "$ROOT/scripts/release.sh" || fail "the manifest call changed"
 if grep -qi 'dmg' "$ROOT/scripts/write-release-manifest.py"; then fail "the manifest writer mentions the disk image"; fi
-# Nothing leaves this Mac before the first confirmation: both submissions come after it.
-FIRST_CONFIRM="$(grep -n '^confirm "submit' "$ROOT/scripts/release.sh" | cut -d: -f1)"
-[[ -n "$FIRST_CONFIRM" ]] || fail "cannot find the first confirmation in release.sh"
+# Nothing leaves this Mac before every check that can fail locally: the first submission
+# comes after the build is verified, and nothing asks for input.
+BUILD_VERIFIED="$(grep -n '^verify_app "$APP"$' "$ROOT/scripts/release.sh" | head -1 | cut -d: -f1)"
+[[ -n "$BUILD_VERIFIED" ]] || fail "cannot find the build check in release.sh"
 while IFS=: read -r line _; do
-  [[ "$line" -gt "$FIRST_CONFIRM" ]] || fail "release.sh line $line submits to Apple before the first confirmation"
+  [[ "$line" -gt "$BUILD_VERIFIED" ]] || fail "release.sh line $line submits to Apple before the build is checked"
 done < <(grep -n '^notarize ' "$ROOT/scripts/release.sh")
+if grep -qE '(^|[^[:alnum:]_])read -r|^confirm ' "$ROOT/scripts/release.sh"; then fail "release.sh asks for input"; fi
 [[ "$(grep -c '^notarize ' "$ROOT/scripts/release.sh")" == 2 ]] || fail "release.sh must notarize the app and the disk image"
 
 [[ -z "$(hdiutil info | grep -F "$WORK" || true)" ]] || fail "an image of this test is still attached"

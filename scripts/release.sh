@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds, notarizes and publishes one release of RimeLingo from this Mac. Run by hand:
+# Builds, notarizes and publishes one release of RimeLingo from this Mac:
 #
 #   RIMELINGO_SIGN_IDENTITY="Developer ID Application: <name> (FKKCZM5CBJ)" bash scripts/release.sh
 #
@@ -50,9 +50,9 @@
 # (Apps/RimeLingo/InstallerApp.swift). The release notes written below say so; README.md
 # keeps the manual way under 「手动安装」.
 #
-# The script stops before anything leaves this Mac unless you type the version, twice:
-# once before the app and then the disk image are sent to Apple for notarization, once
-# before the tag is pushed and the release is created.
+# Running it is the decision to publish: it asks nothing. It prints what it is about to send
+# to Apple and what it is about to publish, and every check that can fail runs before
+# anything leaves this Mac.
 #
 # Releasing with the backup key (the everyday key is lost or has leaked): restore the
 # backup private key into the Keychain (`swift scripts/sign-manifest.swift import --backup`,
@@ -91,17 +91,9 @@ size() { stat -f %z "$1"; }
 # Highest of dotted numeric versions on stdin.
 highest() { sort -t. -k1,1n -k2,2n -k3,3n | tail -1; }
 
-confirm() {  # <what happens next>
-  local answer
-  echo
-  read -r -p "Type the version ($VERSION) to $1, anything else to stop: " answer
-  [[ "$answer" == "$VERSION" ]] || die "not confirmed; nothing was $2"
-}
-
 # ---------------------------------------------------------------- refusals
 
 [[ $# -eq 0 ]] || die "takes no arguments; the version comes from project.yml"
-[[ -t 0 && -t 1 ]] || die "run it in a terminal: it asks for confirmation"
 
 VERSION="$(awk -F'"' '/MARKETING_VERSION/ {print $2; exit}' project.yml)"
 BUILD="$(awk -F'"' '/CURRENT_PROJECT_VERSION/ {print $2; exit}' project.yml)"
@@ -226,18 +218,17 @@ verify_app "$APP"
 
 cat <<EOF
 
-About to send to Apple for notarization:
+Sending to Apple for notarization:
   version   $VERSION (build $BUILD), commit $COMMIT
   signed as $IDENTITY_LINE
   files     a zip of $APP,
             then a disk image of the notarized app (a second submission)
   profile   $NOTARY_PROFILE
-Nothing is published by this step. Afterwards, on a second confirmation:
+Nothing is published by this step. Once both are accepted:
   repository  https://github.com/$REPO (public)
   tag         $TAG
   assets      RimeLingo-$VERSION.zip, latest.json, latest.json.sig, RimeLingo-$VERSION.dmg
 EOF
-confirm "submit them to Apple" "uploaded"
 
 rm -rf "$OUT" && mkdir -p "$OUT"
 WORK="$(mktemp -d -t rimelingo-release)"
@@ -323,7 +314,7 @@ EOF
 
 cat <<EOF
 
-About to publish — this cannot be taken back once installed copies have seen it:
+Publishing — this cannot be taken back once installed copies have seen it:
   repository  https://github.com/$REPO (public)
   tag         $TAG -> $COMMIT (pushed to origin)
   release     "RimeLingo $VERSION", marked as latest
@@ -333,7 +324,6 @@ for file in "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig" "$DMG"; do
 done
 echo "  manifest key $SIGNING_KEY ($SIGNING_KEY_NAME)"
 echo "Every installed release build updates itself to $VERSION within about 24 hours."
-confirm "publish it" "published (the notarized build stays in $OUT)"
 
 # ---------------------------------------------------------------- publish
 
