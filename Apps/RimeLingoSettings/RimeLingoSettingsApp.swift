@@ -11,7 +11,6 @@ struct RimeLingoSettingsApp: App {
 
     init() {
         Self.recoverInterruptedUpdate()
-        Self.migrateLegacyDefaults()
         // The API key used to live in the login Keychain, which made macOS ask for the
         // password when the input method read it. It now lives in an owner-only file.
         CredentialStore(account: "openai-compatible").migrateFromKeychain()
@@ -70,19 +69,6 @@ extension RimeLingoSettingsApp {
               (try? SystemProcessControl().relaunchAfterExit(pid: getpid(), bundle: Bundle.main.bundleURL, background: false)) != nil
         else { return }
         exit(0)
-    }
-
-    /// Preferences written under the previous bundle id (dev.example.rimelingo.settings) are
-    /// copied once into com.leelib.rimelingo.settings.
-    static func migrateLegacyDefaults() {
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: "migratedFromLegacyBundleID"),
-              let legacy = UserDefaults(suiteName: "dev.example.rimelingo.settings")?.persistentDomain(forName: "dev.example.rimelingo.settings")
-        else { return }
-        for (key, value) in legacy where defaults.object(forKey: key) == nil && !key.hasPrefix("NS") {
-            defaults.set(value, forKey: key)
-        }
-        defaults.set(true, forKey: "migratedFromLegacyBundleID")
     }
 }
 

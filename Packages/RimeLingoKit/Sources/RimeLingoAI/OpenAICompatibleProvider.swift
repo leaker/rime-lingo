@@ -172,19 +172,15 @@ public struct CredentialStore: Sendable {
     @discardableResult
     public func migrateFromKeychain() -> Bool {
         guard read() == nil else { return false }
-        for service in ["com.leelib.rimelingo.ai", "dev.example.rimelingo.ai"] {
-            let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                                        kSecAttrAccount as String: account]
-            var lookup = query
-            lookup[kSecReturnData as String] = true
-            lookup[kSecMatchLimit as String] = kSecMatchLimitOne
-            var item: CFTypeRef?
-            guard SecItemCopyMatching(lookup as CFDictionary, &item) == errSecSuccess, let data = item as? Data,
-                  let value = String(data: data, encoding: .utf8), !value.isEmpty else { continue }
-            guard write(value) else { return false }
-            SecItemDelete(query as CFDictionary)
-            return true
-        }
-        return false
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.leelib.rimelingo.ai",
+                                    kSecAttrAccount as String: account]
+        var lookup = query
+        lookup[kSecReturnData as String] = true
+        lookup[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(lookup as CFDictionary, &item) == errSecSuccess, let data = item as? Data,
+              let value = String(data: data, encoding: .utf8), !value.isEmpty, write(value) else { return false }
+        SecItemDelete(query as CFDictionary)
+        return true
     }
 }

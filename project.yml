@@ -122,7 +122,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.productivity
-        # rimelingo-ime://theme?v=1&d=… links from vocabulary.example.com/themes (docs/themes.md).
+        # rimelingo-ime://theme?v=1&d=… links that share a theme (docs/themes.md).
         CFBundleURLTypes:
           - CFBundleURLName: com.leelib.rimelingo.theme
             CFBundleURLSchemes: [rimelingo-ime]

@@ -39,7 +39,7 @@ import Testing
 
     @Test func rejectsOtherLinksAndVersions() {
         #expect(throws: ThemePackage.Failure.notATheme) { try ThemePackage.decode(url: URL(string: "rimelingo-ime://other?d=x")!) }
-        #expect(throws: ThemePackage.Failure.notATheme) { try ThemePackage.decode(url: URL(string: "https://vocabulary.example.com/themes/")!) }
+        #expect(throws: ThemePackage.Failure.notATheme) { try ThemePackage.decode(url: URL(string: "https://example.com/themes/")!) }
         #expect(throws: ThemePackage.Failure.notATheme) { try ThemePackage.decode(url: URL(string: "rimelingo://theme?v=1&d=e30")!) }
         #expect(throws: ThemePackage.Failure.version(3)) { try ThemePackage.decode(url: URL(string: "rimelingo-ime://theme?v=3&d=e30")!) }
     }
