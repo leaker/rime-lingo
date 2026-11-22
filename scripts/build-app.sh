@@ -18,6 +18,8 @@ cd "$ROOT"
 [[ -f build/SharedSupport/default.yaml ]] || bash scripts/fetch-dicts.sh
 # RimeLingo's own data changes more often than the dictionaries: always refresh it.
 ditto SharedSupport build/SharedSupport
+# ditto only adds: drop files a reused build/SharedSupport kept after SharedSupport/ lost them.
+rm -f build/SharedSupport/rimelingo/vocabulary-catalog.json build/SharedSupport/rimelingo/licenses/wanxiang-lts-zh-hans.*
 # Refresh public metadata even when reusing an older dictionary build cache.
 /usr/bin/python3 scripts/dictionary-metadata.py --shared-dir build/SharedSupport
 command -v xcodegen >/dev/null || { echo "xcodegen is required: brew install xcodegen" >&2; exit 1; }
