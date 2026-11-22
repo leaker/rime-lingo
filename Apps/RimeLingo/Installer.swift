@@ -12,29 +12,52 @@ enum InputSourceInstaller {
         TISGetInputSourceProperty(source, key).map { Unmanaged<AnyObject>.fromOpaque($0).takeUnretainedValue() }
     }
 
-    static func sources() -> [TISInputSource] {
-        let filter = [kTISPropertyBundleID as String: Bundle.main.bundleIdentifier ?? ""] as CFDictionary
-        return (TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource]) ?? []
+    static func sourceID(_ source: TISInputSource) -> String {
+        property(source, kTISPropertyInputSourceID) as? String ?? ""
     }
 
-    /// Returns a process exit code.
+    /// The input method's own sources: the input method itself and its modes.
+    ///
+    /// They are matched on the input source identifier, which is read from the bundle on every
+    /// scan. `kTISPropertyBundleID` is not used: the system's input source cache can keep
+    /// reporting a stale bundle identifier, and a filter on it then matches nothing.
+    static func sources() -> [TISInputSource] {
+        guard let own = Bundle.main.bundleIdentifier, !own.isEmpty else { return [] }
+        let all = (TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource]) ?? []
+        return all.filter { sourceID($0) == own || sourceID($0).hasPrefix(own + ".") }
+    }
+
+    static func isEnabled(_ source: TISInputSource) -> Bool {
+        property(source, kTISPropertyInputSourceIsEnabled) as? Bool ?? false
+    }
+
+    /// Returns a process exit code: 0 only when every own source is enabled afterwards and,
+    /// with `select`, the mode was selected.
     static func install(select: Bool) -> Int32 {
         let status = TISRegisterInputSource(Bundle.main.bundleURL as CFURL)
         print("register: \(status)")
-        var enabledAny = false
-        for source in sources() {
-            let id = property(source, kTISPropertyInputSourceID) as? String ?? ""
-            let result = TISEnableInputSource(source)
-            print("enable \(id): \(result)")
-            enabledAny = enabledAny || result == noErr
+        let found = sources()
+        guard !found.isEmpty else {
+            print("enable: no input source of \(Bundle.main.bundleIdentifier ?? "?") is known to the system")
+            return 1
         }
-        guard select else { return enabledAny ? 0 : 1 }
-        guard let mode = sources().first(where: { property($0, kTISPropertyInputSourceID) as? String == modeID }) else {
-            print("select: mode not found (log out and back in, then retry)")
+        for source in found {
+            print("enable \(sourceID(source)): \(TISEnableInputSource(source))")
+        }
+        // The call's status alone does not prove anything: ask the system again.
+        var allEnabled = true
+        for source in sources() {
+            let enabled = isEnabled(source)
+            print("enabled \(sourceID(source)): \(enabled)")
+            allEnabled = allEnabled && enabled
+        }
+        guard select else { return allEnabled ? 0 : 1 }
+        guard let mode = sources().first(where: { sourceID($0) == modeID }) else {
+            print("select: mode \(modeID) not found")
             return 1
         }
         let result = TISSelectInputSource(mode)
         print("select \(modeID): \(result)")
-        return result == noErr ? 0 : 1
+        return result == noErr && allEnabled ? 0 : 1
     }
 }
