@@ -1,19 +1,3 @@
-/// The live translation shortcuts. The key codes live here and nowhere else.
-public enum TranslationShortcuts {
-    public static let englishKeyCode: UInt16 = 14   // E
-    public static let japaneseKeyCode: UInt16 = 38  // J
-
-    /// Matches only when the modifiers are exactly Control+Option+Command (no Shift).
-    public static func target(keyCode: UInt16, control: Bool, option: Bool, command: Bool, shift: Bool) -> TranslationTarget? {
-        guard control, option, command, !shift else { return nil }
-        switch keyCode {
-        case englishKeyCode: return .english
-        case japaneseKeyCode: return .japanese
-        default: return nil
-        }
-    }
-}
-
 /// What a matched translation shortcut does.
 public enum TranslationDispatch: Sendable, Equatable {
     /// The feature is off: the key is not consumed and takes today's path.

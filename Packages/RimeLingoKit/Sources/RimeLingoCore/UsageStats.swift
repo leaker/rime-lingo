@@ -36,11 +36,35 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
     public var asciiPunct = false
     /// Live translation shortcuts; on by default in this build.
     public var liveTranslation = true
-    /// Translation shortcuts in the key recorder's notation; empty turns the shortcut off.
-    /// Read through `TranslationShortcutBindings`, which replaces unusable values by the default.
-    public var translateEnglishShortcut = TranslationShortcutAction.english.defaultShortcut
-    public var translateJapaneseShortcut = TranslationShortcutAction.japanese.defaultShortcut
+    /// The target languages the user enabled, in the user's order. Being in the list is
+    /// being enabled; the list may be empty. Each language has its own optional shortcut in
+    /// the key recorder's notation (empty = none). Read through `TranslationShortcutBindings`,
+    /// which replaces unusable values and settles duplicates.
+    public var translationLanguages = TranslationLanguage.defaults
+    /// The shortcut that inserts the translation, in the key recorder's notation. It is
+    /// always in effect: `TranslationShortcutBindings` reads an empty or unusable value as
+    /// the default.
     public var submitTranslationShortcut = TranslationShortcutAction.submit.defaultShortcut
+
+    /// One enabled target language and its shortcut.
+    public struct TranslationLanguage: Sendable, Codable, Equatable, Identifiable {
+        /// A code of the `TranslationTarget` catalog.
+        public var code: String
+        /// In the key recorder's notation; empty when the language has no shortcut.
+        public var shortcut: String
+        public var id: String { code }
+
+        public init(code: String, shortcut: String) {
+            self.code = code
+            self.shortcut = shortcut
+        }
+
+        /// English and Japanese with their original shortcuts: a fresh install, and a
+        /// features file written before the list existed.
+        static let defaults = [TranslationTarget.english, .japanese].map {
+            TranslationLanguage(code: $0.code, shortcut: $0.defaultShortcut)
+        }
+    }
 
     public struct AIAction: Sendable, Codable, Equatable, Identifiable {
         public var id: UUID
@@ -75,9 +99,45 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
         asciiPunct = try container.decodeIfPresent(Bool.self, forKey: .asciiPunct) ?? defaults.asciiPunct
         liveTranslation = try container.decodeIfPresent(Bool.self, forKey: .liveTranslation) ?? defaults.liveTranslation
         // A value of the wrong type costs that shortcut only, not the whole file.
-        translateEnglishShortcut = (try? container.decodeIfPresent(String.self, forKey: .translateEnglishShortcut)) ?? defaults.translateEnglishShortcut
-        translateJapaneseShortcut = (try? container.decodeIfPresent(String.self, forKey: .translateJapaneseShortcut)) ?? defaults.translateJapaneseShortcut
         submitTranslationShortcut = (try? container.decodeIfPresent(String.self, forKey: .submitTranslationShortcut)) ?? defaults.submitTranslationShortcut
+        let stored = (try? container.decodeIfPresent([Lossy<TranslationLanguage>].self, forKey: .translationLanguages)) ?? nil
+        translationLanguages = stored.flatMap(Self.usableLanguages) ?? Self.legacyLanguages(decoder)
+    }
+
+    /// An array element that failed to decode becomes nil instead of failing the array.
+    private struct Lossy<Value: Decodable>: Decodable {
+        let value: Value?
+        init(from decoder: any Decoder) { value = try? Value(from: decoder) }
+    }
+
+    /// The stored list with catalog spelling, without unknown codes and repeated languages.
+    /// An empty array stays empty: the user removed every language. Nil when it holds
+    /// elements none of which is usable (a damaged list is not taken for an emptied one).
+    private static func usableLanguages(_ stored: [Lossy<TranslationLanguage>]) -> [TranslationLanguage]? {
+        var seen = Set<String>()
+        let languages = stored.compactMap { element -> TranslationLanguage? in
+            guard let language = element.value, let target = TranslationTarget(code: language.code),
+                  seen.insert(target.code).inserted else { return nil }
+            return TranslationLanguage(code: target.code, shortcut: language.shortcut)
+        }
+        return languages.isEmpty && !stored.isEmpty ? nil : languages
+    }
+
+    /// Keys of files written before `translationLanguages` existed.
+    private enum LegacyKeys: String, CodingKey {
+        case translateEnglishShortcut, translateJapaneseShortcut
+    }
+
+    /// English and Japanese with the shortcuts of the old per-language keys. A string is
+    /// kept as it is, the empty one included (the user had cleared that shortcut); a missing
+    /// value or one of the wrong type is the language's default.
+    private static func legacyLanguages(_ decoder: any Decoder) -> [TranslationLanguage] {
+        let legacy = try? decoder.container(keyedBy: LegacyKeys.self)
+        func language(_ target: TranslationTarget, _ key: LegacyKeys) -> TranslationLanguage {
+            let stored: String? = legacy.flatMap { try? $0.decodeIfPresent(String.self, forKey: key) } ?? nil
+            return TranslationLanguage(code: target.code, shortcut: stored ?? target.defaultShortcut)
+        }
+        return [language(.english, .translateEnglishShortcut), language(.japanese, .translateJapaneseShortcut)]
     }
 
     public static let changedNotification = Notification.Name("com.leelib.rimelingo.features")

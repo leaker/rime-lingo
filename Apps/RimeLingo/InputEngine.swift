@@ -34,6 +34,9 @@ final class InputEngine {
     let usage = UsageRecorder()
     /// rimelingo/features.json, reloaded when Settings posts `RimeLingoFeatures.changedNotification`.
     private(set) var features = RimeLingoFeatures()
+    /// The translation shortcuts in effect, resolved once per features reload instead of
+    /// on every key press.
+    private(set) var translationBindings = TranslationShortcutBindings(features: RimeLingoFeatures())
     /// Chinese/English punctuation shared by all apps, following ⌃⇧3 wherever it is
     /// pressed. Nil until the first session: it then starts from librime's remembered
     /// state when `switcher/save_options` lists ascii_punct, else from the setting.
@@ -196,6 +199,7 @@ final class InputEngine {
     private func reloadFeatures() {
         let wasTraditional = features.traditional, wasAsciiPunct = features.asciiPunct
         features = RimeLingoFeatures.load(paths)
+        translationBindings = TranslationShortcutBindings(features: features)
         if features.traditional != wasTraditional { eligibleController?.applyScriptOption() }
         if features.asciiPunct != wasAsciiPunct, asciiPunct != nil {
             asciiPunct = features.asciiPunct

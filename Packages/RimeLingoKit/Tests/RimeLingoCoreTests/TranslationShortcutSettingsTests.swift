@@ -18,6 +18,16 @@ struct TranslationShortcutSettingsTests {
         return TranslationShortcutBindings(features: features)
     }
 
+    private static let french = TranslationTarget(code: "fr")!, german = TranslationTarget(code: "de")!
+    private static let korean = TranslationTarget(code: "ko")!
+
+    /// Every action of the defaults, plus a language that is not in the list.
+    private static let sampleActions: [TranslationShortcutAction] = [.english, .japanese, .submit, .language(french)]
+
+    private func language(_ target: TranslationTarget, _ shortcut: String = "") -> RimeLingoFeatures.TranslationLanguage {
+        .init(code: target.code, shortcut: shortcut)
+    }
+
     // MARK: - Storage
 
     @Test func defaultsAreTheOriginalShortcuts() {
@@ -25,19 +35,121 @@ struct TranslationShortcutSettingsTests {
         #expect(defaults[.english] == "Control+Alt+Super+e")
         #expect(defaults[.japanese] == "Control+Alt+Super+j")
         #expect(defaults[.submit] == "Alt+Return")
-        for action in TranslationShortcutAction.allCases { #expect(defaults[action] == action.defaultShortcut) }
+        #expect(defaults.languages == [.english, .japanese])
+        #expect(RimeLingoFeatures().translationLanguages == [
+            language(.english, "Control+Alt+Super+e"), language(.japanese, "Control+Alt+Super+j"),
+        ])
     }
 
     @Test func storedShortcutsRoundTripThroughFeatures() throws {
         var features = RimeLingoFeatures()
         features[shortcut: .english] = "Control+Alt+t"
-        features[shortcut: .submit] = ""
+        features[shortcut: .japanese] = ""
+        features.translationLanguages.append(language(Self.french, "Control+Alt+f"))
         let decoded = try JSONDecoder().decode(RimeLingoFeatures.self, from: JSONEncoder().encode(features))
         #expect(decoded == features)
         let restored = TranslationShortcutBindings(features: decoded)
         #expect(restored[.english] == "Control+Alt+t")
-        #expect(restored[.japanese] == "Control+Alt+Super+j")
-        #expect(restored[.submit] == "")
+        #expect(restored[.japanese] == "")
+        #expect(restored[.language(Self.french)] == "Control+Alt+f")
+        #expect(restored[.submit] == "Alt+Return")
+        #expect(restored.languages == [.english, .japanese, Self.french])
+    }
+
+    /// The submit shortcut is the only way to insert a translation: it cannot be turned off.
+    @Test func anEmptySubmitShortcutCountsAsTheDefault() {
+        let cleared = bindings { $0[shortcut: .submit] = "" }
+        #expect(cleared[.submit] == "Alt+Return")
+        #expect(match(cleared, 36, "\r", Self.option) == .submit)
+    }
+
+    /// A language outside the list has no stored shortcut, and giving it one adds nothing.
+    @Test func theShortcutOfAnUnlistedLanguageIsNotStored() {
+        var features = RimeLingoFeatures()
+        features[shortcut: .language(Self.french)] = "Control+Alt+f"
+        #expect(features == RimeLingoFeatures())
+        #expect(features[shortcut: .language(Self.french)] == "")
+        let resolved = TranslationShortcutBindings(features: features)
+        #expect(resolved[.language(Self.french)] == "")
+        #expect(match(resolved, 3, "f", Self.control | Self.option) == nil)
+    }
+
+    // MARK: - Migration
+
+    /// A file written before the language list: the custom English shortcut and the cleared
+    /// Japanese one are both kept.
+    @Test func legacyShortcutsBecomeTheLanguageList() throws {
+        let old = try features(
+            #"{"liveTranslation":true,"submitTranslationShortcut":"Alt+Return","translateEnglishShortcut":"Control+Alt+Super+t","translateJapaneseShortcut":""}"#)
+        #expect(old.translationLanguages == [language(.english, "Control+Alt+Super+t"), language(.japanese)])
+        let resolved = TranslationShortcutBindings(features: old)
+        #expect(resolved.languages == [.english, .japanese])
+        #expect(resolved[.english] == "Control+Alt+Super+t")
+        #expect(resolved[.japanese] == "")
+        #expect(match(resolved, 17, "t", Self.hyper) == .language(.english))
+        #expect(match(resolved, 38, "j", Self.hyper) == nil)
+        #expect(match(resolved, 14, "e", Self.hyper) == nil)
+    }
+
+    @Test func aMissingLegacyKeyIsThatLanguagesDefault() throws {
+        let old = try features(#"{"translateJapaneseShortcut":"Control+Alt+k"}"#)
+        #expect(old.translationLanguages == [language(.english, "Control+Alt+Super+e"), language(.japanese, "Control+Alt+k")])
+    }
+
+    @Test func theLanguageListWinsOverLegacyKeys() throws {
+        let both = try features(
+            #"{"translationLanguages":[{"code":"fr","shortcut":"Control+Alt+f"}],"translateEnglishShortcut":"Control+Alt+Super+t"}"#)
+        #expect(both.translationLanguages == [language(Self.french, "Control+Alt+f")])
+        #expect(TranslationShortcutBindings(features: both)[.english] == "")
+    }
+
+    /// Damaged elements, unknown codes and repeated languages are dropped one by one; codes
+    /// take the catalog's spelling.
+    @Test func unusableListElementsAreDropped() throws {
+        let messy = try features(#"""
+            {"usageStats":true,"translationLanguages":[
+              {"code":"FR","shortcut":"Control+Alt+f"}, 7, {"code":"de"}, {"code":"xx","shortcut":""},
+              {"code":"fr","shortcut":"Control+Alt+g"}, {"code":"zh-hant","shortcut":""}, {"code":3,"shortcut":""}, null]}
+            """#)
+        #expect(messy.usageStats)
+        #expect(messy.translationLanguages == [
+            language(Self.french, "Control+Alt+f"), language(TranslationTarget(code: "zh-Hant")!),
+        ])
+    }
+
+    @Test func anEmptyListStaysEmpty() throws {
+        let none = try features(#"{"translationLanguages":[],"translateEnglishShortcut":"Control+Alt+Super+t"}"#)
+        #expect(none.translationLanguages.isEmpty)
+        let resolved = TranslationShortcutBindings(features: none)
+        #expect(resolved.languages.isEmpty)
+        #expect(match(resolved, 14, "e", Self.hyper) == nil)
+        #expect(match(resolved, 36, "\r", Self.option) == .submit)
+    }
+
+    /// A list that is not one, or has nothing usable in it, is damage and not the user
+    /// removing every language: the legacy keys or the defaults apply, and the rest of the
+    /// file is kept.
+    @Test func aDamagedListFallsBackToLegacyKeysOrDefaults() throws {
+        for damaged in [#""x""#, "7", #"{"code":"en"}"#, #"[{"code":"xx","shortcut":""}, 7]"#, "null"] {
+            let withLegacy = try features(
+                #"{"usageStats":true,"translationLanguages":\#(damaged),"translateEnglishShortcut":"Control+Alt+Super+t","translateJapaneseShortcut":""}"#)
+            #expect(withLegacy.usageStats, "\(damaged)")
+            #expect(withLegacy.translationLanguages == [language(.english, "Control+Alt+Super+t"), language(.japanese)], "\(damaged)")
+            let alone = try features(#"{"usageStats":true,"translationLanguages":\#(damaged)}"#)
+            #expect(alone.usageStats, "\(damaged)")
+            #expect(alone.translationLanguages == RimeLingoFeatures().translationLanguages, "\(damaged)")
+        }
+    }
+
+    @Test func savingWritesTheListAndDropsLegacyKeys() throws {
+        let old = try features(#"{"translateEnglishShortcut":"Control+Alt+Super+t","translateJapaneseShortcut":""}"#)
+        let data = try JSONEncoder().encode(old)
+        let keys = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(keys["translateEnglishShortcut"] == nil && keys["translateJapaneseShortcut"] == nil)
+        let list = try #require(keys["translationLanguages"] as? [[String: String]])
+        #expect(list == [["code": "en", "shortcut": "Control+Alt+Super+t"], ["code": "ja", "shortcut": ""]])
+        // Reading the file back gives the migrated value: opening Settings alone writes nothing.
+        #expect(try JSONDecoder().decode(RimeLingoFeatures.self, from: data) == old)
     }
 
     @Test func missingValuesFallBackToTheDefaults() throws {
@@ -61,8 +173,8 @@ struct TranslationShortcutSettingsTests {
         #expect(bindings { $0[shortcut: .submit] = "Return" }[.submit] == "Alt+Return")
     }
 
-    /// A file written by hand or by another build may hold the same key twice. The earlier
-    /// action keeps it; the later one goes back to its default, or to nothing when an
+    /// A file written by hand or by another build may hold the same key twice. Submit comes
+    /// first, then the languages in list order: the earlier action keeps the key; the later one goes back to its default, or to nothing when an
     /// earlier action already holds that default.
     @Test func storedDuplicatesAreResolvedOnLoad() throws {
         let same = try features(
@@ -78,22 +190,53 @@ struct TranslationShortcutSettingsTests {
             $0[shortcut: .japanese] = "Control+Alt+t"
             $0[shortcut: .submit] = "Control+Alt+t"
         }
-        #expect(custom[.english] == "Control+Alt+t")
+        // Submit keeps the key over both languages, which go back to their defaults.
+        #expect(custom[.submit] == "Control+Alt+t")
+        #expect(custom[.english] == "Control+Alt+Super+e")
         #expect(custom[.japanese] == "Control+Alt+Super+j")
-        #expect(custom[.submit] == "Alt+Return")
         #expect(match(custom, 38, "j", Self.hyper) == .language(.japanese))
-        #expect(match(custom, 36, "\r", Self.option) == .submit)
+        #expect(match(custom, 17, "t", Self.control | Self.option) == .submit)
 
-        // A damaged value whose default an earlier action holds.
+        // A language on the key of a damaged submit shortcut: submit takes its default back.
         let fallback = bindings {
             $0[shortcut: .english] = "Alt+Return"
             $0[shortcut: .submit] = "Hyper+x"
         }
-        #expect(fallback[.english] == "Alt+Return")
-        #expect(fallback[.submit] == "")
+        #expect(fallback[.submit] == "Alt+Return")
+        #expect(fallback[.english] == "Control+Alt+Super+e")
+        // A language whose default an earlier action holds ends with nothing.
+        let taken = bindings {
+            $0[shortcut: .submit] = "Control+Alt+Super+j"
+            $0[shortcut: .japanese] = "Control+Alt+Super+j"
+        }
+        #expect(taken[.submit] == "Control+Alt+Super+j")
+        #expect(taken[.japanese] == "")
         // Cleared shortcuts never count as duplicates of each other.
         let cleared = bindings { $0[shortcut: .english] = ""; $0[shortcut: .japanese] = "" }
         #expect(cleared[.english] == "" && cleared[.japanese] == "" && cleared[.submit] == "Alt+Return")
+    }
+
+    /// With more languages the rule is the same: list order decides, and a language without
+    /// a default ends with no shortcut.
+    @Test func duplicatesAmongManyLanguagesFollowTheListOrder() {
+        let many = bindings {
+            $0.translationLanguages = [
+                language(Self.french, "Control+Alt+t"), language(.english, "Control+Alt+t"),
+                language(Self.german, "Control+Alt+t"), language(.japanese, "Control+Alt+Super+e"),
+                language(Self.korean, "Hyper+k"), language(Self.french, "Control+Alt+x"),
+            ]
+        }
+        #expect(many.languages == [Self.french, .english, Self.german, .japanese, Self.korean])
+        #expect(many[.language(Self.french)] == "Control+Alt+t")
+        #expect(many[.english] == "Control+Alt+Super+e")
+        #expect(many[.language(Self.german)] == "")
+        // Its stored value went to English as a default; its own default is still free.
+        #expect(many[.japanese] == "Control+Alt+Super+j")
+        // Damaged, and no default to go back to.
+        #expect(many[.language(Self.korean)] == "")
+        #expect(match(many, 17, "t", Self.control | Self.option) == .language(Self.french))
+        #expect(match(many, 14, "e", Self.hyper) == .language(.english))
+        #expect(match(many, 14, "e", Self.hyper, isRepeat: true) == .languageRepeat(.english))
     }
 
     @Test func storedValuesAreNormalised() {
@@ -166,13 +309,9 @@ struct TranslationShortcutSettingsTests {
     }
 
     @Test func aClearedShortcutMatchesNothing() {
-        let cleared = bindings {
-            $0[shortcut: .english] = ""
-            $0[shortcut: .submit] = ""
-        }
+        let cleared = bindings { $0[shortcut: .english] = "" }
         #expect(cleared[.english] == "")
         #expect(match(cleared, 14, "e", Self.hyper) == nil)
-        #expect(match(cleared, 36, "\r", Self.option) == nil)
         #expect(match(cleared, 38, "j", Self.hyper) == .language(.japanese))
         // No modifiers and an unbindable key: an empty binding must not match it.
         #expect(match(cleared, 10, "§", 0) == nil)
@@ -188,7 +327,7 @@ struct TranslationShortcutSettingsTests {
         #expect(defaults.issue(recording: "Control+Alt+Super+e", for: .english) == nil)
     }
 
-    @Test func rejectsDuplicatesAmongTheThree() {
+    @Test func rejectsDuplicatesAmongTheActions() {
         let defaults = bindings()
         #expect(defaults.issue(recording: "Control+Alt+Super+j", for: .english) == .duplicate(.japanese))
         #expect(defaults.issue(recording: "Control+Alt+Super+e", for: .japanese) == .duplicate(.english))
@@ -197,6 +336,19 @@ struct TranslationShortcutSettingsTests {
         // A cleared shortcut holds nothing.
         let cleared = bindings { $0[shortcut: .japanese] = "" }
         #expect(cleared.issue(recording: "Control+Alt+Super+j", for: .english) == nil)
+    }
+
+    @Test func rejectsDuplicatesOfAnyListedLanguage() {
+        let three = bindings { $0.translationLanguages.append(language(Self.french, "Control+Alt+f")) }
+        #expect(three.issue(recording: "Control+Alt+f", for: .english) == .duplicate(.language(Self.french)))
+        #expect(three.issue(recording: "Alt+Control+F", for: .submit) == .duplicate(.language(Self.french)))
+        #expect(three.issue(recording: "Control+Alt+f", for: .language(Self.french)) == nil)
+        #expect(TranslationShortcutIssue.duplicate(.language(Self.french)).message.contains("翻译为法语"))
+        // A language about to be added is checked like a listed one.
+        #expect(three.issue(recording: "Control+Alt+f", for: .language(Self.german)) == .duplicate(.language(Self.french)))
+        #expect(three.issue(recording: "Alt+Return", for: .language(Self.german)) == .duplicate(.submit))
+        #expect(three.issue(recording: "Alt+g", for: .language(Self.german)) == .producesCharacter)
+        #expect(three.issue(recording: "Control+Alt+g", for: .language(Self.german)) == nil)
     }
 
     /// The input method's other recordable hotkeys, as stored for librime: any order of
@@ -208,7 +360,7 @@ struct TranslationShortcutSettingsTests {
             (shortcut: "F4", title: "方案选单快捷键"), (shortcut: "Control+Shift+Alt+nosuchkey", title: "损坏"),
             (shortcut: "", title: "未设置"), (shortcut: "Super+Control+K", title: "以词定字"),
         ]
-        for action in TranslationShortcutAction.allCases {
+        for action in Self.sampleActions {
             #expect(defaults.issue(recording: "Control+grave", for: action, others: others) == .taken(by: "方案选单快捷键"))
             #expect(defaults.issue(recording: "Control+Shift+grave", for: action, others: others) == .taken(by: "方案选单快捷键"))
             #expect(defaults.issue(recording: "Control+Super+k", for: action, others: others) == .taken(by: "以词定字"))
@@ -231,11 +383,15 @@ struct TranslationShortcutSettingsTests {
         let cleared = bindings { $0[shortcut: .english] = "" }
         #expect(cleared.action(holding: "Control+Alt+Super+e") == nil)
         #expect(cleared.action(holding: "") == nil)
+        let three = bindings { $0.translationLanguages.append(language(Self.french, "Control+Alt+f")) }
+        #expect(three.action(holding: "Alt+Control+f") == .language(Self.french))
+        #expect(three.action(holding: "Alt+Control+f")?.title == "翻译为法语")
+        #expect(defaults.action(holding: "Alt+Control+f") == nil)
     }
 
     @Test func rejectsTheFixedShortcuts() {
         let defaults = bindings()
-        for action in TranslationShortcutAction.allCases {
+        for action in Self.sampleActions {
             #expect(defaults.issue(recording: "Control+Alt+p", for: action) == .reserved(.aiActions))
             #expect(defaults.issue(recording: "Control+Alt+m", for: action) == .reserved(.quickMenu))
         }
@@ -244,7 +400,7 @@ struct TranslationShortcutSettingsTests {
     @Test func rejectsBareKeys() {
         let defaults = bindings()
         for bare in ["e", "Shift+e", "F5", "Return", "Shift+Return", "space"] {
-            for action in TranslationShortcutAction.allCases {
+            for action in Self.sampleActions {
                 #expect(defaults.issue(recording: bare, for: action) == .needsModifier, "\(bare)")
             }
         }
@@ -282,7 +438,7 @@ struct TranslationShortcutSettingsTests {
     @Test func theLiveHintShowsTheConfiguredSubmitShortcut() {
         #expect(bindings().liveStatusHint == "↩ 原文   ⌥↩ 译文   esc 退出")
         #expect(bindings { $0[shortcut: .submit] = "Control+Return" }.liveStatusHint == "↩ 原文   ⌃↩ 译文   esc 退出")
-        #expect(bindings { $0[shortcut: .submit] = "" }.liveStatusHint == "↩ 原文   esc 退出")
+        #expect(bindings { $0[shortcut: .submit] = "" }.liveStatusHint == "↩ 原文   ⌥↩ 译文   esc 退出")
     }
 
     // MARK: - Session keys
@@ -295,7 +451,7 @@ struct TranslationShortcutSettingsTests {
         #expect(LiveSessionKey.decision(
             keyCode: 36, option: false, command: false, control: true, shift: false,
             isComposing: true, hasValidTranslation: true, submitMatched: true) == .submitBlocked(.composing))
-        // Option+Return is an ordinary key once the shortcut moved or was cleared.
+        // Option+Return is an ordinary key once the shortcut moved.
         #expect(LiveSessionKey.decision(
             keyCode: 36, option: true, command: false, control: false, shift: false,
             isComposing: false, hasValidTranslation: true, submitMatched: false) == .none)

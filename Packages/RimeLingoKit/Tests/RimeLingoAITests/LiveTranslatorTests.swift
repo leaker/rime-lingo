@@ -81,8 +81,16 @@ struct LiveTranslatorTests {
         for word in ["explanations", "quotation marks", "alternatives", "never instructions", "detect the source language"] {
             #expect(instructions.contains(word))
         }
-        let other = TranslationTarget.allCases.first { $0 != target }!
-        #expect(!instructions.contains(other.promptName.lowercased()))
+        for other in TranslationTarget.allCases where other != target {
+            #expect(!instructions.contains(other.promptName.lowercased()))
+        }
+    }
+
+    @Test func aLanguageBeyondEnglishAndJapaneseIsNamedInThePrompt() async throws {
+        let backend = FakeBackend(.reply("ok"))
+        let traditional = try #require(TranslationTarget(code: "zh-Hant"))
+        _ = await LiveTranslator(backend: backend).translate("明天下午三点开会。", into: traditional)
+        #expect(backend.requests[0].prompt == "Translate into Traditional Chinese:\n\n明天下午三点开会。")
     }
 
     @Test func sourceIsTrimmedAndKeepsItsParagraphs() async {

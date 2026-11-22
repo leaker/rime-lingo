@@ -121,7 +121,7 @@ private struct QuickMenuShortcutsSection: View {
     }
 }
 
-/// Live and selected-text translation: the switch and its three shortcuts. Saved through
+/// Live and selected-text translation: the switch, a shortcut per enabled language and the submit shortcut. Saved through
 /// the features channel, so the input method follows without a deploy or a restart.
 private struct TranslationShortcutsSection: View {
     @Environment(SettingsModel.self) private var model
@@ -139,7 +139,7 @@ private struct TranslationShortcutsSection: View {
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            ForEach(TranslationShortcutAction.allCases, id: \.self) { action in
+            ForEach(bindings.languages.map(TranslationShortcutAction.language) + [.submit], id: \.self) { action in
                 row(action, bindings: bindings)
             }
         } header: {
@@ -166,9 +166,10 @@ private struct TranslationShortcutsSection: View {
             HStack(spacing: 4) {
                 KeyRecorder(value: current) { assign($0, to: action, bindings: bindings) }
                     .accessibilityLabel("\(action.title)快捷键")
-                // Fixed slot so recorders line up whether or not the key is set.
+                // Fixed slot so recorders line up whether or not the key is set. The submit
+                // shortcut cannot be cleared: it is the way to insert a translation.
                 ZStack {
-                    if !current.isEmpty {
+                    if !current.isEmpty, action != .submit {
                         Button {
                             refusals[action] = nil
                             model.updateFeatures { $0[shortcut: action] = "" }
@@ -187,8 +188,8 @@ private struct TranslationShortcutsSection: View {
                     Image(systemName: "arrow.uturn.backward.circle")
                 }
                 .buttonStyle(.borderless)
-                .disabled(current == action.defaultShortcut)
-                .help("恢复默认：\(HotkeyFormatter.display(action.defaultShortcut))")
+                .disabled(action.defaultShortcut.isEmpty || current == action.defaultShortcut)
+                .help(action.defaultShortcut.isEmpty ? "没有默认快捷键" : "恢复默认：\(HotkeyFormatter.display(action.defaultShortcut))")
                 .accessibilityLabel("恢复\(action.title)的默认快捷键")
             }
         } label: {
@@ -205,8 +206,8 @@ private struct TranslationShortcutsSection: View {
 
     private func detail(_ action: TranslationShortcutAction) -> String {
         switch action {
-        case .english, .japanese: "开始实时翻译或切换目标语言；选中了文字时翻译选区。"
-        case .submit: "把译文写进输入框，或替换选区。清除后仍可点预览面板上的按钮。"
+        case .language: "开始实时翻译或切换目标语言；选中了文字时翻译选区。"
+        case .submit: "把译文写进输入框，或替换选区。"
         }
     }
 

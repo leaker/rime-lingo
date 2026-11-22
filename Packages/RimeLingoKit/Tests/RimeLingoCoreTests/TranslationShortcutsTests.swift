@@ -2,27 +2,6 @@ import Testing
 @testable import RimeLingoCore
 
 struct TranslationShortcutsTests {
-    @Test func matchesEAndJWithControlOptionCommand() {
-        #expect(TranslationShortcuts.target(keyCode: 14, control: true, option: true, command: true, shift: false) == .english)
-        #expect(TranslationShortcuts.target(keyCode: 38, control: true, option: true, command: true, shift: false) == .japanese)
-    }
-
-    @Test func otherKeysDoNotMatch() {
-        for keyCode: UInt16 in [0, 13, 15, 36, 37, 40, 53] {
-            #expect(TranslationShortcuts.target(keyCode: keyCode, control: true, option: true, command: true, shift: false) == nil)
-        }
-    }
-
-    @Test func modifiersMustBeExact() {
-        for keyCode in [TranslationShortcuts.englishKeyCode, TranslationShortcuts.japaneseKeyCode] {
-            for bits in 0..<16 {
-                let control = bits & 1 != 0, option = bits & 2 != 0, command = bits & 4 != 0, shift = bits & 8 != 0
-                let matched = TranslationShortcuts.target(keyCode: keyCode, control: control, option: option, command: command, shift: shift)
-                #expect((matched != nil) == (control && option && command && !shift))
-            }
-        }
-    }
-
     private func decide(
         _ target: TranslationTarget, enabled: Bool = true, isRepeat: Bool = false, menuOrActionOpen: Bool = false,
         selection: SelectionPresence = .none, previewAttached: Bool = false, sessionActive: Bool = false

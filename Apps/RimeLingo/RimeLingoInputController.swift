@@ -453,8 +453,8 @@ final class RimeLingoInputController: IMKInputController {
             menuHold.keyPressed() // a key while the modifier is down is a shortcut, not a hold
             let flags = event.modifierFlags
             // Translation shortcuts as configured in Settings (⌃⌥⌘E / ⌃⌥⌘J / ⌥↩ by default),
-            // read at use and reached only past the secure-context gate.
-            let shortcut = TranslationShortcutBindings(features: engine.features).match(
+            // resolved when the features file is loaded and reached only past the secure-context gate.
+            let shortcut = engine.translationBindings.match(
                 keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
                 eventFlags: flags.rawValue, isRepeat: event.isARepeat)
             switch shortcut {
@@ -702,7 +702,7 @@ final class RimeLingoInputController: IMKInputController {
         case .off: "⌃⌥M 动作"
         }
         var state = PanelState(status: live != nil
-            ? TranslationShortcutBindings(features: engine.features).liveStatusHint : "↩ 上屏   \(hold)")
+            ? engine.translationBindings.liveStatusHint : "↩ 上屏   \(hold)")
         state.statusBadge = liveSession?.option("ascii_mode") == true ? "英" : "中"
         return state
     }

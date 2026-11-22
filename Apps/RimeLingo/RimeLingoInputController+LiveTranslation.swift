@@ -60,7 +60,7 @@ extension RimeLingoInputController {
         coordinator.onChange = { [weak self] snapshot in self?.renderLive(snapshot) }
         live = coordinator
         installLivePanelControls()
-        DebugLog.write("live start target=\(target.rawValue)")
+        DebugLog.write("live start target=\(target.code)")
         coordinator.start(target: target)
         // A draft already pending is the first source.
         draftDidChange()

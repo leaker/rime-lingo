@@ -66,7 +66,7 @@ extension RimeLingoInputController {
             DebugLog.write("selection capture failed reason=\(failure) length=\(range.length)")
             engine.showStatus(failure.message)
         case let .success(capture):
-            DebugLog.write("selection start target=\(target.rawValue) length=\(range.length)")
+            DebugLog.write("selection start target=\(target.code) length=\(range.length)")
             engine.cancelStatus()
             engine.selectionAnchor = selectionRect(range, client: client)
             engine.selection.start(capture: capture, target: target)
