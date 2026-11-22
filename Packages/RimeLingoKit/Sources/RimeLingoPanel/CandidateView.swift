@@ -805,8 +805,16 @@ public final class CandidateView: NSView {
         let key = "\(name)|\(side)|\(color.red),\(color.green),\(color.blue),\(color.alpha)"
         if let cached = symbolImages[key] { return cached }
         let configuration = NSImage.SymbolConfiguration(pointSize: side * 0.82, weight: .regular)
-            .applying(.init(paletteColors: [nsColor(color)]))
-        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return nil }
+        guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return nil }
+        // Tinted as one monochrome shape. A palette colour paints every layer, including the
+        // ones a symbol uses as cut-outs: face.smiling became a solid disc that way.
+        let tint = nsColor(color)
+        let image = NSImage(size: symbol.size, flipped: false) { rect in
+            symbol.draw(in: rect)
+            tint.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
         symbolImages[key] = image
         return image
     }
