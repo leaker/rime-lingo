@@ -25,7 +25,7 @@ class LicensePackagingTests(unittest.TestCase):
                      "observedVendorBinarySha256": hashlib.sha256(b"fixture binary").hexdigest()}
         self.manifest = {"components": [component], "completeCorrespondingSourceAuditPassed": False}
         self.write_manifest()
-        for path in ["LICENSE", "THIRD_PARTY_NOTICES.md", "docs/native-plugin-license-audit.md", "docs/release-checklist.md"]:
+        for path in ["LICENSE", "THIRD_PARTY_NOTICES.md"]:
             self.write(self.source / path, path.encode())
 
     def tearDown(self):
