@@ -106,11 +106,18 @@ public struct InstallFailure: Error, Equatable, Sendable {
 public enum InstalledCopyCheck {
     /// Nil when `installed` is an intact copy of the build that is running; a short reason otherwise.
     public static func problem(installed: SignatureInfo, running: SignatureInfo, bundleID: String) -> String? {
-        guard installed.isValid else { return "invalid signature" }
-        guard installed.bundleID == bundleID else { return "identifier \(installed.bundleID ?? "none")" }
+        if let problem = problem(anyVersion: installed, running: running, bundleID: bundleID) { return problem }
         if let version = running.version, installed.version != version || installed.build != running.build {
             return "version \(installed.version ?? "none") (\(installed.build.map(String.init) ?? "none"))"
         }
+        return nil
+    }
+
+    /// Nil when `installed` is an intact copy of some version of this input method, of the
+    /// kind (release or development build) that is running; a short reason otherwise.
+    public static func problem(anyVersion installed: SignatureInfo, running: SignatureInfo, bundleID: String) -> String? {
+        guard installed.isValid else { return "invalid signature" }
+        guard installed.bundleID == bundleID else { return "identifier \(installed.bundleID ?? "none")" }
         // A release stays a release: the copy has to satisfy the requirement the updater
         // holds every later version to.
         if running.satisfiesDeveloperID, !installed.satisfiesDeveloperID || installed.teamID != UpdateConfiguration.teamID {
@@ -283,9 +290,9 @@ public struct AppInstaller: Sendable {
         return Locks(install: install, update: update)
     }
 
-    /// A complete copy of the previous version that an earlier install left in `folder`
-    /// because it could not put it back, with its working directory. The newest one when
-    /// there are several.
+    /// A complete copy of the previous version that an earlier install left in `folder`,
+    /// with its working directory: because it could not put it back, or because it was
+    /// cut short before it removed it. The newest one when there are several.
     private func keptBackup(in folder: URL) -> (work: URL, backup: URL)? {
         var newest: (work: URL, backup: URL, date: Date)?
         for name in (try? BundleTree.children(of: folder)) ?? [] where name.hasPrefix(Self.workPrefix) {
@@ -309,8 +316,9 @@ public struct AppInstaller: Sendable {
         let folder = destination.deletingLastPathComponent()
         // An install that could not put the previous version back left its copy of it
         // here. That copy may be the only intact one: it is used, never removed, until a
-        // new version has passed its check (`finish`).
-        let kept = keptBackup(in: folder)
+        // new version has passed its check (`finish`) or the destination has turned out
+        // to be intact (below).
+        var kept = keptBackup(in: folder)
 
         guard BundleTree.entry(at: destination) != nil else {
             // Whatever else an install that was cut short left behind is of no use.
@@ -331,6 +339,19 @@ public struct AppInstaller: Sendable {
         }
 
         let replacer = BundleReplacer(fs: fs)
+        if let leftover = kept {
+            // An install that was ended between naming its backup and discarding it left
+            // the copy as well, and the destination may by now be a complete version,
+            // newer than the copy (the one it installed, or an update after it). A bundle
+            // that passes the whole check is not a mix of two versions: it is the previous
+            // version from here on, and the copy must never be put back over it.
+            replacer.cleanTemporaries(in: destination)
+            if InstalledCopyCheck.problem(anyVersion: signature.evaluate(bundle: destination),
+                                          running: signature.evaluateRunningProcess(), bundleID: bundleID) == nil {
+                discard(leftover.backup, in: leftover.work)
+                kept = nil
+            }
+        }
         let work: URL, backup: URL
         // Whether the destination is a complete previous version at this point.
         var intact = true
@@ -338,8 +359,9 @@ public struct AppInstaller: Sendable {
         if let kept {
             (work, backup) = kept
             removeWorkDirectories(in: folder, keeping: work)
-            // The destination is whatever the failed install and its failed rollback made
-            // of it. It is taken back to the previous version first; when that still is
+            // The destination did not pass the check: it is whatever the failed install
+            // and its failed rollback made of it, or what an install that was cut short
+            // halfway left. It is taken back to the previous version first; when that still is
             // not possible, the kept copy stays what a failure below rolls back to.
             do {
                 try replacer.replace(from: backup, into: destination)
@@ -415,19 +437,22 @@ public struct AppInstaller: Sendable {
     /// The new version is in place and has passed its check: the copies of the previous
     /// one are no longer needed.
     private func finish(_ placement: Placement, holdingUpdateLock: Bool) {
-        if case let .replaced(work, backup) = placement {
-            // First made unusable as a backup in one step, in case removing the tree is
-            // cut short: what is left must never be put back over the new version.
-            if (try? fs.rename(backup, to: work.appendingPathComponent("discarded", isDirectory: true))) == nil {
-                try? fs.removeItem(at: backup)
-            }
-        }
+        if case let .replaced(work, backup) = placement { discard(backup, in: work) }
         removeWorkDirectories(in: destination.deletingLastPathComponent())
         // An update that was interrupted would be "recovered" at the next launch by
         // putting its backup over the copy that was just installed and verified.
         guard holdingUpdateLock, let updates else { return }
         try? fs.removeItem(at: updates.marker)
         try? fs.removeItem(at: updates.backup)
+    }
+
+    /// Makes `backup` unusable as a backup in one step before its working directory is
+    /// removed, in case removing the tree is cut short: what is left must never be put
+    /// back over the destination.
+    private func discard(_ backup: URL, in work: URL) {
+        if (try? fs.rename(backup, to: work.appendingPathComponent("discarded", isDirectory: true))) == nil {
+            try? fs.removeItem(at: backup)
+        }
     }
 
     static func describe(_ error: any Error) -> String {

@@ -205,6 +205,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
     static let afterFiles = ["register RimeLingo.app", "agents", "start RimeLingo.app"]
 
     init() throws {
+        signature.checksSeal = true
         try makeBundle(source, version: "0.3.0", build: 21, extra: ["Contents/Resources/added.txt": "new"])
         signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: true, teamID: UpdateConfiguration.teamID,
                                           bundleID: fixtureBundleID, version: "0.3.0", build: 21)
@@ -500,8 +501,9 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         let before = snapshot(destination)
         _ = try damage()
         // The retry fails its check: what it rolls back to is the previous version, not
-        // the mixed bundle the first attempt left.
-        signature.breakEvaluation(1)
+        // the mixed bundle the first attempt left. (Evaluations: the package, the
+        // destination before anything is put back, the installed copy.)
+        signature.breakEvaluation(2)
         var failure = failure(of: installer())
         #expect(failure?.reason == .signature && failure?.bundle == .restored)
         #expect(snapshot(destination) == before && leftovers.isEmpty && temporaries(in: destination).isEmpty)
@@ -509,6 +511,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         // The same when the retry does not get as far as replacing anything.
         _ = try damage()
         try Data("x".utf8).write(to: source.appendingPathComponent("Contents/.rlu-not-installable"))
+        try resealFixture(source)
         failure = self.failure(of: installer())
         #expect(failure?.reason == .copy && failure?.bundle == .restored)
         #expect(snapshot(destination) == before && leftovers.isEmpty && temporaries(in: destination).isEmpty)
@@ -521,6 +524,70 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         fs.fail(.copy, at: 0)
         try installer().install()
         #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty && temporaries(in: destination).isEmpty)
+    }
+
+    /// An install of 0.2.0 over 0.1.0 that was ended after its files were in place but
+    /// before it discarded its backup, followed by updates: the destination is a complete
+    /// 0.2.5 and the leftover copy is 0.1.0.
+    func leaveABackupBehindAnIntactCopy() throws -> URL {
+        if !FileManager.default.fileExists(atPath: destination.path) {
+            try makeBundle(destination, version: "0.2.5", build: 25, extra: ["Contents/Resources/removed.txt": "old"])
+        }
+        let backup = folder.appendingPathComponent(".rimelingo-install-OLD/previous")
+        try makeBundle(backup, version: "0.1.0", build: 10)
+        return backup
+    }
+
+    @Test func aLeftoverBackupIsNeverPutBackOverAnIntactCopy() throws {
+        _ = try leaveABackupBehindAnIntactCopy()
+        let before = snapshot(destination)
+        let bundleInode = inode(destination)
+
+        // The new version cannot be prepared: nothing was changed, and nothing was "restored".
+        // (The first copy is the backup of the installed version.)
+        fs.fail(.copy, at: 0)
+        var failure = failure(of: installer())
+        #expect(failure?.reason == .copy && failure?.bundle == .untouched)
+        #expect(failure?.message.contains("已恢复") == false)
+        #expect(snapshot(destination) == before && inode(destination) == bundleInode && leftovers.isEmpty)
+
+        // The new version fails its check: what comes back is the copy that was installed.
+        _ = try leaveABackupBehindAnIntactCopy()
+        signature.breakEvaluation(2)
+        failure = self.failure(of: installer())
+        #expect(failure?.reason == .signature && failure?.bundle == .restored)
+        #expect(snapshot(destination) == before && leftovers.isEmpty && temporaries(in: destination).isEmpty)
+
+        _ = try leaveABackupBehindAnIntactCopy()
+        try installer().install()
+        #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty)
+    }
+
+    @Test func aLeftoverBackupIsDiscardedBeforeTheInstalledCopyIsBackedUp() throws {
+        let leftover = try leaveABackupBehindAnIntactCopy()
+        let changes = recordChanges()
+        try installer().install()
+        // The first change of all: the copy stops being a backup in one step.
+        #expect(changes.all.first { !$0.hasPrefix("createDirectory") } == "rename discarded", "\(changes.all.prefix(3))")
+        #expect(!FileManager.default.fileExists(atPath: leftover.path) && leftovers.isEmpty)
+    }
+
+    @Test func aLeftoverBackupIsPutBackOverACopyThatIsNotIntact() throws {
+        // A stray file: the bundle is not what its seal says.
+        let previous = snapshot(try leaveABackupBehindAnIntactCopy())
+        try Data("x".utf8).write(to: destination.appendingPathComponent("Contents/Resources/stray.txt"))
+        signature.breakEvaluation(2)
+        var failure = failure(of: installer())
+        #expect(failure?.bundle == .restored && snapshot(destination) == previous && leftovers.isEmpty)
+
+        // Intact, but not the release the running installer is: a release is not rolled
+        // back to, or built upon, a copy somebody else signed.
+        try FileManager.default.removeItem(at: destination)
+        _ = try leaveABackupBehindAnIntactCopy()
+        signature.markDevelopmentSigned(destination)
+        failure = self.failure(of: installer())
+        #expect(failure?.reason == .signature && failure?.bundle == .restored)
+        #expect(snapshot(destination) == previous && leftovers.isEmpty)
     }
 
     @Test func aBackupThatWasCutShortIsNeverPutBack() throws {

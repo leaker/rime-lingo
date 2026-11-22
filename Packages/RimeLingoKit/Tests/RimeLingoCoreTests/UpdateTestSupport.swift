@@ -28,8 +28,29 @@ func makeBundle(_ url: URL, version: String, build: Int, bundleID: String = fixt
     try put("Contents/Helpers/rimelingo", "cli \(version)", mode: 0o755)
     try put("Contents/Applications/RimeLingo Settings.app/Contents/MacOS/RimeLingo Settings", "settings \(version)", mode: 0o755)
     try put("Contents/SharedSupport/dictionary.bin", "the same dictionary in every version")
-    try put("Contents/_CodeSignature/CodeResources", "seal \(version)")
     for (path, text) in extra { try put(path, text) }
+    try put(fixtureSealPath, "seal \(version)\n" + fixtureManifest(of: url))
+}
+
+let fixtureSealPath = "Contents/_CodeSignature/CodeResources"
+
+/// Seals a fixture bundle again after a test changed its files on purpose.
+func resealFixture(_ bundle: URL) throws {
+    let seal = bundle.appendingPathComponent(fixtureSealPath)
+    let first = try String(contentsOf: seal, encoding: .utf8).split(separator: "\n", maxSplits: 1).first ?? ""
+    try Data((first + "\n" + fixtureManifest(of: bundle)).utf8).write(to: seal)
+}
+
+/// Every regular file of a fixture bundle but the seal, with its contents: what the seal
+/// written by `makeBundle` records, as a signature's seal records its files.
+func fixtureManifest(of bundle: URL) -> String {
+    let fm = FileManager.default
+    return ((try? fm.subpathsOfDirectory(atPath: bundle.path)) ?? []).sorted().compactMap { path -> String? in
+        guard path != fixtureSealPath,
+              (try? fm.attributesOfItem(atPath: bundle.appendingPathComponent(path).path)[.type] as? FileAttributeType) == .typeRegular,
+              let text = try? String(contentsOf: bundle.appendingPathComponent(path), encoding: .utf8) else { return nil }
+        return "\(path)=\(text)"
+    }.joined(separator: "\n")
 }
 
 /// Every item below `url` as "path → kind, mode and content", for comparing trees.
@@ -77,6 +98,7 @@ final class FakeSignature: CodeSignatureEvaluating, @unchecked Sendable {
     private var evaluations = 0
     private var invalidEvaluations: Set<Int> = []
     private var developmentPaths: Set<String> = []
+    private var sealed = false
     private var runningInfo = SignatureInfo(isValid: true, satisfiesDeveloperID: true, teamID: UpdateConfiguration.teamID,
                                             bundleID: fixtureBundleID)
 
@@ -85,6 +107,12 @@ final class FakeSignature: CodeSignatureEvaluating, @unchecked Sendable {
         set { lock.withLock { runningInfo = newValue } }
     }
     var count: Int { lock.withLock { evaluations } }
+    /// Whether a bundle is only valid while its files are the ones its seal records
+    /// (`makeBundle`): a mix of two versions, or a stray file, is then a broken signature.
+    var checksSeal: Bool {
+        get { lock.withLock { sealed } }
+        set { lock.withLock { sealed = newValue } }
+    }
 
     /// The n-th `evaluate(bundle:)` from now (0-based) reports a broken signature.
     func breakEvaluation(_ offsets: Int...) { lock.withLock { invalidEvaluations = Set(offsets.map { $0 + evaluations }) } }
@@ -99,7 +127,11 @@ final class FakeSignature: CodeSignatureEvaluating, @unchecked Sendable {
         guard let data = try? Data(contentsOf: bundle.appendingPathComponent("Contents/Info.plist")),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String]
         else { return .unsigned }
-        let valid = !lock.withLock { invalidEvaluations.contains(index) }
+        var valid = !lock.withLock { invalidEvaluations.contains(index) }
+        if valid, checksSeal {
+            let seal = try? String(contentsOf: bundle.appendingPathComponent(fixtureSealPath), encoding: .utf8)
+            valid = seal?.split(separator: "\n", maxSplits: 1).last.map(String.init) == fixtureManifest(of: bundle)
+        }
         return SignatureInfo(isValid: valid, satisfiesDeveloperID: valid && !development, teamID: UpdateConfiguration.teamID,
                              bundleID: plist["CFBundleIdentifier"], version: plist["CFBundleShortVersionString"],
                              build: plist["CFBundleVersion"].flatMap { Int($0) })
