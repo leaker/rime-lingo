@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+NOTICES = "THIRD_PARTY_NOTICES.md"
 
 
 def sha256(data):
@@ -51,8 +52,12 @@ def embed(source_root, app):
     actual_names = {path.name for path in plugins.iterdir()}
     if actual_names != expected_names:
         raise ValueError("bundled plugin directory differs from audited inventory")
-    for path in ["LICENSE", "THIRD_PARTY_NOTICES.md", inventory_path]:
+    for path in ["LICENSE", inventory_path]:
         payload[path] = (source_root / path).read_bytes()
+    # The notices are kept out of the public repository, so a clean clone has none.
+    notices = source_root / NOTICES
+    if notices.is_file():
+        payload[NOTICES] = notices.read_bytes()
     payload["README.txt"] = (
         "RimeLingo license materials — partial inventory\n"
         "LICENSE applies to RimeLingo original code; dependencies retain their licenses.\n"
@@ -67,6 +72,9 @@ def embed(source_root, app):
                          for path, data in sorted(payload.items())]}
     payload["packaging-receipt.json"] = (json.dumps(receipt, indent=2) + "\n").encode()
     destination = app / "Contents/Resources/LicenseMaterials"
+    if NOTICES not in payload:
+        # An incremental build must not keep a copy the receipt no longer lists.
+        (destination / NOTICES).unlink(missing_ok=True)
     for path, data in sorted(payload.items()):
         target = destination / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +90,8 @@ def main():
         receipt = embed(ROOT, args.app)
     except (ValueError, OSError, KeyError, TypeError) as error:
         parser.exit(1, f"license embedding failed: {error}\n")
+    if all(file["path"] != NOTICES for file in receipt["files"]):
+        print(f"Skipped {NOTICES}: not present in the source tree")
     print(f"Embedded {len(receipt['files'])} partial license/source-inventory files before signing")
 
 

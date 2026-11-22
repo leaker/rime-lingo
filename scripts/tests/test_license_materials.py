@@ -49,6 +49,29 @@ class LicensePackagingTests(unittest.TestCase):
             content = (destination / file["path"]).read_bytes()
             self.assertEqual(hashlib.sha256(content).hexdigest(), file["sha256"])
 
+    def test_embeds_notices_when_present(self):
+        receipt = EMBED(self.source, self.app)
+        embedded = self.app / "Contents/Resources/LicenseMaterials/THIRD_PARTY_NOTICES.md"
+        self.assertEqual(embedded.read_bytes(), b"THIRD_PARTY_NOTICES.md")
+        self.assertIn("THIRD_PARTY_NOTICES.md", [file["path"] for file in receipt["files"]])
+
+    def test_skips_absent_notices_and_removes_stale_copy(self):
+        EMBED(self.source, self.app)
+        (self.source / "THIRD_PARTY_NOTICES.md").unlink()
+        receipt = EMBED(self.source, self.app)
+        destination = self.app / "Contents/Resources/LicenseMaterials"
+        self.assertFalse((destination / "THIRD_PARTY_NOTICES.md").exists())
+        self.assertTrue((destination / "LICENSE").is_file())
+        self.assertNotIn("THIRD_PARTY_NOTICES.md", [file["path"] for file in receipt["files"]])
+        on_disk = json.loads((destination / "packaging-receipt.json").read_bytes())
+        self.assertEqual(on_disk, receipt)
+
+    def test_still_requires_license(self):
+        (self.source / "LICENSE").unlink()
+        with self.assertRaises(OSError):
+            EMBED(self.source, self.app)
+        self.assertFalse((self.app / "Contents/Resources").exists())
+
     def test_rejects_changed_license_before_writing_resources(self):
         self.write(self.source / self.license_path, b"truncated license")
         with self.assertRaisesRegex(ValueError, "license hash mismatch"):

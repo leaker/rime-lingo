@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct AboutView: View {
@@ -8,6 +9,9 @@ struct AboutView: View {
         guard let value = Bundle.main.object(forInfoDictionaryKey: "RimeLingoBuildDate") as? String else { return nil }
         return ISO8601DateFormatter().date(from: value)
     }()
+
+    // The notices ship inside the bundle only; a build without them shows no link.
+    private let thirdPartyNotices = Locations.thirdPartyNotices
 
     var body: some View {
         PaneColumn {
@@ -152,7 +156,10 @@ struct AboutView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 18) {
                 Link("MIT 协议", destination: URL(string: "https://github.com/leaker/rime-lingo/blob/main/LICENSE")!)
-                Link("第三方声明", destination: URL(string: "https://github.com/leaker/rime-lingo/blob/main/THIRD_PARTY_NOTICES.md")!)
+                if let thirdPartyNotices {
+                    Button("第三方声明") { NSWorkspace.shared.open(thirdPartyNotices) }
+                        .buttonStyle(.plain)
+                }
             }
             .font(.callout)
             .foregroundStyle(Theme.accentText)

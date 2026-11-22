@@ -23,6 +23,14 @@ enum Locations {
         return env.map { URL(fileURLWithPath: $0) }
     }
 
+    /// The notices embedded in the input method bundle at build time; nil when the build
+    /// had none to embed, since they are not kept in the public repository.
+    static var thirdPartyNotices: URL? {
+        guard let url = inputMethodApp?.appendingPathComponent("Contents/Resources/LicenseMaterials/THIRD_PARTY_NOTICES.md"),
+              FileManager.default.isReadableFile(atPath: url.path) else { return nil }
+        return url
+    }
+
     static let inputMethodBundleID = "com.leelib.inputmethod.rimelingo"
 }
 

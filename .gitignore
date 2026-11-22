@@ -40,8 +40,8 @@ dist/
 Packages/RimeLingoKit/Frameworks/
 
 # Kept on this machine only, not versioned: project notes and community
-# and release documents. scripts/embed-license-materials.py still reads
-# THIRD_PARTY_NOTICES.md at build time, so it must stay on disk.
+# and release documents. scripts/embed-license-materials.py embeds
+# THIRD_PARTY_NOTICES.md into the app when it is on disk and skips it otherwise.
 /docs/
 /SECURITY.md
 /CODE_OF_CONDUCT.md
