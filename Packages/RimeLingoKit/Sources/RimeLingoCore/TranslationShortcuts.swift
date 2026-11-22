@@ -39,6 +39,31 @@ public enum TranslationDispatch: Sendable, Equatable {
     }
 }
 
+/// How the live translation mode applies to one field. The mode is process-wide, but a
+/// session is not started behind the user's back in an application the input layer leaves
+/// alone (`DraftBuffer.isExempt`: terminals, launchers, password managers, English-first
+/// applications): there typed text would go into a hidden draft instead of the app.
+public enum LiveFieldPolicy {
+    /// The target a field without a session resumes with on its next key, silently. Nil:
+    /// no session starts and every key takes the path it has with translation off. The
+    /// mode itself is not touched, so other applications still resume.
+    public static func silentResumeTarget(
+        mode: TranslationTarget?, featureEnabled: Bool, sessionActive: Bool, appExempt: Bool
+    ) -> TranslationTarget? {
+        guard featureEnabled, !sessionActive, !appExempt else { return nil }
+        return mode
+    }
+
+    /// The active target a language shortcut toggles against in this field
+    /// (`TranslationDispatch.decide`). An exempt application without a session is not
+    /// translating, whatever the mode says: a shortcut pressed there is the user asking
+    /// for translation in that field, so it starts a session instead of turning off or
+    /// switching a mode that shows nothing there.
+    public static func toggleTarget(mode: TranslationTarget?, sessionActive: Bool, appExempt: Bool) -> TranslationTarget? {
+        appExempt && !sessionActive ? nil : mode
+    }
+}
+
 /// Why a submit does nothing. Only a current, finished translation is ever inserted.
 public enum LiveSubmitBlock: Sendable, Equatable {
     /// Candidates are still open: the source is not final.

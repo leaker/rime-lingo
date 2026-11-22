@@ -42,6 +42,55 @@ struct TranslationShortcutsTests {
         #expect(key(53, selectionPreviewOpen: true) == .exit)
     }
 
+    /// With the mode left on, a terminal, launcher or password manager gets no session
+    /// behind the user's back: its keys must reach it as with translation off.
+    @Test func silentResumeSkipsExemptApplications() {
+        func resume(
+            _ mode: TranslationTarget?, enabled: Bool = true, sessionActive: Bool = false, exempt: Bool = false
+        ) -> TranslationTarget? {
+            LiveFieldPolicy.silentResumeTarget(
+                mode: mode, featureEnabled: enabled, sessionActive: sessionActive, appExempt: exempt)
+        }
+        #expect(resume(.english) == .english)
+        #expect(resume(Self.french) == Self.french)
+        #expect(resume(.english, exempt: true) == nil)
+        // Nothing to resume: the mode is off, the feature is off, or the field has a session.
+        #expect(resume(nil) == nil)
+        #expect(resume(nil, exempt: true) == nil)
+        #expect(resume(.english, enabled: false) == nil)
+        #expect(resume(.english, sessionActive: true) == nil)
+        // The exemption is the input layer's own: an application set to start in English
+        // (terminals, editors, launchers) and the password managers.
+        let terminal = DraftBuffer.isExempt(appStartsInEnglish: true, bundleID: "com.mitchellh.ghostty", secureInput: false)
+        let passwords = DraftBuffer.isExempt(appStartsInEnglish: false, bundleID: "com.1password.1password", secureInput: false)
+        let notes = DraftBuffer.isExempt(appStartsInEnglish: false, bundleID: "com.apple.Notes", secureInput: false)
+        #expect(resume(.japanese, exempt: terminal) == nil)
+        #expect(resume(.japanese, exempt: passwords) == nil)
+        #expect(resume(.japanese, exempt: notes) == .japanese)
+    }
+
+    /// A language shortcut pressed in an exempt application is the user asking for
+    /// translation there: it starts a session whatever the mode is, and from then on it
+    /// toggles like anywhere else.
+    @Test func aShortcutPressedInAnExemptApplicationStartsASessionThere() {
+        func toggled(
+            _ pressed: TranslationTarget, mode: TranslationTarget?, sessionActive: Bool, exempt: Bool
+        ) -> TranslationDispatch {
+            decide(pressed, activeTarget: LiveFieldPolicy.toggleTarget(
+                mode: mode, sessionActive: sessionActive, appExempt: exempt))
+        }
+        for mode in Self.activeTargets {
+            #expect(toggled(.english, mode: mode, sessionActive: false, exempt: true) == .start(.english))
+        }
+        // With a session there the table applies unchanged.
+        #expect(toggled(.english, mode: .english, sessionActive: true, exempt: true) == .stop)
+        #expect(toggled(.japanese, mode: .english, sessionActive: true, exempt: true) == .switchTarget(.japanese))
+        // Elsewhere the mode alone decides (a field resumes before the shortcut is looked at).
+        #expect(toggled(.english, mode: .english, sessionActive: false, exempt: false) == .stop)
+        #expect(toggled(.japanese, mode: .english, sessionActive: false, exempt: false) == .switchTarget(.japanese))
+        #expect(toggled(.english, mode: nil, sessionActive: false, exempt: false) == .start(.english))
+    }
+
     @Test func dispatchIgnoresEverythingWhenTheFeatureIsOff() {
         for bits in 0..<16 {
             for activeTarget in Self.activeTargets {

@@ -704,8 +704,12 @@ final class RimeLingoInputController: IMKInputController {
 
     /// The layer is on for this field: enabled in Settings, and the app is not one where
     /// keys must reach it at once (terminals, editors, launchers, password managers).
-    var draftLayerActive: Bool {
-        engine.features.draftLayer && !DraftBuffer.isExempt(
+    var draftLayerActive: Bool { engine.features.draftLayer && !draftLayerExempt }
+
+    /// This application is one the layer leaves alone. A live translation session does
+    /// not resume silently there either (`LiveFieldPolicy`).
+    var draftLayerExempt: Bool {
+        DraftBuffer.isExempt(
             appStartsInEnglish: appOptions.asciiMode == true, bundleID: bundleID, secureInput: IsSecureEventInputEnabled())
     }
 

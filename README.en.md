@@ -36,7 +36,7 @@ It works like other pinyin input methods: type pinyin, pick a candidate with Spa
 1. In any input field press **⌃⌥⌘E** (to English) or **⌃⌥⌘J** (to Japanese) to turn live translation on. A hint next to the cursor shows the target language and the keys once.
 2. Type Chinese as usual. The translation appears next to the cursor and follows your input. Nothing is shown while you are not typing.
 3. Press **⌥↩** to insert the translation; if the translation failed, press **⌥↩** again to retry. Press **↩** to insert the Chinese text instead.
-4. Live translation stays on, also when you move to another input field. Press the same shortcut again to turn it off, or the shortcut of another language to switch the target.
+4. Live translation stays on, also when you move to another input field. Press the same shortcut again to turn it off, or the shortcut of another language to switch the target. In applications set to start in English (terminals, editors, launchers) and in password managers it does not resume on its own: press the language shortcut there if you want it.
 
 Until you insert the translation you can keep editing the Chinese text: move the cursor with the arrow keys, insert or delete, and the translation updates. When you turn translation off, Chinese text that has not been inserted yet is written to the input field first, so nothing is lost.
 

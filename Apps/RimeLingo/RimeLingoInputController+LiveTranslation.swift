@@ -30,7 +30,9 @@ extension RimeLingoInputController {
         let (selection, attached) = asksClient ? selectionState() : (.none, false)
         let dispatch = TranslationDispatch.decide(
             target: target, featureEnabled: enabled, isRepeat: isRepeat, menuOrActionOpen: menuOrActionOpen,
-            selection: selection, selectionPreviewAttached: attached, activeTarget: liveEngine.liveTarget)
+            selection: selection, selectionPreviewAttached: attached,
+            activeTarget: LiveFieldPolicy.toggleTarget(
+                mode: liveEngine.liveTarget, sessionActive: live != nil, appExempt: draftLayerExempt))
         switch dispatch {
         case .ignore:
             return nil
@@ -86,10 +88,14 @@ extension RimeLingoInputController {
 
     /// The mode is on and this field has no session yet (it got the keyboard after the
     /// mode was turned on, or its session ended with a click or a deploy): one starts
-    /// with the next key, silently.
+    /// with the next key, silently. Not in an application the input layer leaves alone:
+    /// there keys pass through as with translation off, nothing is shown, and only a
+    /// language shortcut pressed in that field starts a session.
     func resumeLiveIfNeeded(client: (any IMKTextInput)?) {
-        guard live == nil, let target = liveEngine.liveTarget, liveEngine.features.liveTranslation,
-              !blockedBySecureContext(client: client) else { return }
+        guard let target = LiveFieldPolicy.silentResumeTarget(
+            mode: liveEngine.liveTarget, featureEnabled: liveEngine.features.liveTranslation,
+            sessionActive: live != nil, appExempt: draftLayerExempt),
+            !blockedBySecureContext(client: client) else { return }
         startLive(target, announce: false)
     }
 
