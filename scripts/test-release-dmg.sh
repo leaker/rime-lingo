@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Runs the disk image steps of scripts/release.sh (scripts/release-functions.sh) on a
-# fixture folder in a temporary directory. hdiutil, ditto and diskutil are the real ones;
-# codesign, xcrun (notarytool, stapler), spctl and curl are stand-ins that record how they
-# were called. No Keychain, no network, nothing signed, sent to Apple or published.
+# fixture folder in a temporary directory. hdiutil, ditto, diskutil and iconutil are the
+# real ones, and so is the layout tool (uv fetches its two pinned libraries from PyPI the
+# first time); codesign, xcrun (notarytool, stapler), spctl and curl are stand-ins that
+# record how they were called. No Keychain, nothing signed, sent to Apple or published.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # The physical path: it is how `mount` names what is mounted below it.
@@ -72,7 +73,11 @@ ln -s MacOS/RimeLingo "$WORK/build/RimeLingo.app/Contents/link"
 DMG="$WORK/RimeLingo-0.3.0.dmg"
 
 # Building: compressed and read-only, holding the app as it was, under the product's name.
+check_dmg_tools
 build_dmg "$WORK/build/RimeLingo.app" "$DMG" "$WORK"
+[[ -z "$DMG_MOUNT" ]] || fail "build_dmg left DMG_MOUNT set"
+! mounted "$WORK/dmg-writable" || fail "build_dmg left the image it lays out mounted"
+[[ ! -e "$WORK/dmg-writable.dmg" ]] || fail "build_dmg left the writable image behind"
 [[ "$(hdiutil imageinfo -format "$DMG" 2>/dev/null)" == UDZO ]] || fail "the image is not UDZO"
 : > "$CALLS"
 check_dmg "$DMG" "$WORK/mount"
@@ -89,12 +94,48 @@ diff -r "$WORK/build/RimeLingo.app" "$WORK/look/RimeLingo.app" || fail "the app 
 [[ -L "$WORK/look/RimeLingo.app/Contents/link" ]] || fail "a symbolic link was not kept"
 [[ -x "$WORK/look/RimeLingo.app/Contents/MacOS/RimeLingo" ]] || fail "the executable bit was not kept"
 if touch "$WORK/look/written" 2>/dev/null; then fail "the mounted image is writable"; fi
+
+# The window: the app is the only thing Finder shows. The background, the layout and the
+# volume's icon are there and hidden, and there is no shortcut to Applications, where an
+# input method does not work.
+[[ "$(/bin/ls -A "$WORK/look" | LC_ALL=C sort | tr '\n' ' ')" == ".DS_Store .VolumeIcon.icns .background RimeLingo.app " ]] \
+  || fail "the image holds: $(/bin/ls -A "$WORK/look" | tr '\n' ' ')"
+[[ "$(/bin/ls "$WORK/look")" == "RimeLingo.app" ]] || fail "more than the app is visible in the image"
+[[ ! -e "$WORK/look/Applications" && ! -L "$WORK/look/Applications" ]] || fail "the image has an Applications shortcut"
+[[ -z "$(find "$WORK/look" -maxdepth 1 -type l)" ]] || fail "the image has a link at its top"
+for hidden in .DS_Store .VolumeIcon.icns .background; do
+  [[ "$(stat -f %Sf "$WORK/look/$hidden")" == *hidden* ]] || fail "$hidden is not flagged hidden"
+done
+[[ "$(stat -f %Sf "$WORK/look/RimeLingo.app")" != *hidden* ]] || fail "the app is hidden"
+cmp "$ROOT/scripts/dmg/background.tiff" "$WORK/look/.background/background.tiff" || fail "the background in the image is not the tracked one"
+[[ "$(/bin/ls -A "$WORK/look/.background")" == "background.tiff" ]] || fail ".background holds more than the background"
+[[ "$(xattr -px com.apple.FinderInfo "$WORK/look" | tr -d ' \n' | cut -c17-18)" == 04 ]] || fail "the volume does not use its own icon"
+sips -g format "$WORK/look/.VolumeIcon.icns" 2>/dev/null | grep -q 'format: icns' || fail "the volume icon is not an icns"
+# What the layout file itself says, read back with the tool that wrote it.
+LAYOUT="$(dmg_layout read "$WORK/look/.DS_Store")"
+says() { plutil -extract "$1" raw -o - - <<<"$LAYOUT"; }
+[[ "$(says view)" == icnv ]] || fail "the window is not an icon view"
+[[ "$(says 'icons.RimeLingo\.app.0') $(says 'icons.RimeLingo\.app.1')" == "$DMG_ICON_X $DMG_ICON_Y" ]] || fail "the icon is at $(says 'icons.RimeLingo\.app')"
+[[ "$(plutil -extract icons raw -o - - <<<"$LAYOUT")" == RimeLingo.app ]] || fail "the layout places more than the app"
+[[ "$(says background.path)" == /.background/background.tiff ]] || fail "the layout's background is $(says background.path)"
+[[ "$(says background.carbon_path)" == "$DMG_VOLUME_NAME:.background:background.tiff" ]] || fail "the background alias is $(says background.carbon_path)"
+[[ "$(says background.volume_path)" == "/Volumes/$DMG_VOLUME_NAME" ]] || fail "the background alias remembers the build's mount point"
+[[ "$(says bookmark.path)" == .background/background.tiff ]] || fail "the layout's bookmark is $(says bookmark.path)"
+[[ "$(says bookmark.volume_path)" == "/Volumes/$DMG_VOLUME_NAME" ]] || fail "the bookmark remembers the build's mount point"
+[[ "$(says icon_view.backgroundType)" == 2 ]] || fail "the window's background is not a picture"
+[[ "$(says window.WindowBounds)" == "{{200, 120}, {640, 428}}" ]] || fail "the window is $(says window.WindowBounds)"
+[[ "$(says window.ShowToolbar) $(says window.ShowSidebar) $(says window.ShowStatusBar)" == "false false false" ]] || fail "the window shows a bar"
+[[ "$(says icon_view.labelOnBottom) $(says icon_view.arrangeBy)" == "true none" ]] || fail "the icons are not placed by hand with names below"
+# The picture is drawn for the same numbers, at both resolutions.
+grep -qF "let iconCentre = CGPoint(x: $DMG_ICON_X, y: $DMG_ICON_Y)" "$ROOT/scripts/gen-dmg-background.swift" || fail "the background is drawn for another icon position"
+grep -qF "let window = CGSize(width: $DMG_WINDOW_WIDTH, height: $DMG_WINDOW_HEIGHT)" "$ROOT/scripts/gen-dmg-background.swift" || fail "the background is drawn for another window"
+[[ "$(tiffutil -info "$ROOT/scripts/dmg/background.tiff" 2>&1 | grep -c 'Resolution: \(72, 72\|144, 144\)')" == 2 ]] || fail "the background is not a 1x and a 2x rendering"
 detach_dmg
 ! mounted "$WORK/look" || fail "detach_dmg left the image mounted"
 detach_dmg  # nothing mounted: must be harmless
 
 # A second build replaces the first, and leftovers in the staging folder do not get in.
-touch "$WORK/dmg-root/leftover"
+touch "$WORK/dmg-root/leftover" "$WORK/dmg-writable.dmg"
 build_dmg "$WORK/build/RimeLingo.app" "$DMG" "$WORK"
 check_dmg "$DMG" "$WORK/mount"
 
@@ -115,6 +156,19 @@ refuses "an image whose app fails verify_app" "not the app" check_dmg "$WORK/emp
 STUB_TICKET_INVALID=1 refuses "an app without a ticket" "no valid notarization ticket" check_dmg "$DMG" "$WORK/mount"
 STUB_GATEKEEPER_REJECTS=1 refuses "an app Gatekeeper rejects" "Gatekeeper rejects the app" check_dmg "$DMG" "$WORK/mount"
 ! mounted "$WORK/mount" || fail "a refused image stayed mounted"
+# An image without the designed window is not released, nor one whose layout was changed.
+hdiutil create -quiet -volname "$DMG_VOLUME_NAME" -srcfolder "$WORK/build" -fs HFS+ -format UDZO "$WORK/bare.dmg"
+refuses "an image without the background" "background is not" check_dmg "$WORK/bare.dmg" "$WORK/mount-bare"
+! mounted "$WORK/mount-bare" || fail "a refused image stayed mounted"
+mkdir -p "$WORK/moved/.background"
+ditto "$WORK/build/RimeLingo.app" "$WORK/moved/RimeLingo.app"
+cp "$ROOT/scripts/dmg/background.tiff" "$WORK/moved/.background/"
+hdiutil create -quiet -volname "$DMG_VOLUME_NAME" -srcfolder "$WORK/moved" -fs HFS+ -format UDZO "$WORK/unlaid.dmg"
+refuses "an image without a layout" "has no window layout" check_dmg "$WORK/unlaid.dmg" "$WORK/mount-unlaid"
+( DMG_ICON_X=300; refuses "an image with the icon elsewhere" "icon is not at 300" check_dmg "$DMG" "$WORK/mount" )
+touch "$WORK/moved/.background/other.png"
+hdiutil create -quiet -volname "$DMG_VOLUME_NAME" -srcfolder "$WORK/moved" -fs HFS+ -format UDZO -ov "$WORK/unlaid.dmg"
+refuses "an image with more in .background" "holds more than the background" check_dmg "$WORK/unlaid.dmg" "$WORK/mount-unlaid"
 refuses "a file that is not an image" "cannot open" check_dmg "$WORK/build/RimeLingo.app/Contents/Info.plist" "$WORK/mount"
 
 # Signing: the release identity, a secure timestamp, and the same requirement as the app.
@@ -153,6 +207,19 @@ if grep -qE -- ' (-I|--head) ' "$CALLS"; then fail "probe_download used HEAD"; f
 STUB_CURL_FAILS=1 probe_download "https://example.invalid/missing.dmg"
 [[ -z "$REMOTE_SIZE" ]] || fail "a failed download reported a size"
 
+# The standalone entry point builds the same image, unsigned, and takes nothing for granted.
+: > "$CALLS"
+bash "$ROOT/scripts/make-dmg.sh" "$WORK/build/RimeLingo.app" "$WORK/preview.dmg" > /dev/null
+check_dmg "$WORK/preview.dmg" "$WORK/mount"
+if grep -q -e '^codesign --sign' -e 'notarytool' "$CALLS"; then fail "make-dmg.sh signed or notarized"; fi
+if bash "$ROOT/scripts/make-dmg.sh" "$WORK/build" "$WORK/no.dmg" 2>/dev/null; then fail "make-dmg.sh took a folder that is not an app"; fi
+[[ ! -e "$WORK/no.dmg" ]] || fail "make-dmg.sh wrote an image for something that is not an app"
+# release.sh proves the layout tool runs before anything is sent to Apple.
+TOOLS_CHECK="$(grep -n '^check_dmg_tools$' "$ROOT/scripts/release.sh" | cut -d: -f1)"
+[[ -n "$TOOLS_CHECK" && "$TOOLS_CHECK" -lt "$(grep -n '^confirm "submit' "$ROOT/scripts/release.sh" | cut -d: -f1)" ]] \
+  || fail "release.sh does not check the layout tool before the first confirmation"
+( PATH="$STUBS:/usr/bin:/bin"; refuses "a Mac without uv" "uv is required" check_dmg_tools )
+
 # release.sh publishes the image and checks it, but the manifest must not learn about it.
 grep -qF '"$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig" "$DMG" ||' "$ROOT/scripts/release.sh" || fail "release.sh does not upload the disk image"
 grep -qF 'write-release-manifest.py "$ZIP" "$VERSION" "$BUILD" "$MIN_MACOS" "$OUT"' "$ROOT/scripts/release.sh" || fail "the manifest call changed"
@@ -165,4 +232,6 @@ while IFS=: read -r line _; do
 done < <(grep -n '^notarize ' "$ROOT/scripts/release.sh")
 [[ "$(grep -c '^notarize ' "$ROOT/scripts/release.sh")" == 2 ]] || fail "release.sh must notarize the app and the disk image"
 
-echo 'PASS: image built compressed and read-only with only the app, contents and name checked on the mount, detached on failure, signing, notarization, stapling, Gatekeeper, download probe, release.sh order'
+[[ -z "$(hdiutil info | grep -F "$WORK" || true)" ]] || fail "an image of this test is still attached"
+
+echo 'PASS: image built compressed and read-only with the app in the designed window (background, layout, icon; hidden; no Applications link), make-dmg.sh, contents and name checked on the mount, detached on failure, signing, notarization, stapling, Gatekeeper, download probe, release.sh order'

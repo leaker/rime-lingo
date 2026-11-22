@@ -12,6 +12,8 @@
 #   latest.json               the manifest (version, build, size and SHA-256 of the zip)
 #   latest.json.sig           its Ed25519 signature
 #   RimeLingo-<version>.dmg   the same app in a signed, notarized, stapled disk image
+#                             (its window says how to install; scripts/make-dmg.sh builds
+#                             the same image unsigned for a look beforehand)
 # Every installed release build checks latest.json once a day, verifies the signature,
 # downloads the zip and replaces its own files in place. Publishing is therefore the same
 # as installing on every user's Mac within about a day.
@@ -195,6 +197,9 @@ PUSH_CHECK="$(git push --dry-run origin "$COMMIT:refs/tags/$TAG" 2>&1)" \
 
 # notarize, the disk image steps and probe_download.
 source "$ROOT/scripts/release-functions.sh"
+# The disk image's window is laid out by a Python tool that uv runs (and fetches the first
+# time): find out that it runs now, not after the app has been notarized.
+check_dmg_tools
 
 # Fails unless the bundle, and the code inside it that the seal covers only as files, is
 # signed the way the updater will insist on.
