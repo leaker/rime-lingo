@@ -27,12 +27,21 @@ __pycache__/
 *.pyc
 dist/
 
+# Signing and notarization material must never be committed
+*.p8
+*.p12
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.keychain-db
+
 # SwiftPM binary target assembled by scripts/fetch-librime.sh
 Packages/RimeLingoKit/Frameworks/
 
 # Kept on this machine only, not versioned: project notes and community
 # and release documents. scripts/embed-license-materials.py still reads
-# THIRD_PARTY_NOTICES.md and two files under docs/ at build time, so they must stay on disk.
+# THIRD_PARTY_NOTICES.md at build time, so it must stay on disk.
 /docs/
 /SECURITY.md
 /CODE_OF_CONDUCT.md
@@ -41,8 +50,6 @@ Packages/RimeLingoKit/Frameworks/
 /THIRD_PARTY_NOTICES.md
 /CHANGELOG.md
 /CHANGELOG.en.md
-# Brand artwork, product README and CI configuration: kept locally only.
+# Brand artwork and CI configuration: kept locally only.
 /assets/
-/README.md
-/README.en.md
 /.github/
