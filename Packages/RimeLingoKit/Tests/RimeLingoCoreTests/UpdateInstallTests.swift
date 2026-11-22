@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import RimeLingoCore
 
@@ -161,6 +162,33 @@ import Testing
         #expect(inode(installed) == bundleInode)
         #expect(process.registered == [installed])
         #expect(!exists(paths.marker) && !exists(paths.backup) && !exists(paths.staged) && !exists(paths.archive("RimeLingo-0.3.0.zip")))
+    }
+
+    /// A colour tag or custom icon given in Finder: strict validation refuses a bundle
+    /// whose directory carries it, so it must be gone before the backup is copied.
+    @Test func finderInformationOnTheInstalledBundleDoesNotBlockTheUpdate() throws {
+        var finderInfo = [UInt8](repeating: 0, count: 32)
+        finderInfo[9] = 0x0C
+        #expect(setxattr(installed.path, XATTR_FINDERINFO_NAME, &finderInfo, finderInfo.count, 0, 0) == 0)
+        #expect(extendedAttributes(of: installed).contains(XATTR_FINDERINFO_NAME))
+        let expected = snapshot(paths.stagedApp)
+        let installed = installed, backupApp = paths.backupApp
+        let carriedIntoBackup = Mutex<[Bool]>([])
+        fs.observe { operation, url in
+            guard operation == .copy, url == backupApp else { return }
+            carriedIntoBackup.withLock { $0.append(extendedAttributes(of: installed).contains(XATTR_FINDERINFO_NAME)) }
+        }
+        #expect(install() == nil)
+        #expect(carriedIntoBackup.withLock { $0 } == [false], "removed before the backup was copied")
+        #expect(!extendedAttributes(of: installed).contains(XATTR_FINDERINFO_NAME))
+        #expect(snapshot(installed) == expected)
+    }
+
+    @Test func aBundleWhoseFinderInformationCannotBeRemovedIsLeftUntouched() {
+        let before = snapshot(installed)
+        fs.fail(.removeAttribute, at: 0)
+        #expect(install()?.code == "backupFailed")
+        #expect(snapshot(installed) == before && fs.count(.copy) == 0 && !exists(paths.backup) && !exists(paths.marker))
     }
 
     @Test func aStagedBundleTamperedWithAfterStagingIsRefusedBeforeAnythingChanges() {

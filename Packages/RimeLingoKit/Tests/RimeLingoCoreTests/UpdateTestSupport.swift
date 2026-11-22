@@ -59,6 +59,15 @@ func inode(_ url: URL) -> UInt64 {
     return lstat(url.path, &info) == 0 ? UInt64(info.st_ino) : 0
 }
 
+func extendedAttributes(of url: URL) -> [String] {
+    let size = listxattr(url.path, nil, 0, 0)
+    guard size > 0 else { return [] }
+    var buffer = [CChar](repeating: 0, count: size)
+    let length = listxattr(url.path, &buffer, size, 0)
+    guard length > 0 else { return [] }
+    return buffer[..<length].split(separator: 0).map { String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
+}
+
 func temporaries(in url: URL) -> [String] { snapshot(url).keys.filter { $0.contains(BundleTree.temporaryPrefix) } }
 
 /// Reads identity and version from the fixture's Info.plist and calls every bundle a
@@ -101,7 +110,7 @@ final class FakeSignature: CodeSignatureEvaluating, @unchecked Sendable {
 
 /// The real file system with one operation made to fail.
 final class FaultyFileSystem: UpdateFileSystem, @unchecked Sendable {
-    enum Operation: Hashable { case createDirectory, copy, symlink, rename, remove }
+    enum Operation: Hashable { case createDirectory, copy, symlink, rename, remove, removeAttribute }
     struct Injected: Error {}
 
     private let real = LocalUpdateFileSystem()
@@ -149,6 +158,10 @@ final class FaultyFileSystem: UpdateFileSystem, @unchecked Sendable {
     }
     func rename(_ source: URL, to destination: URL) throws { try step(.rename, destination); try real.rename(source, to: destination) }
     func removeItem(at url: URL) throws { try step(.remove, url); try real.removeItem(at: url) }
+    func removeExtendedAttribute(_ name: String, at url: URL) throws {
+        try step(.removeAttribute, url)
+        try real.removeExtendedAttribute(name, at: url)
+    }
     func isUserWritable(_ url: URL) -> Bool { userWritable }
 }
 

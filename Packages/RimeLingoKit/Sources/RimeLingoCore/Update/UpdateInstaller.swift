@@ -68,6 +68,9 @@ public struct UpdateInstaller: Sendable {
 
     private var replacer: BundleReplacer { BundleReplacer(fs: fs) }
 
+    /// What strict validation calls "resource fork, Finder information, or similar detritus".
+    static let finderAttributes = [XATTR_FINDERINFO_NAME, XATTR_RESOURCEFORK_NAME]
+
     /// Throws an `UpdateFailure`. On `.installFailed` the previous version is back in
     /// place; on `.backupFailed`, `.notNewer` and the verification failures nothing was
     /// touched; on `.rollbackFailed` the marker and the backup are kept for the next launch.
@@ -82,6 +85,10 @@ public struct UpdateInstaller: Sendable {
         try BundleVerification.verify(signature.evaluate(bundle: staged), release: release, bundleID: bundleID, installed: current)
 
         do {
+            // A colour tag or custom icon given in Finder puts these on the bundle's
+            // directory. They are outside the seal, but strict validation rejects a bundle
+            // that carries them, and the copy below would take them into the backup.
+            for name in Self.finderAttributes { try fs.removeExtendedAttribute(name, at: bundle) }
             try fs.removeItem(at: paths.backup)
             try fs.createDirectory(at: paths.backup)
             try fs.copyItem(at: bundle, to: paths.backupApp)

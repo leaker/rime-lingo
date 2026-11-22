@@ -11,6 +11,8 @@ public protocol UpdateFileSystem: Sendable {
     /// rename(2): atomically replaces a file or link at `destination`.
     func rename(_ source: URL, to destination: URL) throws
     func removeItem(at url: URL) throws
+    /// Removes one extended attribute of the item itself; one that is not there is not an error.
+    func removeExtendedAttribute(_ name: String, at url: URL) throws
     /// Owned by the current user and writable.
     func isUserWritable(_ url: URL) -> Bool
 }
@@ -39,6 +41,11 @@ public struct LocalUpdateFileSystem: UpdateFileSystem {
     public func removeItem(at url: URL) throws {
         guard BundleTree.entry(at: url) != nil else { return }
         try FileManager.default.removeItem(at: url)
+    }
+
+    public func removeExtendedAttribute(_ name: String, at url: URL) throws {
+        guard removexattr(url.path, name, 0) != 0, errno != ENOATTR else { return }
+        throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
     }
 
     public func isUserWritable(_ url: URL) -> Bool {
