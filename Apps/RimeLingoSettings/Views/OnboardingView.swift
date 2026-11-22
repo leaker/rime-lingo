@@ -711,7 +711,7 @@ private struct PracticeStep: View {
         // has started: ask for focus once now and once when the field has settled.
         .task(id: index) {
             focused = true
-            try? await Task.sleep(for: .milliseconds(450))
+            try? await _Concurrency.Task.sleep(for: .milliseconds(450))
             focused = true
         }
         .onChange(of: text) { _, value in evaluate(value) }
