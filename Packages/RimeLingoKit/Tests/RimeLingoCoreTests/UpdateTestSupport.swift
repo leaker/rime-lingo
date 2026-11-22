@@ -2,7 +2,9 @@ import CryptoKit
 import Foundation
 @testable import RimeLingoCore
 
-let fixtureBundleID = "com.leelib.inputmethod.rimelingo"
+/// Not the real identifier: fixture bundles built under the temporary directory must never
+/// be mistaken by LaunchServices for the installed input method.
+let fixtureBundleID = "com.leelib.inputmethod.rimelingo.test-fixture"
 
 /// A miniature RimeLingo.app: main executable, a library with a version link, a nested
 /// settings app, shared data that does not change between versions, and a seal file.

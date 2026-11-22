@@ -414,7 +414,7 @@ import Testing
         let reopened = scratch.url("re opened")
         let waited = Process()
         waited.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        waited.arguments = ["0.6"]
+        waited.arguments = ["1.5"]
         try waited.run()
         let arguments = RelaunchHelper.arguments(pid: waited.processIdentifier, bundle: reopened, background: false, opener: "/usr/bin/touch")
         try RelaunchHelper.spawnDetached(RelaunchHelper.shell, arguments)
@@ -436,7 +436,7 @@ import Testing
         try stuck.run()
         defer { if stuck.isRunning { stuck.terminate() } }
         let arguments = RelaunchHelper.arguments(pid: stuck.processIdentifier, bundle: reopened, background: false,
-                                                 opener: "/usr/bin/touch", waitTicks: 6)
+                                                 opener: "/usr/bin/touch", waitTicks: 15)
         try RelaunchHelper.spawnDetached(RelaunchHelper.shell, arguments)
         try await Task.sleep(for: .milliseconds(100))
         #expect(stuck.isRunning && !FileManager.default.fileExists(atPath: reopened.path), "it is given its time first")

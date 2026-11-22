@@ -375,7 +375,7 @@ final class UpdateRig {
     // MARK: Launch
 
     @Test func launchWithoutAnUpdateDirectoryTouchesNothing() {
-        #expect(UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, signature: rig.signature, fs: rig.fs,
+        #expect(UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs,
                                                   process: rig.process, publicKey: rig.publicKey) == .none)
         #expect(!FileManager.default.fileExists(atPath: rig.paths.userDataDir.path))
     }
@@ -400,7 +400,7 @@ final class UpdateRig {
         try state.save(rig.paths)
         try Data("partial".utf8).write(to: rig.updates.archive("RimeLingo-0.3.0.zip.part"))
 
-        let outcome = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, signature: rig.signature,
+        let outcome = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
                                                         fs: rig.fs, process: rig.process, publicKey: rig.publicKey,
                                                         now: { [clock = rig.clock] in clock.now })
         #expect(outcome == .rolledBack(from: "0.3.0 (21)", to: "0.2.0 (20)"))
@@ -422,7 +422,7 @@ final class UpdateRig {
                           bundle: rig.installed.path, phase: .commit, startedAt: rig.clock.now).write(rig.updates.marker)
         let before = snapshot(rig.installed)
         func launch(key: String) -> RecoveryOutcome {
-            UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, signature: rig.signature, fs: rig.fs,
+            UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs,
                                               process: rig.process, publicKey: key)
         }
         // …is not acted on by a build without a manifest key,
@@ -451,7 +451,7 @@ final class UpdateRig {
         state.phase = .installing
         try state.save(rig.paths)
 
-        let outcome = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, signature: rig.signature,
+        let outcome = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
                                                         fs: rig.fs, process: rig.process, publicKey: rig.publicKey, now: { [clock = rig.clock] in clock.now })
         #expect(outcome == .completed(version: "0.3.0", build: 21))
         #expect(snapshot(rig.installed) == snapshot(rig.published))
@@ -526,19 +526,19 @@ final class UpdateRig {
         state.progress = 0.4
         try state.save(rig.paths)
         try FileManager.default.createDirectory(at: rig.updates.stagingTemporary, withIntermediateDirectories: true)
-        #expect(UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, signature: rig.signature, fs: rig.fs,
+        #expect(UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs,
                                                   process: rig.process, publicKey: rig.publicKey) == .none)
         #expect(rig.state.phase == .ready && rig.state.progress == nil)
         #expect(BundleTree.entry(at: rig.updates.stagingTemporary) == nil)
         // The staged bundle vanished (cache cleaned): download again instead of failing.
         try FileManager.default.removeItem(at: rig.updates.staged)
-        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, signature: rig.signature, fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
         #expect(rig.state.phase == .downloading)
         // While another process works, nothing is changed.
         let other = try #require(UpdateLock.acquire(rig.updates))
         state.phase = .installing
         try state.save(rig.paths)
-        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, signature: rig.signature, fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
         #expect(rig.state.phase == .installing)
         withExtendedLifetime(other) {}
     }
