@@ -46,8 +46,7 @@ mkdir -p "$OUT/opencc"
 cp -n "$ROOT/Vendor/librime/share/opencc/"* "$OUT/opencc/" 2>/dev/null || true
 ditto "$ROOT/SharedSupport" "$OUT"
 
-# The 2026 AI / internet vocabulary is no longer bundled: it is an optional online
-# vocabulary (github.com/example/dicts) subscribed from RimeLingo Settings.
+# The 2026 AI / internet vocabulary is not bundled.
 rm -f "$OUT/rimelingo_tech.txt" "$OUT/rimelingo/rimelingo_tech.tsv"
 
 echo "rime-ice $(basename "$ASSET")" > "$OUT/rimelingo/VERSION"

@@ -546,30 +546,6 @@ final class SettingsModel {
 
     var subscriptions: [VocabularySubscription] { _ = revision; return SubscriptionManager(paths: paths).subscriptions() }
 
-    /// Official feeds (vocabulary.example.com catalog; cached, refreshed once per launch or on demand).
-    private(set) var vocabularyCatalog: VocabularyCatalog?
-    private var catalogRefreshed = false
-    private(set) var catalogRefreshing = false
-    private(set) var catalogError: String?
-
-    func loadVocabularyCatalog(force: Bool = false) async {
-        if vocabularyCatalog == nil { vocabularyCatalog = VocabularyCatalog.load(paths) }
-        guard !catalogRefreshing, subscriptionActivity == nil,
-              force || !catalogRefreshed else { return }
-        catalogRefreshed = true
-        catalogRefreshing = true
-        defer { catalogRefreshing = false }
-        do {
-            let fresh = try await VocabularyCatalog.refresh(paths)
-            vocabularyCatalog = fresh
-            catalogError = nil
-            // Subscriptions from the catalog point at its current files right away.
-            if (try? SubscriptionManager(paths: paths).follow(fresh))?.isEmpty == false { revision += 1 }
-        } catch {
-            catalogError = "无法获取在线目录，显示的是缓存或内置版本"
-        }
-    }
-
     func setSubscriptionInterval(_ id: String, _ interval: VocabularySubscription.UpdateInterval) {
         do { try SubscriptionManager(paths: paths).setInterval(id: id, interval) } catch { lastError = String(describing: error) }
         revision += 1
@@ -587,22 +563,21 @@ final class SettingsModel {
     var baseDictionaryMetadata: DictionaryMetadata? { DictionaryMetadata.load(paths) }
 
     var canAddSubscription: Bool {
-        subscriptions.count < SubscriptionManager.maxSubscriptions &&
-            subscriptionActivity == nil && !catalogRefreshing
+        subscriptions.count < SubscriptionManager.maxSubscriptions && subscriptionActivity == nil
     }
 
     /// Adds a feed, downloads it and redeploys so the words are typable right away.
     /// Returns false (and removes the entry) when nothing usable was downloaded.
     @discardableResult
-    func addSubscription(url: String, name: String?, feed: VocabularyCatalog.Feed? = nil) async -> Bool {
-        guard subscriptionActivity == nil, !catalogRefreshing else { return false }
+    func addSubscription(url: String, name: String?) async -> Bool {
+        guard subscriptionActivity == nil else { return false }
         subscriptionActivity = "正在下载…"
         subscriptionNotice = nil
         defer { subscriptionActivity = nil; revision += 1 }
         let manager = SubscriptionManager(paths: paths)
         let existingIDs = Set(manager.subscriptions().map(\.id))
         do {
-            let item = try await manager.add(url: url, name: name, feed: feed)
+            let item = try await manager.add(url: url, name: name)
             if let error = item.lastError {
                 if !existingIDs.contains(item.id) { try? manager.remove(id: item.id) }
                 lastError = "订阅失败：\(error)"
@@ -618,13 +593,11 @@ final class SettingsModel {
     }
 
     func refreshSubscriptions() async {
-        guard subscriptionActivity == nil, !catalogRefreshing else { return }
+        guard subscriptionActivity == nil else { return }
         subscriptionActivity = "正在检查更新…"
         defer { subscriptionActivity = nil; revision += 1 }
         let manager = SubscriptionManager(paths: paths)
         let result = await manager.refresh(mode: .manual)
-        if let fresh = result.catalog { vocabularyCatalog = fresh; catalogRefreshed = true }
-        catalogError = result.catalogError == nil ? nil : "无法获取在线目录，显示的是缓存或内置版本"
         lastError = result.errors.isEmpty ? nil : "词库检查失败：" +
             result.errors.sorted { $0.key < $1.key }.prefix(3).map { "\($0.key)：\($0.value)" }.joined(separator: "；")
         subscriptionNotice = "已检查 \(result.checkedIDs.count) 个词库，\(result.changedIDs.count) 个内容更新" +

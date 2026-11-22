@@ -238,19 +238,6 @@ struct SubscriptionTests {
         #expect(manager.tableSignature(schemas: ["rime_ice"], items: manager.subscriptions()) == after)
         #expect(try manager.ensureTables() == false)
     }
-
-    @Test func shippedCatalogDecodes() throws {
-        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let data = try Data(contentsOf: repo.appendingPathComponent("SharedSupport/rimelingo/vocabulary-catalog.json"))
-        let catalog = try JSONDecoder().decode(VocabularyCatalog.self, from: data)
-        #expect(catalog.feeds.count >= 3)
-        // Official feeds come from the website, each pinned to a version and SHA-256.
-        #expect(catalog.feeds.allSatisfy { $0.url.host == "vocabulary.example.com" && $0.url.path.hasPrefix("/resources/") })
-        #expect(catalog.feeds.allSatisfy { $0.sha256?.count == 64 && $0.version != nil && ($0.entries ?? 0) > 0 })
-        #expect(catalog.homepage?.absoluteString == "https://vocabulary.example.com/dictionaries/")
-        #expect(VocabularyCatalog.remoteURL.absoluteString == "https://vocabulary.example.com/api/vocabulary.json")
-    }
 }
 
 extension SubscriptionTests {
@@ -296,34 +283,6 @@ extension SubscriptionTests {
         #expect(manager.subscriptions().first { $0.id == added.id }?.updateInterval == .weekly)
         #expect(manager.subscriptions().first { $0.id == other.id } == savedOther)
         #expect(manager.subscriptions().count == 2)
-    }
-
-    @Test(arguments: [false, true])
-    func pendingUpdateDiscardsChangedSource(checksumOnly: Bool) async throws {
-        let manager = stubManager()
-        let source = URL(string: "https://example.invalid/feed.txt")!
-        let feed = VocabularyCatalog.Feed(id: "feed", name: "词库", description: "", category: nil, entries: nil,
-                                         url: source, version: nil, updated: nil, sha256: nil, size: nil)
-        let added = try await manager.add(url: source.absoluteString, name: nil, feed: feed)
-        let originalCache = try Data(contentsOf: manager.cacheURL(added.id))
-        let gate = SubscriptionFetchGate()
-        let updating = SubscriptionManager(paths: paths, fetch: { _, _ in
-            await gate.pause()
-            return .init(data: Data("新词\txin ci\t60\n".utf8), etag: "stale", lastModified: nil, status: 200)
-        })
-        let task = Task { try await updating.update(id: added.id, force: true) }
-        await gate.waitForEntry()
-        let catalog = VocabularyCatalog(version: 2, name: "RimeLingo", homepage: nil, updated: nil, feeds: [
-            .init(id: "feed", name: "词库", description: "", category: "ai", entries: nil,
-                  url: checksumOnly ? added.url : URL(string: "https://example.invalid/v2/feed.txt")!,
-                  version: nil, updated: nil, sha256: String(repeating: "a", count: 64), size: nil),
-        ])
-        try manager.follow(catalog)
-        let current = manager.subscriptions()
-        await gate.resume()
-        #expect(try await task.value == nil)
-        #expect(manager.subscriptions() == current)
-        #expect(try Data(contentsOf: manager.cacheURL(added.id)) == originalCache)
     }
 
     private func stubManager() -> SubscriptionManager {
@@ -415,30 +374,6 @@ extension SubscriptionTests {
         #expect(try await manager.update(id: added.id, now: start.addingTimeInterval(30 * 24 * 3600))?.entryCount == 2)
         #expect(try await manager.update(id: added.id, force: true)?.entryCount == 3)   // 立即检查 still works
     }
-
-    @Test func catalogFeedsAreVerifiedAndFollowNewVersions() async throws {
-        let v1 = root.appendingPathComponent("v1.txt"), v2 = root.appendingPathComponent("v2.txt")
-        try "氛围编程\n".write(to: v1, atomically: true, encoding: .utf8)
-        try "氛围编程\n具身智能\n".write(to: v2, atomically: true, encoding: .utf8)
-        func feed(_ url: URL, sha: String) -> VocabularyCatalog.Feed {
-            VocabularyCatalog.Feed(id: "ai-terms", name: "AI 术语", description: "", category: "ai", entries: nil, url: url,
-                                   version: nil, updated: nil, sha256: sha, size: nil)
-        }
-        let manager = SubscriptionManager(paths: paths)
-        let sha1 = PackageManager.sha256(of: try Data(contentsOf: v1))
-        // A wrong checksum is refused.
-        let bad = try await manager.add(url: v1.absoluteString, name: nil, feed: feed(v1, sha: String(repeating: "0", count: 64)))
-        #expect(bad.lastError?.contains("SHA-256") == true && bad.entryCount == 0)
-        try manager.remove(id: bad.id)
-        let good = try await manager.add(url: v1.absoluteString, name: nil, feed: feed(v1, sha: sha1))
-        #expect(good.entryCount == 1 && good.lastError == nil)
-        // The catalog publishes v2: the subscription follows it on the next automatic check.
-        let catalog = VocabularyCatalog(version: 1, name: "RimeLingo", homepage: nil, updated: nil,
-                                        feeds: [feed(v2, sha: PackageManager.sha256(of: try Data(contentsOf: v2)))])
-        _ = await manager.updateDue(now: good.lastChecked!.addingTimeInterval(25 * 3600), catalog: { catalog })
-        let after = manager.subscriptions().first { $0.id == good.id }
-        #expect(after?.url == v2 && after?.entryCount == 2 && after?.lastError == nil)
-    }
 }
 
 private actor SubscriptionFetchFixture {
@@ -446,7 +381,6 @@ private actor SubscriptionFetchFixture {
     var urls: [URL] = []
     var etags: [String?] = []
     var metadataRequests = 0
-    var catalogRequests = 0
 
     init(_ content: String = "示例词\tshi li ci\t50\n") {
         response = .init(data: Data(content.utf8), etag: "v1", lastModified: nil, status: 200)
@@ -460,26 +394,19 @@ private actor SubscriptionFetchFixture {
 
     func set(_ response: SubscriptionManager.Response) { self.response = response }
     func metadata(_ url: URL) -> Date? { metadataRequests += 1; return nil }
-    func catalog(_ value: VocabularyCatalog?) -> VocabularyCatalog? { catalogRequests += 1; return value }
-    func counts() -> (feeds: Int, metadata: Int, catalog: Int) { (urls.count, metadataRequests, catalogRequests) }
-    func resetCounts() { urls = []; etags = []; metadataRequests = 0; catalogRequests = 0 }
+    func counts() -> (feeds: Int, metadata: Int) { (urls.count, metadataRequests) }
+    func resetCounts() { urls = []; etags = []; metadataRequests = 0 }
 }
 
 extension SubscriptionTests {
     private var refreshDate: Date { Date(timeIntervalSince1970: 2_000_000_000) }
 
-    private func emptyCatalog() -> VocabularyCatalog {
-        .init(version: 1, name: "Test", homepage: nil, updated: nil, feeds: [])
-    }
-
     private func seed(_ manager: SubscriptionManager, count: Int, github: Bool = false) throws -> [VocabularySubscription] {
         let items = (0..<count).map { index -> VocabularySubscription in
             let host = github ? "raw.githubusercontent.com" : "example.com"
-            var item = VocabularySubscription(id: "feed\(index)", name: "Feed \(index)",
+            return VocabularySubscription(id: "feed\(index)", name: "Feed \(index)",
                 url: URL(string: "https://\(host)/owner/words/main/feed\(index).txt")!,
                 addedAt: refreshDate.addingTimeInterval(Double(index - 100)))
-            if github { item.feedID = "feed\(index)" }
-            return item
         }
         try manager.save(items)
         return items
@@ -496,7 +423,7 @@ extension SubscriptionTests {
         let timestamp = try FileManager.default.attributesOfItem(atPath: cached.path)[.modificationDate] as! Date
         let size = try Data(contentsOf: cached).count
         await fixture.set(.init(data: Data("测试词\tce shi ci\t80\n".utf8), etag: "v2", lastModified: nil, status: 200))
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
         #expect(report.changedIDs == [added.id] && report.errors.isEmpty)
         #expect(manager.subscriptions().first?.entryCount == 1)
         #expect(try Data(contentsOf: cached).count == size)
@@ -520,79 +447,70 @@ extension SubscriptionTests {
         let added = try await manager.add(url: "https://example.com/feed.txt", name: nil)
         let content = Data("词甲\tci jia\t50\n词乙\tci yi\t50\n".utf8)
         await fixture.set(.init(data: content, etag: "v2", lastModified: nil, status: 200))
-        #expect(await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil }).changed)
+        #expect(await manager.refresh(mode: .manual, now: refreshDate).changed)
         #expect(manager.subscriptions().first?.newEntries == 1)
         await fixture.resetCounts()
-        let skipped = await manager.refresh(mode: .due, now: refreshDate.addingTimeInterval(1), catalog: { await fixture.catalog(nil) })
+        let skipped = await manager.refresh(mode: .due, now: refreshDate.addingTimeInterval(1))
         #expect(skipped.checkedIDs.isEmpty && !skipped.changed)
         let skippedRequests = await fixture.counts()
-        #expect(skippedRequests.feeds == 0 && skippedRequests.catalog == 0)
-        let unchanged = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(2), catalog: { nil })
+        #expect(skippedRequests.feeds == 0)
+        let unchanged = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(2))
         #expect(!unchanged.changed && unchanged.errors.isEmpty)
         #expect(manager.subscriptions().first?.newEntries == 1)
         await fixture.set(.init(data: nil, etag: "v2", lastModified: nil, status: 304))
-        let notModified = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(3), catalog: { nil })
+        let notModified = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(3))
         #expect(!notModified.changed && notModified.errors.isEmpty)
         #expect(manager.subscriptions().first?.newEntries == 1 && manager.subscriptions().first?.id == added.id)
-        #expect(await manager.updateDue(now: refreshDate.addingTimeInterval(4), catalog: { nil }) == false)
+        #expect(await manager.updateDue(now: refreshDate.addingTimeInterval(4)) == false)
     }
 
-    @Test func manualRefreshFollowsNewCatalogEvenForManualIntervals() async throws {
+    @Test func manualRefreshChecksManualIntervals() async throws {
         let fixture = SubscriptionFetchFixture("词甲\tci jia\t50\n")
-        let old = URL(string: "https://example.com/resources/v1/terms.txt")!
-        let new = URL(string: "https://example.com/resources/v2/terms.txt")!
-        func feed(_ url: URL, _ data: Data) -> VocabularyCatalog.Feed {
-            .init(id: "terms", name: "Terms", description: "", category: nil, entries: nil, url: url,
-                  version: nil, updated: nil, sha256: PackageManager.sha256(of: data), size: nil)
-        }
+        let source = URL(string: "https://example.com/resources/terms.txt")!
         let manager = SubscriptionManager(paths: paths) { await fixture.fetch($0, $1) }
-        let added = try await manager.add(url: old.absoluteString, name: nil, feed: feed(old, Data("词甲\tci jia\t50\n".utf8)))
+        let added = try await manager.add(url: source.absoluteString, name: nil)
         try manager.setInterval(id: added.id, .manual)
-        let data = Data("词甲\tci jia\t80\n".utf8)
-        await fixture.set(.init(data: data, etag: "v2", lastModified: nil, status: 200))
+        await fixture.set(.init(data: Data("词甲\tci jia\t80\n".utf8), etag: "v2", lastModified: nil, status: 200))
         await fixture.resetCounts()
-        let catalog = VocabularyCatalog(version: 2, name: "Test", homepage: nil, updated: nil, feeds: [feed(new, data)])
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { await fixture.catalog(catalog) })
-        #expect(report.catalog == catalog && report.catalogError == nil && report.changedIDs == [added.id])
-        #expect(manager.subscriptions().first?.url == new && manager.subscriptions().first?.updateInterval == .manual)
+        let due = await manager.refresh(mode: .due, now: refreshDate)
+        #expect(due.checkedIDs.isEmpty)
+        #expect(await fixture.counts().feeds == 0)
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
+        #expect(report.changedIDs == [added.id] && report.errors.isEmpty)
+        #expect(manager.subscriptions().first?.url == source && manager.subscriptions().first?.updateInterval == .manual)
         let requestedURLs = await fixture.urls
         let requestedETags = await fixture.etags
-        #expect(requestedURLs == [new] && requestedETags == [nil])
-        #expect(await fixture.counts().catalog == 1)
+        #expect(requestedURLs == [source] && requestedETags == ["v1"])
     }
 
-    @Test func failedCatalogStillChecksOldSourceAndPreservesCacheOnFailures() async throws {
+    @Test func failedDownloadsPreserveCache() async throws {
         let fixture = SubscriptionFetchFixture()
         let manager = SubscriptionManager(paths: paths) { await fixture.fetch($0, $1) }
         let added = try await manager.add(url: "https://example.com/feed.txt", name: nil)
         let before = try Data(contentsOf: manager.cacheURL(added.id))
         await fixture.resetCounts()
         await fixture.set(.init(data: nil, etag: nil, lastModified: nil, status: 503))
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { await fixture.catalog(nil) })
-        #expect(report.catalogError != nil && report.errors[added.id]?.contains("503") == true && !report.changed)
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
+        #expect(report.errors[added.id]?.contains("503") == true && !report.changed)
         #expect(try Data(contentsOf: manager.cacheURL(added.id)) == before)
-        let failedRequests = await fixture.counts()
-        #expect(failedRequests.feeds == 1 && failedRequests.catalog == 1)
+        #expect(await fixture.counts().feeds == 1)
         #expect(manager.subscriptions().first?.lastError == report.errors[added.id])
         await fixture.set(.init(data: nil, etag: nil, lastModified: nil, status: 200))
-        let empty = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(1), catalog: { nil })
+        let empty = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(1))
         #expect(empty.errors[added.id] != nil && !empty.changed)
         #expect(try Data(contentsOf: manager.cacheURL(added.id)) == before)
     }
 
-    @Test func checksumAndSizeFailuresDoNotReplaceUsableCache() async throws {
+    @Test func emptyAndOversizedDownloadsDoNotReplaceUsableCache() async throws {
         let fixture = SubscriptionFetchFixture()
         let manager = SubscriptionManager(paths: paths) { await fixture.fetch($0, $1) }
         let data = Data("示例词\tshi li ci\t50\n".utf8)
-        let url = URL(string: "https://example.com/feed.txt")!
-        let feed = VocabularyCatalog.Feed(id: "feed", name: "Feed", description: "", category: nil, entries: nil, url: url,
-            version: nil, updated: nil, sha256: PackageManager.sha256(of: data), size: nil)
-        let added = try await manager.add(url: url.absoluteString, name: nil, feed: feed)
-        await fixture.set(.init(data: Data("其他词\tqi ta ci\t50\n".utf8), etag: nil, lastModified: nil, status: 200))
-        let checksum = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
-        #expect(checksum.errors[added.id]?.contains("SHA-256") == true && !checksum.changed)
+        let added = try await manager.add(url: "https://example.com/feed.txt", name: nil)
+        await fixture.set(.init(data: Data("# no entries\n".utf8), etag: nil, lastModified: nil, status: 200))
+        let empty = await manager.refresh(mode: .manual, now: refreshDate)
+        #expect(empty.errors[added.id] != nil && !empty.changed)
         await fixture.set(.init(data: Data(repeating: 0, count: SubscriptionManager.maxBytes + 1), etag: nil, lastModified: nil, status: 200))
-        let oversized = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(1), catalog: { nil })
+        let oversized = await manager.refresh(mode: .manual, now: refreshDate.addingTimeInterval(1))
         #expect(oversized.errors[added.id]?.contains("20 MB") == true && !oversized.changed)
         #expect(try Data(contentsOf: manager.cacheURL(added.id)) == data)
         #expect(await fixture.counts().feeds == 3) // add + two checks; no retries
@@ -605,7 +523,7 @@ extension SubscriptionTests {
         var limit = Data("边界词\tbian jie ci\t50\n#".utf8)
         limit.append(Data(repeating: 0x61, count: SubscriptionManager.maxBytes - limit.count))
         await fixture.set(.init(data: limit, etag: nil, lastModified: nil, status: 200))
-        let accepted = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
+        let accepted = await manager.refresh(mode: .manual, now: refreshDate)
         #expect(accepted.changed && accepted.errors.isEmpty)
         #expect(try Data(contentsOf: manager.cacheURL(added.id)).count == SubscriptionManager.maxBytes)
     }
@@ -617,7 +535,7 @@ extension SubscriptionTests {
         try FileManager.default.removeItem(at: manager.cacheURL(added.id))
         await fixture.resetCounts()
         await fixture.set(.init(data: nil, etag: "v1", lastModified: nil, status: 304))
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
         #expect(report.errors[added.id] != nil && !report.changed)
         let requestedETags = await fixture.etags
         let requests = await fixture.counts()
@@ -646,38 +564,19 @@ extension SubscriptionTests {
         var manager = SubscriptionManager(paths: paths) { await fixture.fetch($0, $1) }
         manager.fetchCommitDate = { await fixture.metadata($0) }
         let original = try seed(manager, count: 40, github: true)
-        let catalog = emptyCatalog()
-        let first = await manager.refresh(mode: .due, now: refreshDate, catalog: { await fixture.catalog(catalog) })
+        let first = await manager.refresh(mode: .due, now: refreshDate)
         #expect(first.checkedIDs == original.prefix(32).map(\.id) && first.deferredCount == 8)
         #expect(first.changedIDs.count == 32 && first.errors.isEmpty)
         let requests = await fixture.counts()
-        #expect(requests.feeds == 32 && requests.metadata == 32 && requests.catalog == 1)
-        #expect(requests.feeds + requests.metadata + requests.catalog == SubscriptionManager.maxRequestsPerRefresh)
+        #expect(requests.feeds == 32 && requests.metadata == 32)
+        #expect(requests.feeds + requests.metadata == SubscriptionManager.maxRequestsPerRefresh)
         await fixture.resetCounts()
-        let next = await manager.refresh(mode: .due, now: refreshDate.addingTimeInterval(1), catalog: { await fixture.catalog(catalog) })
+        let next = await manager.refresh(mode: .due, now: refreshDate.addingTimeInterval(1))
         #expect(next.checkedIDs == original.suffix(8).map(\.id) && next.deferredCount == 0)
         #expect(manager.subscriptions().count == 40)
         #expect(original.allSatisfy { FileManager.default.fileExists(atPath: manager.cacheURL($0.id).path) })
         let nextRequests = await fixture.counts()
-        #expect(nextRequests.feeds == 8 && nextRequests.metadata == 8 && nextRequests.catalog == 1)
-    }
-
-    @Test func adoptionPersistsFeedIDWithoutChangingSourceAndRejectsPrivateNamesakes() async throws {
-        let fixture = SubscriptionFetchFixture()
-        let manager = SubscriptionManager(paths: paths) { await fixture.fetch($0, $1) }
-        let same = URL(string: "https://example.com/owner/words/main/terms.txt")!
-        let added = try await manager.add(url: same.absoluteString, name: nil)
-        let sameFeed = VocabularyCatalog.Feed(id: "terms", name: "Terms", description: "", category: nil, entries: nil,
-            url: same, version: nil, updated: nil, sha256: nil, size: nil)
-        let catalog = VocabularyCatalog(version: 1, name: "Test", homepage: nil, updated: nil, feeds: [sameFeed])
-        #expect(try manager.follow(catalog).isEmpty)
-        #expect(manager.subscriptions().first?.feedID == "terms")
-        let privateFeed = try await manager.add(url: "https://example.com/private/words/main/terms.txt", name: nil)
-        let localFeed = try await manager.add(url: root.appendingPathComponent("terms.txt").absoluteString, name: nil)
-        #expect(try manager.follow(catalog).isEmpty)
-        #expect(manager.subscriptions().first(where: { $0.id == privateFeed.id })?.feedID == nil)
-        #expect(manager.subscriptions().first(where: { $0.id == localFeed.id })?.feedID == nil)
-        #expect(manager.subscriptions().first(where: { $0.id == added.id })?.feedID == "terms")
+        #expect(nextRequests.feeds == 8 && nextRequests.metadata == 8)
     }
 
     @Test func refreshDoesNotResurrectFeedRemovedWhileFetching() async throws {
@@ -688,7 +587,7 @@ extension SubscriptionTests {
             try SubscriptionManager(paths: localPaths).remove(id: original.id)
             return .init(data: Data("旧响应\tjiu xiang ying\t50\n".utf8), etag: nil, lastModified: nil, status: 200)
         }
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
         #expect(manager.subscriptions().isEmpty && !report.changed)
         #expect(!FileManager.default.fileExists(atPath: manager.cacheURL(original.id).path))
     }
@@ -710,7 +609,7 @@ extension SubscriptionTests {
             try peer.save(items)
             return nil
         }
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
         let after = manager.subscriptions()
         #expect(report.changed && report.errors.isEmpty && after.count == 2)
         #expect(after[0].name == "Renamed" && after[0].updateInterval == .manual && after[0].entryCount == 1)
@@ -729,7 +628,7 @@ extension SubscriptionTests {
             try peer.save(items)
             return .init(data: Data("旧响应\tjiu xiang ying\t50\n".utf8), etag: "old", lastModified: nil, status: 200)
         }
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
         #expect(!report.changed && manager.subscriptions().first?.url == newURL)
         #expect(manager.subscriptions().first?.lastChecked == nil)
         #expect(!FileManager.default.fileExists(atPath: manager.cacheURL(original.id).path))
@@ -788,7 +687,7 @@ extension SubscriptionTests {
             return nil
         }
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: paths.rimelingoDir.path) }
-        let report = await manager.refresh(mode: .manual, now: refreshDate, catalog: { nil })
+        let report = await manager.refresh(mode: .manual, now: refreshDate)
         #expect(report.errors[original.id] != nil)
         #expect(report.changedIDs == [original.id]) // downloaded bytes are still usable
         #expect(manager.subscriptions().first?.lastChecked == nil)
@@ -804,7 +703,7 @@ extension SubscriptionTests {
         try FileManager.default.createDirectory(at: manager.cacheURL(original[0].id).deletingLastPathComponent(), withIntermediateDirectories: true)
         let before = Data("示例词\tshi li ci\t50\n".utf8)
         for item in original { try before.write(to: manager.cacheURL(item.id)) }
-        let report = await manager.refresh(mode: .due, now: refreshDate, catalog: { nil })
+        let report = await manager.refresh(mode: .due, now: refreshDate)
         #expect(report.checkedIDs == original.map(\.id) && report.changedIDs == [original[0].id])
         #expect(report.errors.count == 1 && report.errors[original[1].id]?.contains("503") == true)
         #expect(try Data(contentsOf: manager.cacheURL(original[1].id)) == before)
@@ -835,22 +734,19 @@ private actor SubscriptionFetchGate {
 }
 
 extension SubscriptionTests {
-    @Test func olderSubscriptionsAreAdoptedByFileName() async throws {
-        let old = URL(string: "https://example.com/owner/words/old/ai-terms-dev-tools.txt")!
-        let official = URL(string: "https://example.com/owner/words/new/ai-terms-dev-tools.txt")!
-        let officialData = Data("氛围编程\n具身智能\n".utf8)
-        let manager = SubscriptionManager(paths: paths) { url, _ in
-            .init(data: url == official ? officialData : Data("氛围编程\n".utf8), etag: nil, lastModified: nil, status: 200)
+    /// Lists written by older builds carry fields this build no longer reads.
+    @Test func olderListsWithExtraFieldsStillLoadAndUpdate() async throws {
+        let manager = SubscriptionManager(paths: paths) { _, _ in
+            .init(data: Data("氛围编程\n具身智能\n".utf8), etag: nil, lastModified: nil, status: 200)
         }
-        let added = try await manager.add(url: old.absoluteString, name: nil)
-        #expect(added.feedID == nil)
-        let catalog = VocabularyCatalog(version: 2, name: "RimeLingo", homepage: nil, updated: nil, feeds: [
-            .init(id: "ai-terms-dev-tools", name: "AI 与开发术语", description: "", category: "ai", entries: 2, url: official,
-                  version: "2026-10-01", updated: "2026-10-01", sha256: PackageManager.sha256(of: officialData), size: nil),
-        ])
-        #expect(try manager.follow(catalog) == [added.id])
-        let adopted = manager.subscriptions().first!
-        #expect(adopted.feedID == "ai-terms-dev-tools" && adopted.url == official && adopted.expectedSHA256 != nil)
-        #expect(try await manager.update(id: adopted.id, force: true)?.entryCount == 2)
+        try FileManager.default.createDirectory(at: paths.rimelingoDir, withIntermediateDirectories: true)
+        try Data("""
+        [{"id": "terms", "name": "Terms", "url": "https://example.com/words/terms.txt", "addedAt": "2026-01-01T00:00:00Z",
+          "entryCount": 0, "newEntries": 0, "recentWords": [],
+          "feedID": "terms", "expectedSHA256": "\(String(repeating: "0", count: 64))"}]
+        """.utf8).write(to: manager.listURL)
+        #expect(manager.subscriptions().map(\.id) == ["terms"])
+        let updated = try await manager.update(id: "terms", force: true)
+        #expect(updated?.entryCount == 2 && updated?.lastError == nil && updated?.contentChanged == true)
     }
 }

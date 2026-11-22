@@ -276,7 +276,7 @@ struct DictionariesView: View {
 
     var body: some View {
         Form {
-            Section { PaneHeader(title: "词库", subtitle: "内置雾凇拼音；AI、互联网等专题词库按需订阅；其他输入方案一键安装。", symbol: "books.vertical") }
+            Section { PaneHeader(title: "词库", subtitle: "内置雾凇拼音；在线词库粘贴链接即可订阅；其他输入方案一键安装。", symbol: "books.vertical") }
 
             Section("内置") {
                 LabeledContent {
@@ -294,11 +294,9 @@ struct DictionariesView: View {
             }
             LanguageModelsSection()
             SubscriptionsSection()
-            RecommendedFeedsSection()
             SchemeCatalogSection()
         }
         .formStyle(.cards)
-        .task { await model.loadVocabularyCatalog() }
         .scrollTargetForScreenshots()
     }
 }
@@ -315,65 +313,6 @@ private struct LanguageModelsSection: View {
             Text("整句语言模型 · 可选")
         } footer: {
             Text("下载后在「输入习惯 → 整句语言模型」中选用。整句选词在本机完成；默认关闭。")
-        }
-    }
-}
-
-/// The official catalog from vocabulary.example.com: every feed with its size, version and date,
-/// one click to subscribe. Added feeds are managed once in SubscriptionsSection.
-private struct RecommendedFeedsSection: View {
-    @Environment(SettingsModel.self) private var model
-
-    var body: some View {
-        let feeds = model.vocabularyCatalog?.availableFeeds(subscriptions: model.subscriptions) ?? []
-        Section {
-            if feeds.isEmpty {
-                Text(model.vocabularyCatalog?.feeds.isEmpty == false
-                     ? "目录中的词库均已添加，可在上方管理更新。"
-                     : "暂无可添加词库。请刷新目录，或添加自定义链接。")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-            ForEach(feeds) { feed in
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: feed.category == "ai" ? "sparkles" : "globe.asia.australia")
-                        .foregroundStyle(Theme.accentText).font(.title3).frame(width: 26)
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text(feed.name).font(.body.weight(.medium))
-                            if let entries = feed.entries { Text("\(entries) 条补充词").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
-                        }
-                        Text(feed.description).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 10) {
-                            if let updated = feed.updated ?? feed.version { Label("更新于 \(updated)", systemImage: "clock") }
-                            if let size = feed.size { Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)) }
-                            if feed.sha256 != nil { Label("SHA-256 校验", systemImage: "checkmark.shield") }
-                        }
-                        .font(.caption2).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("添加") { Task { await model.addSubscription(url: feed.url.absoluteString, name: feed.name, feed: feed) } }
-                        .disabled(!model.canAddSubscription)
-                }
-                .padding(.vertical, 4)
-            }
-        } header: {
-            HStack {
-                Text("可添加词库")
-                if let updated = model.vocabularyCatalog?.updated {
-                    Text("目录 \(updated)").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button { Task { await model.loadVocabularyCatalog(force: true) } } label: {
-                    Label("刷新目录", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless).controlSize(.small).disabled(model.catalogRefreshing || model.subscriptionActivity != nil)
-                if let home = model.vocabularyCatalog?.homepage {
-                    Link(destination: home) { Label("官网", systemImage: "arrow.up.right.square") }.font(.caption)
-                }
-            }
-        } footer: {
-            Text(model.catalogError ?? "这些是基础词库之外的补充词，可随词表版本扩充。目录登记版本与 SHA-256，下载校验通过才会使用；已订阅词库按设定频率跟进新版本。")
-                .font(.caption).foregroundStyle(model.catalogError == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(Theme.warning))
         }
     }
 }
@@ -416,7 +355,7 @@ private struct SubscriptionsSection: View {
                 if !model.subscriptions.isEmpty {
                     Button { Task { await model.refreshSubscriptions() } } label: { Label("立即检查", systemImage: "arrow.clockwise") }
                         .buttonStyle(.borderless).controlSize(.small)
-                        .disabled(model.subscriptionActivity != nil || model.catalogRefreshing)
+                        .disabled(model.subscriptionActivity != nil)
                 }
                 if !adding {
                     Button {
@@ -431,7 +370,7 @@ private struct SubscriptionsSection: View {
             }
         } footer: {
             if model.subscriptions.isEmpty && !adding {
-                Text("可以添加下方目录中的词库，或粘贴兼容 RIME 的单表链接。每个词库可设为每天、每周自动更新或仅手动；新词在你停止打字后自动生效。")
+                Text("粘贴兼容 RIME 的单表链接即可添加词库。每个词库可设为每天、每周自动更新或仅手动；新词在你停止打字后自动生效。")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if model.subscriptions.count >= SubscriptionManager.maxSubscriptions {
@@ -457,7 +396,6 @@ private struct SubscriptionRow: View {
     let item: VocabularySubscription
 
     var body: some View {
-        let feed = model.vocabularyCatalog?.feeds.first { $0.matches(item) }
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "antenna.radiowaves.left.and.right")
                 .foregroundStyle(Theme.accentText).font(.title3).frame(width: 26)
@@ -465,15 +403,11 @@ private struct SubscriptionRow: View {
                 HStack(spacing: 6) {
                     Text(item.name).font(.body.weight(.medium))
                     Text("\(item.entryCount) 条补充词").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    if feed != nil { Text("目录词库").font(.caption).foregroundStyle(.secondary) }
                     if item.newEntries > 0 {
                         Text("+\(item.newEntries) 新词").font(.caption.weight(.medium))
                             .padding(.horizontal, 6).padding(.vertical, 1)
                             .background(Theme.success.opacity(0.15), in: Capsule()).foregroundStyle(Theme.success)
                     }
-                }
-                if let feed {
-                    Text(feed.description).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Text(item.url.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 HStack(spacing: 10) {

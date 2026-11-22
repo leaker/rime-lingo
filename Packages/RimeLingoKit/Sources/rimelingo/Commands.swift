@@ -387,7 +387,6 @@ struct Subscribe: AsyncParsableCommand {
             for (id, error) in result.errors.sorted(by: { $0.key < $1.key }) {
                 print("\(id): ⚠️ \(error)")
             }
-            if let error = result.catalogError { print("catalog: ⚠️ \(error)") }
             if result.deferredCount > 0 { print("\(result.deferredCount) feeds deferred to the next run") }
             if result.changed {
                 print("tables rebuilt with \(try Subscribe.rebuild(workspace)) entries")

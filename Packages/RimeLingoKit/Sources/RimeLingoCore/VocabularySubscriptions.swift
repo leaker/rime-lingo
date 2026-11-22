@@ -118,10 +118,6 @@ public struct VocabularySubscription: Sendable, Codable, Identifiable, Hashable 
     public var newEntries: Int = 0
     public var recentWords: [String] = []
     public var lastError: String?
-    /// Set when subscribed from the official catalog: the feed id and the checksum the
-    /// downloaded file must have (both follow the catalog when it publishes a new version).
-    public var feedID: String?
-    public var expectedSHA256: String?
     /// How often the automatic check may download it (absent in older files = daily).
     public var interval: UpdateInterval?
 
@@ -153,12 +149,10 @@ public enum SubscriptionError: Error, CustomStringConvertible {
     case tooLarge
     case empty
     case http(Int)
-    case checksum
     case limitReached(Int)
 
     public var description: String {
         switch self {
-        case .checksum: "下载的文件与词库目录登记的 SHA-256 不一致，未使用"
         case .invalidURL: "请输入 http(s) 开头的词库地址"
         case .tooLarge: "词库文件超过 20 MB 上限"
         case .empty: "没有解析到词条（支持 RIME dict.yaml、词条<Tab>编码 或 每行一个词）"
@@ -175,8 +169,8 @@ public struct SubscriptionManager: Sendable {
     public static let maxBytes = 20 << 20
     public static let maxSubscriptions = 32
     public static let maxBatchSize = 32
-    /// One catalog, one download and at most one commit-date request per selected feed.
-    public static let maxRequestsPerRefresh = 1 + maxBatchSize * 2
+    /// One download and at most one commit-date request per selected feed.
+    public static let maxRequestsPerRefresh = maxBatchSize * 2
     public static let tableName = "rimelingo_online"
 
     public enum RefreshMode: Sendable, Equatable {
@@ -189,8 +183,6 @@ public struct SubscriptionManager: Sendable {
         /// IDs whose cached bytes actually changed, independent of entry counts/badges.
         public var changedIDs: [String] = []
         public var deferredCount: Int = 0
-        public var catalog: VocabularyCatalog?
-        public var catalogError: String?
         /// Download/validation or persistence errors for individual subscriptions.
         public var errors: [String: String] = [:]
         public var changed: Bool { !changedIDs.isEmpty }
@@ -269,7 +261,7 @@ public struct SubscriptionManager: Sendable {
     }
 
     @discardableResult
-    public func add(url string: String, name: String?, feed: VocabularyCatalog.Feed? = nil) async throws -> VocabularySubscription {
+    public func add(url string: String, name: String?) async throws -> VocabularySubscription {
         guard let url = Self.normalize(string) else { throw SubscriptionError.invalidURL }
         let (subscription, inserted) = try withSubscriptionLock {
             var list = subscriptions()
@@ -278,10 +270,8 @@ public struct SubscriptionManager: Sendable {
             let base = url.deletingPathExtension().lastPathComponent.lowercased().filter { $0.isLetter || $0.isNumber }
             var id = base.isEmpty ? "sub" : String(base.prefix(24))
             while list.contains(where: { $0.id == id }) { id += "x" }
-            var subscription = VocabularySubscription(id: id, name: name?.isEmpty == false ? name! : url.lastPathComponent,
+            let subscription = VocabularySubscription(id: id, name: name?.isEmpty == false ? name! : url.lastPathComponent,
                                                       url: url, addedAt: Date())
-            subscription.feedID = feed?.id
-            subscription.expectedSHA256 = feed?.sha256
             list.append(subscription)
             try save(list)
             return (subscription, true)
@@ -303,42 +293,6 @@ public struct SubscriptionManager: Sendable {
             guard let index = list.firstIndex(where: { $0.id == id }) else { return }
             list[index].interval = interval
             try save(list)
-        }
-    }
-
-    /// Points catalog subscriptions at the catalog's current file and checksum. Returns
-    /// the ids whose file changed (a new version to download).
-    @discardableResult
-    public func follow(_ catalog: VocabularyCatalog) throws -> [String] {
-        try withSubscriptionLock {
-            var list = subscriptions()
-            var changed: [String] = []
-            var dirty = false
-            for index in list.indices {
-                // Adopt older links only within the same source, never a private/local
-                // file merely sharing the official feed's name. GitHub tags may differ.
-                if list[index].feedID == nil,
-                   let match = catalog.feeds.first(where: { feed in
-                       let old = list[index].url
-                       if feed.url == old { return true }
-                       return old.host != nil && old.host == feed.url.host
-                           && old.pathComponents.filter { $0 != "/" }.prefix(2) == feed.url.pathComponents.filter { $0 != "/" }.prefix(2)
-                           && old.lastPathComponent == feed.url.lastPathComponent
-                   }) {
-                    list[index].feedID = match.id
-                    dirty = true
-                }
-                guard let feedID = list[index].feedID, let feed = catalog.feeds.first(where: { $0.id == feedID }) else { continue }
-                if list[index].url != feed.url || list[index].expectedSHA256 != feed.sha256 {
-                    list[index].url = feed.url
-                    list[index].expectedSHA256 = feed.sha256
-                    list[index].etag = nil
-                    changed.append(list[index].id)
-                    dirty = true
-                }
-            }
-            if dirty { try save(list) }
-            return changed
         }
     }
 
@@ -373,8 +327,7 @@ public struct SubscriptionManager: Sendable {
             // lock so removal, source edits and newer completed checks stay intact.
             var list = subscriptions()
             guard let index = list.firstIndex(where: { $0.id == id }),
-                  list[index].url == requested.url,
-                  list[index].expectedSHA256 == requested.expectedSHA256 else { return nil }
+                  list[index].url == requested.url else { return nil }
             guard list[index].lastChecked == requested.lastChecked else {
                 return UpdateResult(item: list[index], contentChanged: false)
             }
@@ -388,7 +341,6 @@ public struct SubscriptionManager: Sendable {
                     guard previousDigest != nil,
                           let text = try? String(contentsOf: cached, encoding: .utf8),
                           !VocabularyParser.parse(text).isEmpty else { throw SubscriptionError.empty }
-                    if let expected = item.expectedSHA256, previousDigest != expected.lowercased() { throw SubscriptionError.checksum }
                     item.etag = response.etag ?? item.etag
                 } else {
                     guard let data = response.data else { throw SubscriptionError.empty }
@@ -396,7 +348,6 @@ public struct SubscriptionManager: Sendable {
                     let digest = PackageManager.sha256(of: data)
                     let entries = VocabularyParser.parse(String(decoding: data, as: UTF8.self))
                     guard !entries.isEmpty else { throw SubscriptionError.empty }
-                    if let expected = item.expectedSHA256, digest != expected.lowercased() { throw SubscriptionError.checksum }
                     if digest != previousDigest {
                         let previous = Set(VocabularyParser.parse((try? String(contentsOf: cached, encoding: .utf8)) ?? "").map(\.text))
                         let added = entries.map(\.text).filter { !previous.contains($0) }
@@ -421,8 +372,8 @@ public struct SubscriptionManager: Sendable {
     }
 
     /// Checks at most 32 feeds, oldest first. Existing longer lists are preserved and
-    /// rotate through later batches. A failed catalog/download keeps the cached data.
-    public func refresh(mode: RefreshMode, now: Date = Date(), catalog: (() async -> VocabularyCatalog?)? = nil) async -> RefreshResult {
+    /// rotate through later batches. A failed download keeps the cached data.
+    public func refresh(mode: RefreshMode, now: Date = Date()) async -> RefreshResult {
         let eligible = subscriptions().enumerated().filter { _, item in
             if mode == .manual { return true }
             guard let interval = item.updateInterval.seconds else { return false }
@@ -438,14 +389,6 @@ public struct SubscriptionManager: Sendable {
         var result = RefreshResult()
         result.deferredCount = eligible.count - selected.count
         guard !selected.isEmpty else { return result }
-        if mode == .manual || selected.contains(where: { $0.feedID != nil }) {
-            if let fresh = await (catalog ?? { try? await VocabularyCatalog.refresh(paths) })() {
-                result.catalog = fresh
-                do { try follow(fresh) } catch { result.catalogError = String(describing: error) }
-            } else {
-                result.catalogError = "无法刷新词库目录，继续使用现有词库地址"
-            }
-        }
         for item in selected {
             let before = try? PackageManager.sha256(of: cacheURL(item.id))
             do {
@@ -463,8 +406,8 @@ public struct SubscriptionManager: Sendable {
     }
 
     /// Compatibility wrapper for automatic callers.
-    public func updateDue(now: Date = Date(), catalog: (() async -> VocabularyCatalog?)? = nil) async -> Bool {
-        await refresh(mode: .due, now: now, catalog: catalog).changed
+    public func updateDue(now: Date = Date()) async -> Bool {
+        await refresh(mode: .due, now: now).changed
     }
 
     // MARK: - Tables
