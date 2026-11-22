@@ -95,6 +95,31 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         try makeBundle(scratch.url("Downloads/Copy/RimeLingo.app"), version: "0.3.0", build: 21)
         #expect(!LaunchContext.isInstalled(scratch.url("Downloads/Copy/RimeLingo.app")))
     }
+
+    /// `~/Library/Input Methods` kept elsewhere (dotfiles, another volume) under another
+    /// name: LaunchServices reports the resolved path of a copy started through the link.
+    @Test func anInputMethodsFolderLinkedToAnotherNameIsStillInstalled() throws {
+        let scratch = Scratch()
+        let target = scratch.url("real/IMs")
+        try makeBundle(target.appendingPathComponent("RimeLingo.app"), version: "0.3.0", build: 21)
+        try FileManager.default.createDirectory(at: scratch.url("home/Library"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: scratch.url("home/Library/Input Methods"), withDestinationURL: target)
+        let location = scratch.url("home/Library/Input Methods/RimeLingo.app")
+        let real = target.appendingPathComponent("RimeLingo.app").resolvingSymlinksInPath()
+        let unrelated = [scratch.url("other/Library/Input Methods/RimeLingo.app")]
+
+        #expect(real.deletingLastPathComponent().lastPathComponent == "IMs")
+        #expect(LaunchContext.isInstalled(real, locations: [location]))
+        #expect(LaunchContext.classify(bundle: real, arguments: ["x"], locations: [location]) == .inputMethod)
+        // Through the link the name alone settles it.
+        #expect(LaunchContext.isInstalled(location, locations: unrelated))
+        // The same real path is a download when no install location leads to it.
+        #expect(!LaunchContext.isInstalled(real, locations: unrelated))
+        #expect(LaunchContext.classify(bundle: real, arguments: ["x"], locations: unrelated) == .installer)
+        // Another bundle next to the installed one is not installed.
+        try makeBundle(target.appendingPathComponent("Other.app"), version: "0.3.0", build: 21)
+        #expect(!LaunchContext.isInstalled(target.appendingPathComponent("Other.app"), locations: [location]))
+    }
 }
 
 @Suite struct InstallOfferTests {

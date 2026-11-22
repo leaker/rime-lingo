@@ -12,22 +12,35 @@ public enum LaunchContext: Equatable, Sendable {
 
     public static let inputMethodsFolder = "Input Methods"
 
-    public static func classify(bundle: URL, arguments: [String]) -> LaunchContext {
+    public static func classify(
+        bundle: URL, arguments: [String],
+        locations: [URL] = [RimeLingoInstallations.userURL(), RimeLingoInstallations.systemURL]
+    ) -> LaunchContext {
         if arguments.contains("--install") { return .registerInputSource(select: true) }
         if arguments.contains("--enable") { return .registerInputSource(select: false) }
-        return isInstalled(bundle) ? .inputMethod : .installer
+        return isInstalled(bundle, locations: locations) ? .inputMethod : .installer
     }
 
-    /// Whether the bundle lies directly in a folder named "Input Methods"
-    /// (`~/Library/Input Methods`, `/Library/Input Methods`), as given or once links are
-    /// resolved. The folder is matched by name and not against the two known paths: an
-    /// installed copy that is wrongly taken for a download would never serve input again,
-    /// which is far worse than an installer that does not show up for a copy someone put
-    /// into a folder of that name elsewhere.
-    public static func isInstalled(_ bundle: URL) -> Bool {
-        [bundle.standardizedFileURL, bundle.resolvingSymlinksInPath()].contains {
+    /// Whether the bundle is an installed copy: it lies directly in a folder named
+    /// "Input Methods" (`~/Library/Input Methods`, `/Library/Input Methods`), as given or
+    /// once links are resolved, or it is the very bundle one of the two known install
+    /// locations leads to. The second rule covers an Input Methods folder that is itself a
+    /// link to a folder of another name: LaunchServices hands a copy started through it
+    /// the resolved path, in which nothing is called "Input Methods" any more.
+    ///
+    /// The folder is matched by name as well as against the known paths: an installed copy
+    /// that is wrongly taken for a download would never serve input again, which is far
+    /// worse than an installer that does not show up for a copy someone put into a folder
+    /// of that name elsewhere.
+    public static func isInstalled(
+        _ bundle: URL,
+        locations: [URL] = [RimeLingoInstallations.userURL(), RimeLingoInstallations.systemURL]
+    ) -> Bool {
+        let resolved = bundle.resolvingSymlinksInPath()
+        if [bundle.standardizedFileURL, resolved].contains(where: {
             $0.deletingLastPathComponent().lastPathComponent == inputMethodsFolder
-        }
+        }) { return true }
+        return locations.contains { $0.resolvingSymlinksInPath().path == resolved.path }
     }
 }
 
