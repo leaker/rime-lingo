@@ -56,8 +56,10 @@ struct InstallerView: View {
         }
     }
 
-    /// The name the input menu shows for the input source in the system's language
-    /// (InfoPlist.strings: 灵译输入法 in Chinese, RimeLingo elsewhere).
+    /// The name the input menu shows for the input source under the user's preferred
+    /// languages (InfoPlist.strings): RimeLingo when English is among them with Simplified
+    /// Chinese not ahead of it, 灵译输入法 otherwise. The development language is zh-Hans,
+    /// so a list with neither language falls back to the Chinese name.
     private static let inputSourceName = Bundle.main.localizedInfoDictionary?["CFBundleDisplayName"] as? String ?? "灵译输入法"
 
     private var title: String {
