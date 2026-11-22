@@ -79,6 +79,11 @@ import Testing
         #expect(ManifestKeys.shipped.isConfigured == UpdateConfiguration.isConfigured)
         #expect(ManifestKeys.shipped.accepted == [everyday, backup].filter { everyday != placeholder && $0 != placeholder })
         #expect(everyday == placeholder || everyday != backup, "the backup key must be a different key")
+        // The backup key comes with the proof that its private half existed, or not at all.
+        let proof = UpdateConfiguration.manifestBackupKeyProof
+        #expect((backup == placeholder) == (proof == placeholder))
+        #expect(backup == placeholder || ManifestVerifier.verify(manifest: UpdateConfiguration.keyProofMessage(for: backup),
+                                                                 signature: Data(proof.utf8), publicKey: backup))
 
         #expect(!UpdateConfiguration.isConfigured(placeholder))
         let data = manifest()
@@ -177,6 +182,27 @@ import Testing
         #expect(!UpdateConfiguration.isSmallOrderPoint(key.publicKey.rawRepresentation) && UpdateConfiguration.isConfigured(publicKey))
         #expect(!UpdateConfiguration.isSmallOrderPoint(Data(count: 31)) && !UpdateConfiguration.isSmallOrderPoint(Data()))
         #expect(ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: ManifestKeys(publicKey, backup: zero.base64EncodedString())))
+    }
+
+    /// The proof scripts/release.sh checks for the backup constant. The fixed pair was made
+    /// by `sign-manifest.swift keygen` and `prove` with a throw-away key, so the sentence
+    /// signed here and there is the same one.
+    @Test func aProofOfPossessionBelongsToOneKeyAndIsNoManifestSignature() throws {
+        let fixedKey = "g+iAXs9Y5N/ZNu9koWmqsDeg5usEFN2ahHZeqYSITlU="
+        let fixedProof = Data("U5kfeEAvyrQdDgZY/QbzbAlJIzV5gXW3lqIjPVoU2WjcY7MpM+PjNSbt4Ek7uWbyVOaeCssYMz3W/AFbC1EkAg==".utf8)
+        #expect(ManifestVerifier.verify(manifest: UpdateConfiguration.keyProofMessage(for: fixedKey), signature: fixedProof, publicKey: fixedKey))
+
+        let message = UpdateConfiguration.keyProofMessage(for: publicKey)
+        let proof = try signature(message)
+        #expect(ManifestVerifier.verify(manifest: message, signature: proof, publicKey: publicKey))
+        #expect(!ManifestVerifier.verify(manifest: UpdateConfiguration.keyProofMessage(for: fixedKey), signature: proof, publicKey: publicKey))
+        #expect(!ManifestVerifier.verify(manifest: message, signature: fixedProof, publicKey: publicKey))
+        #expect(!ManifestVerifier.verify(manifest: message, signature: proof, publicKey: fixedKey))
+        // Published with the source, it must be worthless as the signature of a release.
+        #expect(!ManifestVerifier.verify(manifest: manifest(), signature: proof, keys: ManifestKeys(publicKey)))
+        #expect(throws: UpdateFailure.malformedManifest("decode")) {
+            try ManifestVerifier.release(manifest: message, signature: proof, keys: ManifestKeys(publicKey))
+        }
     }
 
     @Test func acceptsAManifestSignedByTheKey() throws {

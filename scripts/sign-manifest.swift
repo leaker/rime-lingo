@@ -6,8 +6,11 @@
 //   swift scripts/sign-manifest.swift pubkey               # prints the public key of the stored key
 //   swift scripts/sign-manifest.swift sign latest.json     # writes latest.json.sig
 //   swift scripts/sign-manifest.swift verify latest.json <public-key-base64>
+//   swift scripts/sign-manifest.swift check-key <public-key-base64>   # is it a usable public key?
+//   swift scripts/sign-manifest.swift prove                # prints a signature that shows the key is held
+//   swift scripts/sign-manifest.swift check-proof <public-key-base64> <proof>
 //
-// `--backup` after keygen, pubkey or sign uses the backup key instead of the everyday one
+// `--backup` after keygen, pubkey, sign or prove uses the backup key instead of the everyday one
 // (Keychain account "ed25519-backup" instead of "ed25519"). The apps trust a manifest
 // signed by either (UpdateConfiguration.manifestBackupPublicKey), so the backup key is what
 // still reaches installed copies when the everyday key is lost or has leaked. See below.
@@ -32,7 +35,13 @@
 //
 // The backup key is generated once, before the first release, and does not stay on this Mac:
 //   swift scripts/sign-manifest.swift keygen --backup
-// prints its PUBLIC key; paste that into `manifestBackupPublicKey` and commit. Then move
+// prints its PUBLIC key; paste that into `manifestBackupPublicKey`. While the key is still
+// here, also run
+//   swift scripts/sign-manifest.swift prove --backup
+// and paste what it prints into `manifestBackupKeyProof`, then commit both. The proof is a
+// signature over a fixed sentence naming the public key: scripts/release.sh checks it at
+// every release, so a mistyped or foreign backup constant is caught while it can still be
+// fixed, without the private key. It does not show that the offline copy is readable. Then move
 // the private half to offline storage. This prints its 32 bytes as hex, to be written down
 // or stored where no network reaches:
 //   security find-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519-backup -w
@@ -69,7 +78,9 @@ if let index = arguments.firstIndex(of: "--ephemeral-key-file") {
 }
 var backup = false
 if let index = arguments.firstIndex(of: "--backup") {
-    guard ["keygen", "pubkey", "sign"].contains(arguments.first ?? "") else { fail("--backup goes with keygen, pubkey or sign") }
+    guard ["keygen", "pubkey", "sign", "prove"].contains(arguments.first ?? "") else {
+        fail("--backup goes with keygen, pubkey, sign or prove")
+    }
     backup = true
     arguments.remove(at: index)
 }
@@ -129,6 +140,11 @@ func publicKey(_ text: String) -> Curve25519.Signing.PublicKey? {
     return smallOrderPoints.contains(y) ? nil : try? Curve25519.Signing.PublicKey(rawRepresentation: data)
 }
 
+/// What a proof of possession signs. Keep identical to UpdateConfiguration.keyProofMessage.
+func proofMessage(for key: String) -> Data {
+    Data("RimeLingo manifest signing key, proof of possession: \(key)".utf8)
+}
+
 switch arguments.first {
 case "keygen":
     guard arguments.count == 1 else { fail("usage: keygen\(flags)") }
@@ -172,6 +188,25 @@ case "verify":
     let text = try String(contentsOfFile: arguments[1] + ".sig", encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     guard let signature = Data(base64Encoded: text), key.isValidSignature(signature, for: data) else { fail("signature invalid") }
     print("signature valid")
+case "check-key":
+    // Exactly what `keygen` prints: a constant with a stray character is not close enough.
+    guard arguments.count == 2 else { fail("usage: check-key <public-key>") }
+    guard let key = publicKey(arguments[1]), key.rawRepresentation.base64EncodedString() == arguments[1] else {
+        fail("not a usable Ed25519 public key: \(arguments[1])")
+    }
+    print("public key usable")
+case "prove":
+    guard arguments.count == 1 else { fail("usage: prove\(flags)") }
+    let key = requireKey()
+    print(try key.signature(for: proofMessage(for: key.publicKey.rawRepresentation.base64EncodedString())).base64EncodedString())
+case "check-proof":
+    guard arguments.count == 3 else { fail("usage: check-proof <public-key> <proof>") }
+    guard let key = publicKey(arguments[1]) else { fail("not a usable Ed25519 public key: \(arguments[1])") }
+    guard let proof = Data(base64Encoded: arguments[2]), key.isValidSignature(proof, for: proofMessage(for: arguments[1])) else {
+        fail("this is not a proof made with the private key of \(arguments[1])")
+    }
+    print("proof valid")
 default:
-    fail("usage: sign-manifest.swift keygen [--backup] | pubkey [--backup] | sign [--backup] <file> | verify <file> <public-key>")
+    fail("usage: sign-manifest.swift keygen [--backup] | pubkey [--backup] | sign [--backup] <file> | verify <file> <public-key>"
+        + " | check-key <public-key> | prove [--backup] | check-proof <public-key> <proof>")
 }

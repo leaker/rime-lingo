@@ -87,6 +87,46 @@ done
 cp "$WORK/real.sig" "$WORK/latest.json.sig"
 "${SIGN[@]}" verify "$WORK/latest.json" "$PUBLIC_KEY" >/dev/null
 
+
+# A constant is checked the way release.sh does: exactly a key as keygen prints it.
+"${SIGN[@]}" check-key "$PUBLIC_KEY" >/dev/null
+"${SIGN[@]}" check-key "$BACKUP_PUBLIC_KEY" >/dev/null
+for bad in "" REPLACE_BEFORE_FIRST_RELEASE "${PUBLIC_KEY%=}" "${PUBLIC_KEY%??}" "${PUBLIC_KEY}=" "A$PUBLIC_KEY" " $PUBLIC_KEY" \
+           "$PUBLIC_KEY " "${PUBLIC_KEY}AAAA" "$(tr 'A-Za-z0-9' '!' <<<"${PUBLIC_KEY:0:1}")${PUBLIC_KEY:1}" \
+           AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=; do
+  if "${SIGN[@]}" check-key "$bad" > "$WORK/check-key.log" 2>&1; then fail "check-key accepted '$bad'"; fi
+done
+
+# The proof of possession: made with the private key, tied to its public key.
+PROOF="$("${SIGN[@]}" prove "${BACKUP[@]}")"
+[[ "$PROOF" =~ ^[A-Za-z0-9+/]{86}==$ ]] || fail "prove --backup must print the proof and nothing else"
+! grep -qF "$BACKUP_PRIVATE" <<<"$PROOF" || fail "prove --backup printed the private key"
+"${SIGN[@]}" check-proof "$BACKUP_PUBLIC_KEY" "$PROOF" >/dev/null
+EVERYDAY_PROOF="$("${SIGN[@]}" prove "${KEY[@]}")"
+"${SIGN[@]}" check-proof "$PUBLIC_KEY" "$EVERYDAY_PROOF" >/dev/null
+check_proof_refuses() {  # <public key> <proof> <what>
+  if "${SIGN[@]}" check-proof "$1" "$2" > "$WORK/check-proof.log" 2>&1; then fail "check-proof accepted $3"; fi
+}
+check_proof_refuses "$PUBLIC_KEY" "$PROOF" "the backup key's proof for the everyday key"
+check_proof_refuses "$BACKUP_PUBLIC_KEY" "$EVERYDAY_PROOF" "the everyday key's proof for the backup key"
+check_proof_refuses "$OTHER" "$PROOF" "a proof for a key it was not made with"
+check_proof_refuses "$BACKUP_PUBLIC_KEY" "REPLACE_BEFORE_FIRST_RELEASE" "the placeholder"
+check_proof_refuses "$BACKUP_PUBLIC_KEY" "" "an empty proof"
+check_proof_refuses "$BACKUP_PUBLIC_KEY" "$(python3 -c 'import base64; print(base64.b64encode(bytes(64)).decode())')" "an all-zero proof"
+check_proof_refuses AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+  "$(python3 -c 'import base64; print(base64.b64encode(bytes([1] + [0] * 63)).decode())')" "a forged proof for a small-order key"
+# A signature of the manifest is not a proof, and a proof does not sign a manifest.
+check_proof_refuses "$PUBLIC_KEY" "$(cat "$WORK/latest.json.sig")" "a manifest signature"
+cp "$WORK/latest.json.sig" "$WORK/real.sig"
+echo "$EVERYDAY_PROOF" > "$WORK/latest.json.sig"
+if "${SIGN[@]}" verify "$WORK/latest.json" "$PUBLIC_KEY" > "$WORK/proof-as-signature.log" 2>&1; then
+  fail "a proof passed for a manifest signature"
+fi
+cp "$WORK/real.sig" "$WORK/latest.json.sig"
+if "${SIGN[@]}" prove --backup --ephemeral-key-file "$WORK/missing" > "$WORK/prove-missing.log" 2>&1; then
+  fail "prove --backup without a key"
+fi
+
 # Pre-release versions, wrong archive names and bad numbers are refused.
 mkdir "$WORK/bad"
 for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip 0.3.1 21 15.0" \
@@ -97,4 +137,4 @@ for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip
   fi
   [[ ! -e "$WORK/bad/latest.json" ]] || fail "wrote a manifest for: $arguments"
 done
-echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, backup key, small-order keys, refused input'
+echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, backup key, small-order keys, key check, proof of possession, refused input'

@@ -18,6 +18,19 @@ public enum UpdateConfiguration {
     /// `swift scripts/sign-manifest.swift keygen --backup`; scripts/release.sh refuses to
     /// publish while this is the placeholder. On its own it does not switch the updater on.
     public static let manifestBackupPublicKey = "REPLACE_BEFORE_FIRST_RELEASE"
+    /// Signature (base64) of `keyProofMessage(for: manifestBackupPublicKey)` by the backup
+    /// private key. TO BE REPLACED BEFORE THE FIRST RELEASE with the output of
+    /// `swift scripts/sign-manifest.swift prove --backup`, run before that key goes offline.
+    /// The apps never read it. It is how scripts/release.sh and the tests tell, with the
+    /// private half out of reach, that the backup constant is the key that was generated
+    /// here and not a mistyped or made-up one, which would otherwise only show on the day
+    /// the backup key is needed.
+    public static let manifestBackupKeyProof = "REPLACE_BEFORE_FIRST_RELEASE"
+    /// What a proof signs. Not JSON, so a proof can never pass for the signature of a
+    /// manifest. Keep identical to scripts/sign-manifest.swift.
+    public static func keyProofMessage(for key: String) -> Data {
+        Data("RimeLingo manifest signing key, proof of possession: \(key)".utf8)
+    }
 
     /// Only the everyday key decides this: a build with just a backup key stays inert.
     public static var isConfigured: Bool { isConfigured(manifestPublicKey) }

@@ -26,11 +26,14 @@
 #      scripts/sign-manifest.swift, with what protects the Keychain item and what does not).
 #      Backup key, so that losing or leaking that key does not strand installed copies:
 #        swift scripts/sign-manifest.swift keygen --backup
-#      Paste the PUBLIC key it prints into `manifestBackupPublicKey` in the same file and
-#      commit, then move the private half to offline storage and delete it from the
-#      Keychain (commands at the top of scripts/sign-manifest.swift). Installed copies
-#      accept a manifest signed by either key. This script refuses to release while the
-#      backup constant is the placeholder; it does not ask for the backup private key.
+#      Paste the PUBLIC key it prints into `manifestBackupPublicKey` in the same file, and
+#      the output of
+#        swift scripts/sign-manifest.swift prove --backup
+#      into `manifestBackupKeyProof`. Commit, then move the private half to offline storage
+#      and delete it from the Keychain (commands at the top of scripts/sign-manifest.swift).
+#      Installed copies accept a manifest signed by either key. This script refuses to
+#      release while the backup constant is the placeholder, is not a usable key, or does
+#      not match the proof; it does not ask for the backup private key.
 #   2. Notarization credentials, stored by notarytool in the Keychain under a profile name:
 #        xcrun notarytool store-credentials "rimelingo-notary"
 #      Another name goes into RIMELINGO_NOTARY_PROFILE.
@@ -134,6 +137,20 @@ SOURCE_BACKUP_KEY="$(source_key manifestBackupPublicKey)"
 [[ "$SOURCE_BACKUP_KEY" != "$PLACEHOLDER_KEY" ]] \
   || die "manifestBackupPublicKey is still the placeholder; run 'swift scripts/sign-manifest.swift keygen --backup', paste the key, commit"
 [[ "$SOURCE_BACKUP_KEY" != "$SOURCE_KEY" ]] || die "manifestBackupPublicKey is the same key as manifestPublicKey: it backs nothing up"
+# The apps silently leave out a constant that is not a usable key, and a mangled everyday
+# key switches the updater off for good: both must be exactly what keygen printed.
+swift scripts/sign-manifest.swift check-key "$SOURCE_KEY" >/dev/null \
+  || die "manifestPublicKey ($SOURCE_KEY) is not a usable Ed25519 public key; paste the output of 'swift scripts/sign-manifest.swift pubkey' again"
+swift scripts/sign-manifest.swift check-key "$SOURCE_BACKUP_KEY" >/dev/null \
+  || die "manifestBackupPublicKey ($SOURCE_BACKUP_KEY) is not a usable Ed25519 public key: installed copies would not accept the backup key"
+# The backup private key is offline, so its proof of possession stands in for it: without
+# this a wrong backup constant would only show on the day the backup key is needed.
+SOURCE_BACKUP_PROOF="$(source_key manifestBackupKeyProof)"
+[[ -n "$SOURCE_BACKUP_PROOF" ]] || die "cannot read manifestBackupKeyProof from $CONFIGURATION"
+[[ "$SOURCE_BACKUP_PROOF" != "$PLACEHOLDER_KEY" ]] \
+  || die "manifestBackupKeyProof is still the placeholder; run 'swift scripts/sign-manifest.swift prove --backup' while the backup key is in the Keychain, paste the proof, commit"
+swift scripts/sign-manifest.swift check-proof "$SOURCE_BACKUP_KEY" "$SOURCE_BACKUP_PROOF" >/dev/null \
+  || die "manifestBackupKeyProof was not made with the private key of manifestBackupPublicKey: one of the two constants is wrong"
 # The key this release is signed with. The backup private key is offline by design and is
 # only looked for when it is asked for.
 case "$SIGN_WITH_BACKUP_KEY" in
