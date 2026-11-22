@@ -214,6 +214,35 @@ struct LanguageModelSettingsTests {
         #expect(try fixture.store.layers.importedPatch(fixture.target).last { $0.key == "grammar" }?.value["collocation_max_length"] == 9)
     }
 
+    @Test func uninstallingPackageMissingFromRegistryClearsReferencesToItsModel() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let name = "wanxiang-lts-zh-hans"
+        let manager = PackageManager(paths: fixture.paths)
+        #expect(manager.registry.package(name) == nil)
+        try fixture.model(name)
+        try fixture.store.setLanguageModel(name)
+        let record = InstalledPackage(
+            id: name, version: "1", sha256: "", installedAt: Date(),
+            files: ["\(name).gram": PackageManager.sha256(of: Data("fixture".utf8))], backupDir: nil)
+        try FileManager.default.createDirectory(at: fixture.paths.packagesDir, withIntermediateDirectories: true)
+        try PackageManager.encoder.encode(record).write(to: manager.manifestURL(name))
+        #expect(manager.installed(name)?.languageModelNames == [name])
+
+        let result = try fixture.store.uninstallPackage(name)
+
+        #expect(result.models == [name] && result.removed == ["\(name).gram"] && result.kept.isEmpty)
+        #expect(fixture.store.layers.generatedValue(fixture.target, keypath: "grammar/language") == "")
+        #expect(manager.installed(name) == nil)
+        #expect(!FileManager.default.fileExists(atPath: fixture.paths.userDataDir.appendingPathComponent("\(name).gram").path))
+    }
+
+    @Test func uninstallingUnknownPackageStillReportsNotInstalled() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        #expect(throws: PackageError.notInstalled("nothing")) { try fixture.store.uninstallPackage("nothing") }
+    }
+
     @Test func uninstallHonorsPendingReplacementsAndOnlyFallsBackToBuildForMissingLanguage() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

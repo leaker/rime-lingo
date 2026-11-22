@@ -108,6 +108,18 @@ extension SettingsStore {
         for id in references { try setLanguageModel("", schemaID: id) }
     }
 
+    /// Uninstalls a package after clearing references to the language models it
+    /// installed. The names come from the installed record, so a package the
+    /// registry does not list is handled like any other.
+    @discardableResult
+    public func uninstallPackage(_ id: String) throws -> (models: [String], removed: [String], kept: [String]) {
+        let manager = PackageManager(paths: paths)
+        let models = (manager.installed(id)?.languageModelNames ?? []).filter(Self.isSafeLanguageModelName)
+        for name in models { try disableLanguageModelReferences(named: name) }
+        let result = try manager.uninstall(id)
+        return (models, result.removed, result.kept)
+    }
+
     private static func applyingLanguageModelPatch(_ patch: [ConfigValue.Entry], to source: ConfigValue) -> ConfigValue {
         var effective = source
         for entry in patch.sorted(by: { $0.key < $1.key })

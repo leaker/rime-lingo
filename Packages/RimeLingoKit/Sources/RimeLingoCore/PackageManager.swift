@@ -101,6 +101,11 @@ public struct InstalledPackage: Sendable, Codable, Hashable {
     public var license: String?
     public var licenseURL: String?
     public var attribution: String?
+
+    /// Names of the `.gram` language models this package put in the user data dir.
+    public var languageModelNames: [String] {
+        files.keys.filter { $0.hasSuffix(".gram") && !$0.contains("/") }.map { String($0.dropLast(5)) }.sorted()
+    }
 }
 
 public enum PackageError: Error, Equatable, CustomStringConvertible {

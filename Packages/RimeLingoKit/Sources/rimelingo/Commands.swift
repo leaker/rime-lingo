@@ -234,13 +234,8 @@ struct Package: AsyncParsableCommand {
         func run() async throws {
             let lock = try Workspace.lock(workspace.paths)
             defer { _ = lock }
-            let manager = PackageManager(paths: workspace.paths)
-            if manager.installed(id) != nil, let package = manager.registry.package(id),
-               package.kind == .model, let filename = package.source.filename, filename.hasSuffix(".gram") {
-                try SettingsStore(paths: workspace.paths).disableLanguageModelReferences(named: String(filename.dropLast(5)))
-                print("disabled model references; run `rimelingo deploy` to apply")
-            }
-            let result = try manager.uninstall(id)
+            let result = try SettingsStore(paths: workspace.paths).uninstallPackage(id)
+            if !result.models.isEmpty { print("disabled model references; run `rimelingo deploy` to apply") }
             print("removed \(result.removed.count) files")
             if !result.kept.isEmpty { print("kept \(result.kept.count) modified files: \(result.kept.joined(separator: ", "))") }
         }

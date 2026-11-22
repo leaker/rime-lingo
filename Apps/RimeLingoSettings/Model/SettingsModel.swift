@@ -531,14 +531,18 @@ final class SettingsModel {
         revision += 1
     }
 
-    func uninstall(_ package: DictionaryPackage) {
-        perform {
-            if package.kind == .model,
-               let filename = package.source.filename, filename.hasSuffix(".gram") {
-                let name = String(filename.dropLast(5))
-                try store.disableLanguageModelReferences(named: name)
-            }
-            _ = try PackageManager(paths: paths).uninstall(package.id)
+    func uninstall(_ package: DictionaryPackage) { uninstall(id: package.id) }
+
+    /// Also clears the settings that point at a language model the package installed.
+    func uninstall(id: String) {
+        perform { try store.uninstallPackage(id) }
+    }
+
+    /// Installed packages the registry no longer lists which hold a language model file.
+    var unlistedModelPackages: [InstalledPackage] {
+        _ = revision
+        return PackageManager(paths: paths).installedPackages().filter {
+            registry.package($0.id) == nil && !$0.languageModelNames.isEmpty
         }
     }
 

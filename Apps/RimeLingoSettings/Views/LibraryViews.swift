@@ -311,6 +311,18 @@ private struct LanguageModelsSection: View {
             ForEach(packages) { package in
                 AddonRow(package: package)
             }
+            // Installed earlier and no longer offered: still removable from here.
+            ForEach(model.unlistedModelPackages, id: \.id) { record in
+                LabeledContent {
+                    Button("卸载", role: .destructive) { model.uninstall(id: record.id) }.controlSize(.small)
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(record.languageModelNames.joined(separator: "、")).font(.body.weight(.medium))
+                        Text("此前下载安装的语言模型，已不再提供下载；卸载会删除文件并停用引用它的方案设置。")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
             // No model is offered for download: say what is on disk and where a file goes.
             if packages.isEmpty {
                 LabeledContent {
