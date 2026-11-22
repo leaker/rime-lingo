@@ -11,6 +11,8 @@ final class TranslationPreviewView: NSView {
         /// `.zero` when the state has no target label.
         var labelRect: NSRect = .zero
         var messageRect: NSRect = .zero
+        /// `.zero` when the state has no trailing hint or the header has no room for it.
+        var trailingRect: NSRect = .zero
         /// `.zero` when the translation is not stale.
         var markerRect: NSRect = .zero
         /// `.zero` when there is no translation to show.
@@ -199,6 +201,16 @@ final class TranslationPreviewView: NSView {
             result.messageRect = NSRect(x: messageX, y: y + (pillHeight - smallHeight) / 2,
                                         width: min(messageWidth, messageEnd - messageX), height: smallHeight)
         }
+        // The trailing hint only uses room the header has anyway: it never widens the panel
+        // and never squeezes the status line.
+        if !state.trailing.isEmpty {
+            let trailingWidth = width(state.trailing, smallFont)
+            let start = result.messageRect == .zero ? messageX : result.messageRect.maxX + 12
+            if messageWidth <= messageEnd - messageX, trailingWidth <= messageEnd - start {
+                result.trailingRect = NSRect(x: messageEnd - trailingWidth, y: y + (pillHeight - smallHeight) / 2,
+                                             width: trailingWidth, height: smallHeight)
+            }
+        }
         y += pillHeight
 
         if textSize != .zero {
@@ -246,6 +258,9 @@ final class TranslationPreviewView: NSView {
             // A failure reason is the main content of the panel: full-strength text.
             let color = state.status == .failed ? nsColor(palette.text) : nsColor(palette.secondary)
             line(state.message, smallFont, color).draw(with: layout.messageRect, options: Self.bodyOptions)
+        }
+        if layout.trailingRect != .zero {
+            line(state.trailing, smallFont, nsColor(palette.secondary, alpha: 0.75)).draw(with: layout.trailingRect, options: Self.bodyOptions)
         }
         if layout.markerRect != .zero, let marker = Self.staleMarker(for: state) {
             pill(layout.markerRect, nsColor(palette.text, alpha: 0.1))

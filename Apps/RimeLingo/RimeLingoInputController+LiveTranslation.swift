@@ -199,7 +199,9 @@ extension RimeLingoInputController {
             DebugLog.write("live render status=\(status) length=\(snapshot.text.count) stale=\(snapshot.isStale)")
             state = TranslationPreviewState(
                 targetLabel: snapshot.targetLabel, status: status, text: snapshot.text, isStale: snapshot.isStale,
-                message: engine.translationBindings.liveMessage(snapshot), footnote: footnote)
+                message: engine.translationBindings.liveMessage(snapshot), footnote: footnote,
+                // The one-time footnote already names the keys.
+                trailing: footnote.isEmpty ? engine.translationBindings.liveTrailingHint(snapshot) : "")
         }
         // While visible the panel stays where the last key put it (see `repositionLivePreview`);
         // the client is asked for the cursor only when the panel appears.

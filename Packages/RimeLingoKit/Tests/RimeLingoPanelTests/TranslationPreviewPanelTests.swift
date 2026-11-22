@@ -130,6 +130,27 @@ struct TranslationPreviewPanelTests {
     static let hint = "⌥↩ 替换选区   esc 关闭"
 
     @MainActor
+    @Test func theTrailingHintUsesOnlySpareHeaderRoom() {
+        let view = View()
+        // A short translation leaves the header at the minimum width: the hint fits at its right end.
+        view.state = TranslationPreviewState(targetLabel: "日语", status: .ready, text: "ああ", trailing: "⌥↩ 上屏译文")
+        let plain = TranslationPreviewState(targetLabel: "日语", status: .ready, text: "ああ")
+        let layout = view.layout
+        #expect(!layout.trailingRect.isEmpty)
+        #expect(layout.trailingRect.minX >= layout.labelRect.maxX + 8)
+        #expect(layout.trailingRect.maxX <= layout.size.width)
+        view.state = plain
+        #expect(view.layout.size == layout.size, "the hint never changes the panel's size")
+        // A status line that needs the room keeps it: the hint is left out, the size unchanged.
+        let long = "请求失败，网络连接已断开，请稍后再试一次"
+        view.state = TranslationPreviewState(targetLabel: "日语", status: .failed, message: long, trailing: "⌥↩ 上屏译文 以及更多更多更多说明文字文字文字文字")
+        let crowded = view.layout
+        view.state = TranslationPreviewState(targetLabel: "日语", status: .failed, message: long)
+        #expect(crowded.trailingRect == .zero)
+        #expect(crowded.size == view.layout.size)
+    }
+
+    @MainActor
     @Test func selectionPreviewShowsItsKeyHintsAsAFootnote() {
         let view = View()
         view.state = TranslationPreviewState(targetLabel: "英语", status: .ready, text: "Hello", footnote: Self.hint, kind: .selection)

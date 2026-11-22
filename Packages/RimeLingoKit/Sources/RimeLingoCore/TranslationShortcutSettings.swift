@@ -323,6 +323,15 @@ public struct TranslationShortcutBindings: Sendable, Equatable {
         }
     }
 
+    /// The key hint at the right end of the live preview's header: how to insert the
+    /// translation. Empty where the status line already names the key.
+    public func liveTrailingHint(_ snapshot: LiveTranslationSnapshot) -> String {
+        switch snapshot.status {
+        case .failed, .overLimit: ""
+        case .waiting, .updating, .ready: self[.submit].isEmpty ? "" : "\(submitKey) 上屏译文"
+        }
+    }
+
     /// The line of keys under a selection preview.
     public func selectionFootnote(canReplace: Bool, canRetry: Bool) -> String {
         var keys: [String] = []

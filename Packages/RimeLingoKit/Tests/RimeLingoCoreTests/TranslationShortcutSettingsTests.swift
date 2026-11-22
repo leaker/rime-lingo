@@ -586,6 +586,14 @@ struct TranslationShortcutSettingsTests {
         #expect(content(stopped) == .hint(stopped))
     }
 
+    @Test func theLiveHeaderNamesTheSubmitKeyUnlessTheStatusLineAlreadyDoes() {
+        #expect(bindings().liveTrailingHint(snapshot(.ready, "")) == "⌥↩ 上屏译文")
+        #expect(bindings().liveTrailingHint(snapshot(.updating, "翻译中…")) == "⌥↩ 上屏译文")
+        #expect(customised.liveTrailingHint(snapshot(.ready, "")) == "⌃↩ 上屏译文")
+        #expect(bindings().liveTrailingHint(snapshot(.failed, "请求失败")).isEmpty)
+        #expect(bindings().liveTrailingHint(snapshot(.overLimit, "超过 200 字")).isEmpty)
+    }
+
     @Test func theLiveMessageNamesTheKeyThatActsOnIt() {
         #expect(bindings().liveMessage(snapshot(.failed, "请求失败")) == "请求失败 · ⌥↩ 重试")
         #expect(bindings().liveMessage(snapshot(.overLimit, "超过 200 字")) == "超过 200 字 · ⌥↩ 翻译")

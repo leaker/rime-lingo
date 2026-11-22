@@ -19,9 +19,11 @@ public struct TranslationPreviewState: Sendable, Equatable {
     public var message: String
     /// One line of key hints as plain text; empty draws nothing.
     public var footnote: String
+    /// A short key hint at the right end of the header, drawn only when there is spare room.
+    public var trailing: String
 
     public init(targetLabel: String, status: Status, text: String = "", isStale: Bool = false, message: String = "",
-                footnote: String = "", kind: Kind = .live) {
+                footnote: String = "", trailing: String = "", kind: Kind = .live) {
         self.kind = kind
         self.targetLabel = targetLabel
         self.status = status
@@ -29,6 +31,7 @@ public struct TranslationPreviewState: Sendable, Equatable {
         self.isStale = isStale
         self.message = message
         self.footnote = footnote
+        self.trailing = trailing
     }
 }
 
