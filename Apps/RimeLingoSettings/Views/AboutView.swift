@@ -20,7 +20,7 @@ struct AboutView: View {
                 version
                 projectLinks
                 licenses
-                Text("RimeLingo 基于 RIME。感谢 RIME 与开源社区。")
+                Text("RimeLingo 基于 AIME 开发，输入引擎为 RIME。AIME © 2026 ZOOL LLC（MIT）。感谢 AIME、RIME 与开源社区。")
                     .font(.caption)
                     .foregroundStyle(Theme.secondaryText)
                     .frame(maxWidth: .infinity)
@@ -117,6 +117,10 @@ struct AboutView: View {
             projectLink("开源仓库", address: "github.com/leaker/rime-lingo", destination: "https://github.com/leaker/rime-lingo") {
                 Image("GitHubMark").resizable().scaledToFit()
             }
+            Rectangle().fill(Theme.divider).frame(height: 1).padding(.horizontal, 20)
+            projectLink("原项目 AIME", address: "github.com/zoolapp/aime", destination: "https://github.com/zoolapp/aime") {
+                Image(systemName: "arrow.triangle.branch").font(.title2)
+            }
         }
     }
 
@@ -150,7 +154,7 @@ struct AboutView: View {
                 .font(.headline)
                 .foregroundStyle(Theme.text)
                 .accessibilityAddTraits(.isHeader)
-            Text("RimeLingo 的源码以 MIT 协议发布。安装包包含 GPL-3.0 组件，整体按 GPL-3.0 分发；各依赖与词库遵循各自许可。")
+            Text("RimeLingo 基于 AIME 修改，AIME 的源码由 ZOOL LLC 以 MIT 协议发布，修改部分沿用 MIT 协议。安装包包含 GPL-3.0 组件，整体按 GPL-3.0 分发；各依赖与词库遵循各自许可。")
                 .font(.callout)
                 .foregroundStyle(Theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

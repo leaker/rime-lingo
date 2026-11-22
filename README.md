@@ -2,7 +2,7 @@
 
 [English](README.en.md)
 
-灵译输入法（RimeLingo）是一款基于 [RIME](https://rime.im) 的 macOS 中文输入法。除了日常的拼音输入，它还能在你打字的同时把中文译成英语或日语，确认后再上屏；也能翻译输入框里选中的文字。
+灵译输入法（RimeLingo）是一款 macOS 中文输入法，基于开源输入法 [AIME](https://github.com/zoolapp/aime) 开发，输入引擎为 [RIME](https://rime.im)。除了日常的拼音输入，它还能在你打字的同时把中文译成英语或日语，确认后再上屏；也能翻译输入框里选中的文字。
 
 ## 系统要求
 
@@ -86,3 +86,7 @@
 ## 许可
 
 见 [LICENSE](LICENSE)。
+
+## 致谢
+
+灵译输入法基于 [AIME](https://github.com/zoolapp/aime)（© 2026 ZOOL LLC，MIT 许可）开发，设置应用和输入法的大部分基础功能来自该项目。输入引擎是 [RIME](https://rime.im)。感谢这两个项目的作者和贡献者。

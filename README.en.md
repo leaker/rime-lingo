@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-RimeLingo (灵译输入法) is a Chinese input method for macOS built on [RIME](https://rime.im). Besides everyday pinyin input, it translates what you type into English or Japanese as you go and inserts the translation once you confirm it. It can also translate text you have selected in an input field.
+RimeLingo (灵译输入法) is a Chinese input method for macOS. It is based on the open-source input method [AIME](https://github.com/zoolapp/aime) and uses the [RIME](https://rime.im) engine. Besides everyday pinyin input, it translates what you type into English or Japanese as you go and inserts the translation once you confirm it. It can also translate text you have selected in an input field.
 
 ## Requirements
 
@@ -86,3 +86,7 @@ On the "概览" (Overview) page click "导入" (Import) to bring over your Squir
 ## License
 
 See [LICENSE](LICENSE).
+
+## Acknowledgements
+
+RimeLingo is based on [AIME](https://github.com/zoolapp/aime) (© 2026 ZOOL LLC, MIT License); the settings app and most of the input method's basic features come from that project. The input engine is [RIME](https://rime.im). Thanks to the authors and contributors of both.
