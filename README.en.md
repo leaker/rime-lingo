@@ -1,8 +1,40 @@
 # RimeLingo
 
-[中文](README.md)
+[中文](README.md) · [Website](https://rimelingo.keworks.dev/en/)
 
 RimeLingo (灵译输入法) is a Chinese input method for macOS. It is based on the open-source input method [AIME](https://github.com/zoolapp/aime) and uses the [RIME](https://rime.im) engine. Besides everyday pinyin input, it translates what you type into English, Japanese and many other languages as you go and inserts the translation once you confirm it. It can also translate text you have selected in an input field.
+
+## A quick look
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/translation-live-en-dark.png">
+  <img src="screenshots/translation-live-en-light.png" alt="Live translation: the English translation appears next to the cursor while you type Chinese" width="413">
+</picture>
+
+Translate as you type: write Chinese as usual, the translation follows next to the cursor, and ⌥↩ inserts it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/translation-selection-dark.png">
+  <img src="screenshots/translation-selection-light.png" alt="Translation of selected text, with ⌥↩ to replace the selection" width="394">
+</picture>
+
+Translate selected text: select a passage in a chat field or document, press the language shortcut, then ⌥↩ to replace it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/panel-quick-menu-dark.png">
+  <img src="screenshots/panel-quick-menu-light.png" alt="Quick menu with AI actions, phrases, symbols, frequent words, emoji and settings" width="286">
+</picture>
+
+The quick menu keeps AI actions, phrases, symbols and emoji in one place.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/settings-translation-dark.png">
+  <img src="screenshots/settings-translation-light.png" alt="The Translation page of the settings: target languages and their shortcuts" width="540">
+</picture>
+
+The 翻译 (Translation) page of the settings: pick target languages and give each one a shortcut.
+
+More screenshots are in the [screenshots](screenshots/) folder. The app's interface is in Chinese.
 
 ## Requirements
 

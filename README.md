@@ -1,8 +1,40 @@
 # 灵译输入法
 
-[English](README.en.md)
+[English](README.en.md) · [产品网站](https://rimelingo.keworks.dev)
 
 灵译输入法（RimeLingo）是一款 macOS 中文输入法，基于开源输入法 [AIME](https://github.com/zoolapp/aime) 开发，输入引擎为 [RIME](https://rime.im)。除了日常的拼音输入，它还能在你打字的同时把中文译成英语、日语等多种语言，确认后再上屏；也能翻译输入框里选中的文字。
+
+## 看一看
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/translation-live-en-dark.png">
+  <img src="screenshots/translation-live-en-light.png" alt="实时翻译：输入中文时，光标旁显示英语译文" width="413">
+</picture>
+
+边打边译：照常输入中文，译文显示在光标旁，按 ⌥↩ 写入输入框。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/translation-selection-dark.png">
+  <img src="screenshots/translation-selection-light.png" alt="选中文字的翻译，按 ⌥↩ 替换选区" width="394">
+</picture>
+
+翻译选中的文字：在聊天框或文档里选中一段，按语言快捷键，再按 ⌥↩ 替换。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/panel-quick-menu-dark.png">
+  <img src="screenshots/panel-quick-menu-light.png" alt="快捷菜单：AI 处理、常用语、符号、高频词、表情、设置" width="286">
+</picture>
+
+快捷菜单：AI 处理、常用语、符号和表情都在一处。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/settings-translation-dark.png">
+  <img src="screenshots/settings-translation-light.png" alt="设置里的「翻译」页：目标语言和各自的快捷键" width="540">
+</picture>
+
+设置里的「翻译」页：选择目标语言，给每种语言设一个快捷键。
+
+更多截图见 [screenshots](screenshots/) 文件夹。
 
 ## 系统要求
 
