@@ -101,7 +101,8 @@ public struct InstallFailure: Error, Equatable, Sendable {
     }
 }
 
-/// The rule the installed copy must pass before anything is told about it.
+/// The rule the package must pass before it replaces anything, and the installed copy
+/// before anything is told about it.
 public enum InstalledCopyCheck {
     /// Nil when `installed` is an intact copy of the build that is running; a short reason otherwise.
     public static func problem(installed: SignatureInfo, running: SignatureInfo, bundleID: String) -> String? {
@@ -245,7 +246,8 @@ public struct AppInstaller: Sendable {
             InstallFailure(step: .checkPackage, reason: reason, detail: detail, bundle: .untouched)
         }
         // A damaged download must not get as far as replacing a copy that works.
-        guard signature.evaluateRunningProcess().isValid else { throw failure(.damagedPackage) }
+        let running = signature.evaluateRunningProcess()
+        guard running.isValid else { throw failure(.damagedPackage, "the running installer") }
         // Before anything in the folder is looked at: what an earlier install left there
         // is only told apart from what another one is working on by this lock.
         let install: UpdateLock
@@ -253,6 +255,15 @@ public struct AppInstaller: Sendable {
         case let .acquired(lock): install = lock
         case .held: throw failure(.installing)
         case let .unavailable(code): throw failure(.lock, "\(installLock.path): errno \(code)")
+        }
+        // The running process only vouches for the pages it has loaded. Every file that is
+        // about to be copied is checked where it lies, by the rule the installed copy has
+        // to pass afterwards: a package that would fail then is refused now, while the
+        // installed copy is still whole. (A development build is held to its own
+        // signature only, as there.)
+        if let problem = InstalledCopyCheck.problem(installed: signature.evaluate(bundle: source), running: running,
+                                                    bundleID: bundleID) {
+            throw failure(.damagedPackage, "package: \(problem)")
         }
         let folder = destination.deletingLastPathComponent()
         do { try fs.createDirectory(at: folder) } catch { throw failure(.folder, Self.describe(error)) }

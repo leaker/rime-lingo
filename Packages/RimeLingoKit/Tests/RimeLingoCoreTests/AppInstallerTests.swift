@@ -273,6 +273,92 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         #expect(snapshot(destination) == before && system.calls == ["running"] && leftovers.isEmpty)
     }
 
+    /// Every change an install asks of the file system from now on.
+    func recordChanges() -> ChangeLog {
+        let log = ChangeLog()
+        fs.observe { operation, url in log.append("\(operation) \(url.lastPathComponent)") }
+        return log
+    }
+
+    @Test func aTamperedPackageIsRefusedBeforeTheInstalledCopyIsTouched() throws {
+        try installOld()
+        let before = snapshot(folder)
+        let bundleInode = inode(destination)
+        let changes = recordChanges()
+        // The installer runs (its loaded pages are fine), but a file of the package on
+        // disk no longer matches the seal.
+        signature.breakEvaluation(0)
+        let failure = failure(of: installer())
+        #expect(failure?.reason == .damagedPackage && failure?.bundle == .untouched && failure?.step == .checkPackage)
+        #expect(failure?.message.contains("请重新下载") == true)
+        #expect(snapshot(folder) == before && inode(destination) == bundleInode && leftovers.isEmpty)
+        #expect(changes.all.isEmpty, "no backup, no staged file: \(changes.all)")
+        #expect(signature.count == 1 && system.calls == ["running"])
+    }
+
+    @Test func aTamperedPackageIsNotInstalledForTheFirstTime() throws {
+        let changes = recordChanges()
+        signature.breakEvaluation(0)
+        #expect(failure(of: installer())?.reason == .damagedPackage)
+        #expect(!FileManager.default.fileExists(atPath: destination.path) && leftovers.isEmpty && changes.all.isEmpty)
+    }
+
+    @Test func aReleaseInstallerRefusesAPackageThatIsNotTheReleaseItRunsAs() throws {
+        try installOld()
+        let before = snapshot(folder)
+        // Signed, but not with the Developer ID the running installer has.
+        signature.markDevelopmentSigned(source)
+        var failure = failure(of: installer())
+        #expect(failure?.reason == .damagedPackage && failure?.bundle == .untouched && snapshot(folder) == before)
+
+        // Another version than the one that is running was put in its place.
+        let other = scratch.url("Other/RimeLingo.app")
+        try makeBundle(other, version: "0.3.1", build: 22)
+        var installer = installer()
+        installer.source = other
+        failure = self.failure(of: installer)
+        #expect(failure?.reason == .damagedPackage && failure?.bundle == .untouched && snapshot(folder) == before)
+        #expect(system.calls.allSatisfy { $0 == "running" })
+    }
+
+    @Test func aDevelopmentBuildInstallsItself() throws {
+        try installOld()
+        signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: false, bundleID: fixtureBundleID,
+                                          version: "0.3.0", build: 21)
+        signature.markDevelopmentSigned(source)
+        signature.markDevelopmentSigned(destination)
+        try installer().install()
+        #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty)
+    }
+
+    /// The real evaluation on a really signed (ad-hoc) bundle: one changed byte in a
+    /// sealed resource of the package is found on disk before the installed copy changes.
+    @Test func aPackageWithAChangedFileFailsTheRealSignatureCheck() throws {
+        let package = scratch.url("Signed/RimeLingo.app")
+        try makeSignedBundle(package, version: "0.3.0", build: 21)
+        let real = RealStaticSignature(running: SignatureInfo(isValid: true, satisfiesDeveloperID: false,
+                                                              bundleID: fixtureBundleID, version: "0.3.0", build: 21))
+        #expect(real.evaluate(bundle: package).isValid, "the fixture is signed")
+
+        try installOld()
+        let before = snapshot(folder)
+        let changes = recordChanges()
+        var installer = installer()
+        installer.source = package
+        installer.signature = real
+        let resource = package.appendingPathComponent("Contents/Resources/data.txt")
+        try Data("tampered".utf8).write(to: resource)
+        let failure = failure(of: installer)
+        #expect(failure?.reason == .damagedPackage && failure?.bundle == .untouched)
+        #expect(snapshot(folder) == before && changes.all.isEmpty)
+
+        // The intact package installs: an ad-hoc development build stays installable.
+        try Data("data".utf8).write(to: resource)
+        try installer.install()
+        #expect(snapshot(destination) == snapshot(package) && leftovers.isEmpty)
+        #expect(real.evaluate(bundle: destination).isValid)
+    }
+
     @Test func aFolderOrCopyTheUserCannotChangeIsRefused() throws {
         try installOld()
         let before = snapshot(destination)
@@ -303,7 +389,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
     }
 
     @Test func aFirstCopyThatFailsItsCheckIsRemoved() throws {
-        signature.breakEvaluation(0)
+        signature.breakEvaluation(1)
         let failure = failure(of: installer())
         #expect(failure?.reason == .signature && failure?.step == .verifySignature && failure?.bundle == .untouched)
         #expect(!FileManager.default.fileExists(atPath: destination.path) && leftovers.isEmpty)
@@ -352,7 +438,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
     @Test func aReplacementThatFailsItsCheckIsRolledBack() throws {
         try installOld()
         let before = snapshot(destination)
-        signature.breakEvaluation(0)
+        signature.breakEvaluation(1)
         let failure = failure(of: installer())
         #expect(failure?.reason == .signature && failure?.bundle == .restored)
         #expect(failure?.message.contains("已恢复为原来的版本") == true)
@@ -415,7 +501,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         _ = try damage()
         // The retry fails its check: what it rolls back to is the previous version, not
         // the mixed bundle the first attempt left.
-        signature.breakEvaluation(0)
+        signature.breakEvaluation(1)
         var failure = failure(of: installer())
         #expect(failure?.reason == .signature && failure?.bundle == .restored)
         #expect(snapshot(destination) == before && leftovers.isEmpty && temporaries(in: destination).isEmpty)
@@ -441,7 +527,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         try installOld()
         let before = snapshot(destination)
         try makeBundle(folder.appendingPathComponent(".rimelingo-install-OLD/previous.partial"), version: "0.1.0", build: 10)
-        signature.breakEvaluation(0)
+        signature.breakEvaluation(1)
         let failure = failure(of: installer())
         #expect(failure?.bundle == .restored && snapshot(destination) == before && leftovers.isEmpty)
     }
@@ -450,7 +536,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         // The user removed the damaged bundle by hand; the copy of the previous version
         // is all that is left of it.
         try makeBundle(folder.appendingPathComponent(".rimelingo-install-OLD/previous"), version: "0.2.0", build: 20)
-        signature.breakEvaluation(0)
+        signature.breakEvaluation(1)
         let failure = failure(of: installer())
         #expect(failure?.bundle == .untouched && leftovers == [".rimelingo-install-OLD"])
         try installer().install()
@@ -524,7 +610,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
 
     @Test func theInstallLockIsReleasedAfterSuccessAndAfterFailure() throws {
         try installOld()
-        signature.breakEvaluation(0)
+        signature.breakEvaluation(1)
         #expect(failure(of: installer())?.bundle == .restored)
         try installer().install()
         try installer().install()
@@ -585,6 +671,45 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         #expect(snapshot(destination) == snapshot(source))
         #expect(leftovers == ["Other.app"] && snapshot(folder.appendingPathComponent("Other.app")) == other)
     }
+}
+
+final class ChangeLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var entries: [String] = []
+    var all: [String] { lock.withLock { entries } }
+    func append(_ entry: String) { lock.withLock { entries.append(entry) } }
+}
+
+/// Security.framework's static check of bundles on disk, with a given answer for the
+/// running process (the test runner is not the installer).
+struct RealStaticSignature: CodeSignatureEvaluating {
+    var running: SignatureInfo
+    func evaluate(bundle: URL) -> SignatureInfo { SecCodeSignatureEvaluator(depth: .complete).evaluate(bundle: bundle) }
+    func evaluateRunningProcess() -> SignatureInfo { running }
+}
+
+/// A minimal bundle with a real executable and one resource, signed ad hoc (no identity,
+/// no keychain).
+func makeSignedBundle(_ url: URL, version: String, build: Int) throws {
+    let fm = FileManager.default
+    try fm.createDirectory(at: url.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+    try fm.createDirectory(at: url.appendingPathComponent("Contents/Resources"), withIntermediateDirectories: true)
+    let plist = ["CFBundleIdentifier": fixtureBundleID, "CFBundleExecutable": "RimeLingo", "CFBundlePackageType": "APPL",
+                 "CFBundleShortVersionString": version, "CFBundleVersion": String(build)]
+    try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        .write(to: url.appendingPathComponent("Contents/Info.plist"))
+    try buildSleeper(at: url.appendingPathComponent("Contents/MacOS/RimeLingo"))
+    try Data("data".utf8).write(to: url.appendingPathComponent("Contents/Resources/data.txt"))
+    let codesign = Process()
+    codesign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+    codesign.arguments = ["--force", "--sign", "-", url.path]
+    codesign.standardOutput = FileHandle.nullDevice
+    codesign.standardError = FileHandle.nullDevice
+    let done = DispatchSemaphore(value: 0)
+    codesign.terminationHandler = { _ in done.signal() }
+    try codesign.run()
+    done.wait()
+    guard codesign.terminationStatus == 0 else { throw CocoaError(.executableLoad) }
 }
 
 final class StepLog: @unchecked Sendable {
