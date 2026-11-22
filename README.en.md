@@ -142,6 +142,26 @@ On the "概览" (Overview) page click "导入" (Import) to bring over your Squir
 - **Updates**: RimeLingo checks for a new version once a day, verifies its signature and installs it while the Mac is idle. You can turn this off on the "概览" (Overview) page.
 - **Removal**: remove 灵译输入法 in System Settings › Keyboard › Input Sources, then delete `~/Library/Input Methods/RimeLingo.app`. To remove your data as well, delete `~/Library/RimeLingo`.
 
+## Troubleshooting
+
+**In one application RimeLingo is greyed out in the input menu, selecting it does nothing, or switching to that application changes the input source back to ABC or another one**
+
+That application was already open before RimeLingo was installed and still remembers the old list of input sources. Quit it completely (⌘Q) and open it again. For web apps made with Safari's "Add to Dock", quit all of them and open them again.
+
+If many applications behave like this, log out and back in once, or restart the Mac; that sets all of them right.
+
+**In System Settings › Keyboard › Input Sources the RimeLingo row has no name or icon and cannot be added**
+
+Quit System Settings completely (⌘Q) and open it again. If that does not help, log out and back in once.
+
+**RimeLingo can be selected but typing produces nothing**
+
+Run this line in Terminal, or log out and back in once:
+
+```bash
+killall imklaunchagent TextInputMenuAgent TextInputSwitcher
+```
+
 ## License
 
 See [LICENSE](LICENSE).
