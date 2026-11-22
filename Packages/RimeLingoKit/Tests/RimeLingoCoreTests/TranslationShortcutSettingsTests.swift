@@ -486,6 +486,77 @@ struct TranslationShortcutSettingsTests {
         #expect(TranslationShortcutBindings.liveSwitchedHint(to: Self.french).targetLabel == "法语")
     }
 
+    // MARK: - The language list
+
+    @Test func anAddedLanguageBringsItsDefaultShortcutWhenItIsFree() {
+        var features = RimeLingoFeatures()
+        features.translationLanguages = []
+        features.addTranslationLanguage(.english)
+        features.addTranslationLanguage(Self.french)
+        // Only English and Japanese have a default.
+        #expect(features.translationLanguages == [language(.english, "Control+Alt+Super+e"), language(Self.french)])
+    }
+
+    @Test func anAddedLanguageHasNoShortcutWhenItsDefaultIsTaken() {
+        // By another language.
+        var features = RimeLingoFeatures()
+        features.translationLanguages = [language(Self.french, "Control+Alt+Super+e")]
+        features.addTranslationLanguage(.english)
+        #expect(features.translationLanguages == [language(Self.french, "Control+Alt+Super+e"), language(.english)])
+        // By the submit shortcut.
+        features = RimeLingoFeatures()
+        features.translationLanguages = []
+        features.submitTranslationShortcut = "Control+Alt+Super+j"
+        features.addTranslationLanguage(.japanese)
+        #expect(features.translationLanguages == [language(.japanese)])
+        // By another hotkey setting of the input method, in any modifier order.
+        features = RimeLingoFeatures()
+        features.translationLanguages = []
+        features.addTranslationLanguage(.english, others: [("Super+Alt+Control+e", "方案选单")])
+        #expect(features.translationLanguages == [language(.english)])
+    }
+
+    @Test func addingAListedLanguageChangesNothing() {
+        var features = RimeLingoFeatures()
+        features[shortcut: .english] = "Control+Alt+t"
+        let before = features
+        features.addTranslationLanguage(.english)
+        features.addTranslationLanguage(.japanese)
+        #expect(features == before)
+    }
+
+    @Test func languagesMoveWithinTheListOnly() {
+        var features = RimeLingoFeatures()
+        features.addTranslationLanguage(Self.french)
+        let codes = { features.translationLanguages.map(\.code) }
+        #expect(codes() == ["en", "ja", "fr"])
+        features.moveTranslationLanguage(code: "fr", by: -1)
+        #expect(codes() == ["en", "fr", "ja"])
+        features.moveTranslationLanguage(code: "en", by: 2)
+        #expect(codes() == ["fr", "ja", "en"])
+        // Past either end, not in the list, or no distance: nothing moves.
+        features.moveTranslationLanguage(code: "fr", by: -1)
+        features.moveTranslationLanguage(code: "en", by: 1)
+        features.moveTranslationLanguage(code: "ja", by: 5)
+        features.moveTranslationLanguage(code: "de", by: -1)
+        features.moveTranslationLanguage(code: "ja", by: 0)
+        #expect(codes() == ["fr", "ja", "en"])
+        // Shortcuts travel with their language.
+        #expect(features[shortcut: .english] == "Control+Alt+Super+e")
+    }
+
+    @Test func aRemovedLanguageNoLongerMatchesItsShortcut() {
+        var features = RimeLingoFeatures()
+        #expect(match(TranslationShortcutBindings(features: features), 14, "e", Self.hyper) == .language(.english))
+        features.removeTranslationLanguage(code: "en")
+        features.removeTranslationLanguage(code: "de")
+        #expect(features.translationLanguages == [language(.japanese, "Control+Alt+Super+j")])
+        let bindings = TranslationShortcutBindings(features: features)
+        #expect(match(bindings, 14, "e", Self.hyper) == nil)
+        #expect(match(bindings, 38, "j", Self.hyper) == .language(.japanese))
+        #expect(bindings[.english] == "")
+    }
+
     // MARK: - Mode and panel content
 
     @Test func theModeNeedsItsLanguageInTheListWithAShortcut() {

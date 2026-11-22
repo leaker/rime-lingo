@@ -51,6 +51,35 @@ extension RimeLingoFeatures {
             }
         }
     }
+
+    // MARK: - The language list
+
+    /// Appends `target` to the enabled languages; nothing changes when it is already
+    /// there. It brings its default shortcut when it has one that passes every check a
+    /// recording takes (`others` as in `TranslationShortcutBindings.issue`), and no
+    /// shortcut otherwise.
+    public mutating func addTranslationLanguage(_ target: TranslationTarget, others: [(shortcut: String, title: String)] = []) {
+        guard !translationLanguages.contains(where: { $0.code == target.code }) else { return }
+        var shortcut = target.defaultShortcut
+        if !shortcut.isEmpty,
+           TranslationShortcutBindings(features: self).issue(recording: shortcut, for: .language(target), others: others) != nil {
+            shortcut = ""
+        }
+        translationLanguages.append(TranslationLanguage(code: target.code, shortcut: shortcut))
+    }
+
+    /// Moves a language `offset` places in the list (negative = towards the front);
+    /// nothing changes when it is not in the list or would leave it.
+    public mutating func moveTranslationLanguage(code: String, by offset: Int) {
+        guard let index = translationLanguages.firstIndex(where: { $0.code == code }) else { return }
+        let destination = index + offset
+        guard offset != 0, translationLanguages.indices.contains(destination) else { return }
+        translationLanguages.insert(translationLanguages.remove(at: index), at: destination)
+    }
+
+    public mutating func removeTranslationLanguage(code: String) {
+        translationLanguages.removeAll { $0.code == code }
+    }
 }
 
 extension HotkeyFormatter.Modifiers {

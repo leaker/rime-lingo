@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-RimeLingo (灵译输入法) is a Chinese input method for macOS. It is based on the open-source input method [AIME](https://github.com/zoolapp/aime) and uses the [RIME](https://rime.im) engine. Besides everyday pinyin input, it translates what you type into English or Japanese as you go and inserts the translation once you confirm it. It can also translate text you have selected in an input field.
+RimeLingo (灵译输入法) is a Chinese input method for macOS. It is based on the open-source input method [AIME](https://github.com/zoolapp/aime) and uses the [RIME](https://rime.im) engine. Besides everyday pinyin input, it translates what you type into English, Japanese and many other languages as you go and inserts the translation once you confirm it. It can also translate text you have selected in an input field.
 
 ## Requirements
 
@@ -33,15 +33,18 @@ It works like other pinyin input methods: type pinyin, pick a candidate with Spa
 
 ### Translate as you type
 
-1. In any input field press **⌃⌥⌘E** (to English) or **⌃⌥⌘J** (to Japanese).
-2. Type Chinese as usual. The translation appears in a preview panel next to the cursor and follows your input.
-3. Press **⌥↩** to insert the translation, or **Esc** to cancel.
+1. In any input field press **⌃⌥⌘E** (to English) or **⌃⌥⌘J** (to Japanese) to turn live translation on. A hint next to the cursor shows the target language and the keys once.
+2. Type Chinese as usual. The translation appears next to the cursor and follows your input. Nothing is shown while you are not typing.
+3. Press **⌥↩** to insert the translation; if the translation failed, press **⌥↩** again to retry. Press **↩** to insert the Chinese text instead.
+4. Live translation stays on, also when you move to another input field. Press the same shortcut again to turn it off, or the shortcut of another language to switch the target.
 
-Until you insert the translation you can keep editing the Chinese text: move the cursor with the arrow keys, insert or delete, and the translation updates.
+Until you insert the translation you can keep editing the Chinese text: move the cursor with the arrow keys, insert or delete, and the translation updates. When you turn translation off, Chinese text that has not been inserted yet is written to the input field first, so nothing is lost.
+
+The translation view has no buttons; everything is done from the keyboard. English and Japanese are enabled by default. On the 翻译 (Translation) page of the settings you can add other languages and give each its own shortcut.
 
 ### Translate selected text
 
-Select text where you can type (a chat field, a document, an editor) and press **⌃⌥⌘E** or **⌃⌥⌘J**. When the preview panel shows the translation you can replace the original, copy the translation, or cancel.
+Select text where you can type (a chat field, a document, an editor) and press **⌃⌥⌘E** or **⌃⌥⌘J** (or the shortcut you gave another language). When the translation appears, press **⌥↩** to replace the selection with it, **⌥↩** again to retry after a failure, or **Esc** to close it.
 
 Selections in read-only content (web page text, PDFs) are not supported.
 
@@ -55,8 +58,8 @@ Click the input method icon in the menu bar and choose "灵译输入法设置…
 
 | Section | What it does |
 | --- | --- |
-| 快捷键 (Shortcuts) | Change the shortcuts for "translate to English", "translate to Japanese" and "insert translation" |
-| AI 助手 (AI assistant) | Choose the translation service: the on-device model, or any online service with an OpenAI-compatible API (enter its address and key) |
+| 翻译 (Translation) | Turn live translation on or off; add, remove and reorder target languages; give each language a shortcut; change the "insert translation" shortcut; choose the translation service |
+| AI 助手 (AI assistant) | Configure the translation service: the on-device model, or any online service with an OpenAI-compatible API (enter its address and key) |
 | 输入方案 (Schemas) | Full pinyin, double pinyin and other schemas |
 | 输入习惯, 中英切换, 模糊音与拼写 | Number of candidates, switching keys, fuzzy pinyin |
 | 外观 (Appearance) | Colours, fonts, horizontal or vertical candidates |

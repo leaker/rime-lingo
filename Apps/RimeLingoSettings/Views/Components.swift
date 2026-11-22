@@ -59,7 +59,6 @@ struct CatalogPane: View {
             }
             if pane == .keys {
                 QuickMenuShortcutsSection()
-                TranslationShortcutsSection()
                 Section("方案选单") {
                     ForEach(settings.filter { $0.id == "switcher.hotkeys" }) { SettingRow(setting: $0) }
                 }
@@ -118,107 +117,6 @@ private struct QuickMenuShortcutsSection: View {
         } footer: {
             Text("关闭长按后仍可用 ⌃⌥M 打开。方案选单是切换输入方案和开关的菜单，触发键在下方单独设置。")
         }
-    }
-}
-
-/// Live and selected-text translation: the switch, a shortcut per enabled language and the submit shortcut. Saved through
-/// the features channel, so the input method follows without a deploy or a restart.
-private struct TranslationShortcutsSection: View {
-    @Environment(SettingsModel.self) private var model
-    /// Why the last recording or restore of a shortcut was refused.
-    @State private var refusals: [TranslationShortcutAction: String] = [:]
-
-    var body: some View {
-        let features = model.features
-        let bindings = TranslationShortcutBindings(features: features)
-        Section {
-            Toggle(isOn: Binding(get: { features.liveTranslation }, set: { on in model.updateFeatures { $0.liveTranslation = on } })) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("实时翻译")
-                    Text("按语言快捷键开始：打出的字停在光标处，译文显示在预览面板里；选中了文字时翻译选中的部分。")
-                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            ForEach(bindings.languages.map(TranslationShortcutAction.language) + [.submit], id: \.self) { action in
-                row(action, bindings: bindings)
-            }
-        } header: {
-            Text("翻译")
-        } footer: {
-            Text("无法检测与其他应用或系统快捷键的冲突。")
-        }
-    }
-
-    /// The catalog's hotkey settings as stored, for duplicate detection.
-    private var catalogHotkeys: [(shortcut: String, title: String)] {
-        model.catalog.settings.flatMap { setting -> [(shortcut: String, title: String)] in
-            switch setting.type {
-            case .hotkey: [(model.value(setting)?.stringValue ?? "", setting.title)]
-            case .hotkeyList: (model.value(setting)?.listValue ?? []).compactMap(\.stringValue).map { ($0, setting.title) }
-            default: []
-            }
-        }
-    }
-
-    private func row(_ action: TranslationShortcutAction, bindings: TranslationShortcutBindings) -> some View {
-        let current = bindings[action]
-        return LabeledContent {
-            HStack(spacing: 4) {
-                KeyRecorder(value: current) { assign($0, to: action, bindings: bindings) }
-                    .accessibilityLabel("\(action.title)快捷键")
-                // Fixed slot so recorders line up whether or not the key is set. The submit
-                // shortcut cannot be cleared: it is the way to insert a translation.
-                ZStack {
-                    if !current.isEmpty, action != .submit {
-                        Button {
-                            refusals[action] = nil
-                            model.updateFeatures { $0[shortcut: action] = "" }
-                        } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.borderless)
-                        .help("清除快捷键")
-                        .accessibilityLabel("清除\(action.title)快捷键")
-                    }
-                }
-                .frame(width: 18)
-                Button {
-                    assign(action.defaultShortcut, to: action, bindings: bindings)
-                } label: {
-                    Image(systemName: "arrow.uturn.backward.circle")
-                }
-                .buttonStyle(.borderless)
-                .disabled(action.defaultShortcut.isEmpty || current == action.defaultShortcut)
-                .help(action.defaultShortcut.isEmpty ? "没有默认快捷键" : "恢复默认：\(HotkeyFormatter.display(action.defaultShortcut))")
-                .accessibilityLabel("恢复\(action.title)的默认快捷键")
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(action.title)
-                if let refusal = refusals[action] {
-                    Text(refusal).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text(detail(action)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-    }
-
-    private func detail(_ action: TranslationShortcutAction) -> String {
-        switch action {
-        case .language: "开始实时翻译或切换目标语言；选中了文字时翻译选区。"
-        case .submit: "把译文写进输入框，或替换选区。"
-        }
-    }
-
-    /// Recording and restoring take the same checks; a refused value is not saved.
-    private func assign(_ shortcut: String, to action: TranslationShortcutAction, bindings: TranslationShortcutBindings) {
-        if let issue = bindings.issue(recording: shortcut, for: action, others: catalogHotkeys) {
-            refusals[action] = "未采用 \(HotkeyFormatter.display(shortcut))：\(issue.message)"
-            return
-        }
-        refusals[action] = nil
-        model.updateFeatures { $0[shortcut: action] = shortcut }
     }
 }
 
