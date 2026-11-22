@@ -22,8 +22,38 @@ public enum UpdateConfiguration {
     /// Only the everyday key decides this: a build with just a backup key stays inert.
     public static var isConfigured: Bool { isConfigured(manifestPublicKey) }
     public static func isConfigured(_ key: String) -> Bool {
-        key != placeholderPublicKey && Data(base64Encoded: key)?.count == 32
+        guard key != placeholderPublicKey, let raw = Data(base64Encoded: key), raw.count == 32 else { return false }
+        return !isSmallOrderPoint(raw)
     }
+
+    /// Whether 32 bytes encode one of the eight points of small order. CryptoKit takes
+    /// them as public keys, and under such a key a signature needs no private key: the
+    /// identity (01 00 … 00) accepts the signature 01 00 … 00 for every message, the
+    /// all-zero key its own bytes followed by 32 zero bytes for one message in four. A
+    /// constant filled in with such a value must count as no key at all.
+    public static func isSmallOrderPoint(_ raw: Data) -> Bool {
+        var y = [UInt8](raw)
+        guard y.count == 32 else { return false }
+        y[31] &= 0x7f
+        return smallOrderPoints.contains(y)
+    }
+
+    /// Their y coordinates, little-endian with the sign bit cleared: 0, 1, the two of
+    /// order eight, p - 1, and the non-canonical spellings p and p + 1 of 0 and 1.
+    /// Keep identical to scripts/sign-manifest.swift.
+    private static let smallOrderPoints: Set<[UInt8]> = {
+        func spanning(_ first: UInt8, _ middle: UInt8, _ last: UInt8) -> [UInt8] {
+            [first] + Array(repeating: middle, count: 30) + [last]
+        }
+        return [
+            spanning(0x00, 0x00, 0x00), spanning(0x01, 0x00, 0x00),
+            [0x26, 0xe8, 0x95, 0x8f, 0xc2, 0xb2, 0x27, 0xb0, 0x45, 0xc3, 0xf4, 0x89, 0xf2, 0xef, 0x98, 0xf0,
+             0xd5, 0xdf, 0xac, 0x05, 0xd3, 0xc6, 0x33, 0x39, 0xb1, 0x38, 0x02, 0x88, 0x6d, 0x53, 0xfc, 0x05],
+            [0xc7, 0x17, 0x6a, 0x70, 0x3d, 0x4d, 0xd8, 0x4f, 0xba, 0x3c, 0x0b, 0x76, 0x0d, 0x10, 0x67, 0x0f,
+             0x2a, 0x20, 0x53, 0xfa, 0x2c, 0x39, 0xcc, 0xc6, 0x4e, 0xc7, 0xfd, 0x77, 0x92, 0xac, 0x03, 0x7a],
+            spanning(0xec, 0xff, 0x7f), spanning(0xed, 0xff, 0x7f), spanning(0xee, 0xff, 0x7f),
+        ]
+    }()
 
     /// Team whose Developer ID Application certificate signs releases.
     public static let teamID = "FKKCZM5CBJ"
@@ -116,7 +146,8 @@ public struct ManifestKeys: Sendable, Equatable {
 
     public var isConfigured: Bool { UpdateConfiguration.isConfigured(everyday) }
     /// Nothing without a real everyday key; the backup key only when it is a real key too,
-    /// so a placeholder or a mangled constant is never something a signature is checked against.
+    /// so a placeholder, a mangled constant or a point of small order is never something a
+    /// signature is checked against.
     public var accepted: [String] {
         guard isConfigured else { return [] }
         return UpdateConfiguration.isConfigured(backup) ? [everyday, backup] : [everyday]

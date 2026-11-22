@@ -108,6 +108,27 @@ func requireKey() -> Curve25519.Signing.PrivateKey {
     return key
 }
 
+/// A public key as the apps take it: base64 of 32 bytes that are not a point of small
+/// order. CryptoKit accepts those eight points, and under them a signature anyone can
+/// write down verifies. Keep identical to UpdateConfiguration.isSmallOrderPoint.
+func publicKey(_ text: String) -> Curve25519.Signing.PublicKey? {
+    func spanning(_ first: UInt8, _ middle: UInt8, _ last: UInt8) -> [UInt8] {
+        [first] + Array(repeating: middle, count: 30) + [last]
+    }
+    let smallOrderPoints: Set<[UInt8]> = [
+        spanning(0x00, 0x00, 0x00), spanning(0x01, 0x00, 0x00),
+        [0x26, 0xe8, 0x95, 0x8f, 0xc2, 0xb2, 0x27, 0xb0, 0x45, 0xc3, 0xf4, 0x89, 0xf2, 0xef, 0x98, 0xf0,
+         0xd5, 0xdf, 0xac, 0x05, 0xd3, 0xc6, 0x33, 0x39, 0xb1, 0x38, 0x02, 0x88, 0x6d, 0x53, 0xfc, 0x05],
+        [0xc7, 0x17, 0x6a, 0x70, 0x3d, 0x4d, 0xd8, 0x4f, 0xba, 0x3c, 0x0b, 0x76, 0x0d, 0x10, 0x67, 0x0f,
+         0x2a, 0x20, 0x53, 0xfa, 0x2c, 0x39, 0xcc, 0xc6, 0x4e, 0xc7, 0xfd, 0x77, 0x92, 0xac, 0x03, 0x7a],
+        spanning(0xec, 0xff, 0x7f), spanning(0xed, 0xff, 0x7f), spanning(0xee, 0xff, 0x7f),
+    ]
+    guard let data = Data(base64Encoded: text), data.count == 32 else { return nil }
+    var y = [UInt8](data)
+    y[31] &= 0x7f
+    return smallOrderPoints.contains(y) ? nil : try? Curve25519.Signing.PublicKey(rawRepresentation: data)
+}
+
 switch arguments.first {
 case "keygen":
     guard arguments.count == 1 else { fail("usage: keygen\(flags)") }
@@ -145,8 +166,8 @@ case "sign":
     try (signature.base64EncodedString() + "\n").write(toFile: path + ".sig", atomically: true, encoding: .utf8)
     print("signed \(path) with \(key.publicKey.rawRepresentation.base64EncodedString())")
 case "verify":
-    guard arguments.count == 3, let keyData = Data(base64Encoded: arguments[2]),
-          let key = try? Curve25519.Signing.PublicKey(rawRepresentation: keyData) else { fail("usage: verify <file> <public-key>") }
+    guard arguments.count == 3 else { fail("usage: verify <file> <public-key>") }
+    guard let key = publicKey(arguments[2]) else { fail("not a usable Ed25519 public key: \(arguments[2])") }
     let data = try Data(contentsOf: URL(fileURLWithPath: arguments[1]))
     let text = try String(contentsOfFile: arguments[1] + ".sig", encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     guard let signature = Data(base64Encoded: text), key.isValidSignature(signature, for: data) else { fail("signature invalid") }

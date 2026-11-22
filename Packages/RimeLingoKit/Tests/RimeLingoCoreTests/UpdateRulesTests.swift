@@ -136,6 +136,49 @@ import Testing
         }
     }
 
+    /// The eight points of small order, every spelling: CryptoKit takes them as public
+    /// keys and then accepts signatures nobody signed, so none of them may count as a key.
+    @Test func refusesPublicKeysOfSmallOrder() throws {
+        func spanning(_ first: UInt8, _ middle: UInt8, _ last: UInt8) -> Data {
+            Data([first] + Array(repeating: middle, count: 30) + [last])
+        }
+        let identity = spanning(0x01, 0x00, 0x00), zero = Data(count: 32)
+        var weak = [zero, identity, spanning(0xec, 0xff, 0x7f), spanning(0xed, 0xff, 0x7f), spanning(0xee, 0xff, 0x7f),
+                    try #require(Data(base64Encoded: "JuiVj8KyJ7BFw/SJ8u+Y8NXfrAXTxjM5sTgCiG1T/AU=")),
+                    try #require(Data(base64Encoded: "xxdqcD1N2E+6PAt2DRBnDyogU/osOczGTsf9d5KsA3o="))]
+        weak += weak.map { $0.dropLast() + [$0[31] | 0x80] }
+        #expect(Set(weak).count == 14)
+
+        // What makes them dangerous, shown on CryptoKit itself: R = the key, S = 0. The
+        // identity takes that for every message, the all-zero key for one in four.
+        var data = manifest()
+        let forgedByIdentity = identity + Data(count: 32), forgedByZero = Data(count: 64)
+        #expect(try Curve25519.Signing.PublicKey(rawRepresentation: identity).isValidSignature(forgedByIdentity, for: data))
+        let zeroKey = try Curve25519.Signing.PublicKey(rawRepresentation: zero)
+        for _ in 0..<200 where !zeroKey.isValidSignature(forgedByZero, for: data) { data.append(UInt8(ascii: " ")) }
+        #expect(zeroKey.isValidSignature(forgedByZero, for: data))
+        #expect(try Curve25519.Signing.PublicKey(rawRepresentation: identity).isValidSignature(forgedByIdentity, for: data))
+
+        let forgeries = [forgedByIdentity, forgedByZero].map { Data($0.base64EncodedString().utf8) }
+        for raw in weak {
+            let key = raw.base64EncodedString()
+            #expect(UpdateConfiguration.isSmallOrderPoint(raw) && !UpdateConfiguration.isConfigured(key))
+            // As the backup key it is left out; as the everyday key it leaves the updater inert.
+            #expect(ManifestKeys(publicKey, backup: key).accepted == [publicKey])
+            #expect(!ManifestKeys(key, backup: publicKey).isConfigured && ManifestKeys(key, backup: publicKey).accepted.isEmpty)
+            for forged in forgeries {
+                #expect(!ManifestVerifier.verify(manifest: data, signature: forged, publicKey: key))
+                #expect(!ManifestVerifier.verify(manifest: data, signature: forged, keys: ManifestKeys(publicKey, backup: key)))
+                #expect(failure(data, backup: key, signature: forged) == .untrustedManifest)
+                #expect(failure(data, key: key, backup: publicKey, signature: forged) == .notConfigured)
+            }
+        }
+        // Real keys, and other lengths, are not mistaken for them.
+        #expect(!UpdateConfiguration.isSmallOrderPoint(key.publicKey.rawRepresentation) && UpdateConfiguration.isConfigured(publicKey))
+        #expect(!UpdateConfiguration.isSmallOrderPoint(Data(count: 31)) && !UpdateConfiguration.isSmallOrderPoint(Data()))
+        #expect(ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: ManifestKeys(publicKey, backup: zero.base64EncodedString())))
+    }
+
     @Test func acceptsAManifestSignedByTheKey() throws {
         let data = manifest()
         let release = try ManifestVerifier.release(manifest: data, signature: try signature(data), keys: ManifestKeys(publicKey))

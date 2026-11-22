@@ -70,6 +70,23 @@ if "${SIGN[@]}" verify --backup "$WORK/latest.json" "$PUBLIC_KEY" > "$WORK/backu
   fail "verify took --backup"
 fi
 
+# Points of small order are not keys: under them a signature made without any private key
+# verifies. The identity takes R = identity, S = 0 for every message.
+cp "$WORK/latest.json.sig" "$WORK/real.sig"
+python3 -c 'import base64; print(base64.b64encode(bytes([1] + [0] * 63)).decode())' > "$WORK/latest.json.sig"
+for weak in AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA= \
+            AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA= \
+            JuiVj8KyJ7BFw/SJ8u+Y8NXfrAXTxjM5sTgCiG1T/AU= JuiVj8KyJ7BFw/SJ8u+Y8NXfrAXTxjM5sTgCiG1T/IU= \
+            xxdqcD1N2E+6PAt2DRBnDyogU/osOczGTsf9d5KsA3o= xxdqcD1N2E+6PAt2DRBnDyogU/osOczGTsf9d5KsA/o= \
+            7P///////////////////////////////////////38= 7P////////////////////////////////////////8= \
+            7f///////////////////////////////////////38= 7f////////////////////////////////////////8= \
+            7v///////////////////////////////////////38= 7v////////////////////////////////////////8=; do
+  if "${SIGN[@]}" verify "$WORK/latest.json" "$weak" > "$WORK/weak.log" 2>&1; then fail "small-order key accepted: $weak"; fi
+  grep -q 'not a usable Ed25519 public key' "$WORK/weak.log" || fail "small-order key not named as the reason: $weak"
+done
+cp "$WORK/real.sig" "$WORK/latest.json.sig"
+"${SIGN[@]}" verify "$WORK/latest.json" "$PUBLIC_KEY" >/dev/null
+
 # Pre-release versions, wrong archive names and bad numbers are refused.
 mkdir "$WORK/bad"
 for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip 0.3.1 21 15.0" \
@@ -80,4 +97,4 @@ for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip
   fi
   [[ ! -e "$WORK/bad/latest.json" ]] || fail "wrote a manifest for: $arguments"
 done
-echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, backup key, refused input'
+echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, backup key, small-order keys, refused input'
