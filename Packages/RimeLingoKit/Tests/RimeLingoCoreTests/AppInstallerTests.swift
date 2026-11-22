@@ -199,6 +199,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
     var source: URL { scratch.url("Downloads/RimeLingo.app") }
     var folder: URL { scratch.url("home/Library/Input Methods") }
     var destination: URL { folder.appendingPathComponent("RimeLingo.app") }
+    var installLock: URL { scratch.url("home/Library/Caches/installer/lock") }
     var updates: UpdatePaths { UpdatePaths(root: scratch.url("home/Library/RimeLingo/Rime/rimelingo/cache/updates")) }
 
     static let afterFiles = ["register RimeLingo.app", "agents", "start RimeLingo.app"]
@@ -210,8 +211,8 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
     }
 
     func installer(select: Bool = true) -> AppInstaller {
-        AppInstaller(source: source, destination: destination, bundleID: fixtureBundleID, select: select, updates: updates,
-                     signature: signature, fs: fs, system: system, clearQuarantine: { _ in })
+        AppInstaller(source: source, destination: destination, bundleID: fixtureBundleID, select: select, installLock: installLock,
+                     updates: updates, signature: signature, fs: fs, system: system, clearQuarantine: { _ in })
     }
 
     func installOld() throws {
@@ -499,6 +500,65 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
         let failure = failure(of: installer())
         #expect(failure?.reason == .busy && failure?.bundle == .untouched && snapshot(destination) == before)
         withExtendedLifetime(lock) {}
+    }
+
+    @Test func aSecondInstallerIsRefusedWhileOneIsWorking() throws {
+        try installOld()
+        // What the first installer is working with.
+        try makeBundle(folder.appendingPathComponent(".rimelingo-install-OTHER/previous"), version: "0.1.0", build: 10)
+        try Data("staged".utf8).write(to: destination.appendingPathComponent("Contents/MacOS/.rlu-OTHER-RimeLingo"))
+        let before = snapshot(folder)
+        guard case let .acquired(first) = UpdateLock.attempt(file: installLock) else {
+            Issue.record("the lock of an idle installer was not free")
+            return
+        }
+        let failure = failure(of: installer())
+        #expect(failure?.reason == .installing && failure?.bundle == .untouched && failure?.step == .checkPackage)
+        #expect(failure?.message.contains("另一个安装正在进行") == true)
+        #expect(snapshot(folder) == before, "nothing of the other install is removed")
+        #expect(system.calls == ["running"])
+        #expect(!FileManager.default.fileExists(atPath: updates.root.path), "the updater's folder is not needed for it")
+
+        withExtendedLifetime(first) {}
+    }
+
+    @Test func theInstallLockIsReleasedAfterSuccessAndAfterFailure() throws {
+        try installOld()
+        signature.breakEvaluation(0)
+        #expect(failure(of: installer())?.bundle == .restored)
+        try installer().install()
+        try installer().install()
+        #expect(snapshot(destination) == snapshot(source) && leftovers.isEmpty)
+    }
+
+    @Test func anInstallHoldsItsLockUntilTheLastStep() throws {
+        let installLock = installLock
+        let held = StepLog()
+        system.observe { call in
+            guard call == "start" else { return }
+            if case .held = UpdateLock.attempt(file: installLock) { held.append(.startInputMethod) }
+        }
+        try installer().install()
+        #expect(held.all == [.startInputMethod])
+    }
+
+    @Test func aLockFileThatCannotBeCreatedStopsTheInstall() throws {
+        try installOld()
+        let before = snapshot(destination)
+        // A file where the lock's folder would be.
+        try FileManager.default.createDirectory(at: scratch.url("blocked"), withIntermediateDirectories: true)
+        try Data().write(to: scratch.url("blocked/caches"))
+        var installer = installer()
+        installer.installLock = scratch.url("blocked/caches/lock")
+        let failure = failure(of: installer)
+        #expect(failure?.reason == .lock && failure?.bundle == .untouched)
+        #expect(snapshot(destination) == before && leftovers.isEmpty)
+    }
+
+    @Test func theStandardLockIsOutsideTheFoldersItProtects() {
+        let lock = AppInstaller.standardLock().path
+        #expect(lock.hasSuffix("/Library/Caches/\(RimeLingoInstallations.bundleID).installer/lock"))
+        #expect(!lock.contains("Input Methods") && !lock.hasPrefix(UpdatePaths(.standard).root.path))
     }
 
     @Test func anInterruptedUpdateCannotUndoTheInstall() throws {

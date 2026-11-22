@@ -48,7 +48,7 @@ public protocol InstallSystem: Sendable {
 
 public struct InstallFailure: Error, Equatable, Sendable {
     public enum Reason: String, Sendable {
-        case damagedPackage, folder, notWritable, busy, copy, signature, quarantine, registration, enable, agents, start
+        case damagedPackage, folder, notWritable, busy, installing, lock, copy, signature, quarantine, registration, enable, agents, start
     }
 
     /// What is at the destination after the failure.
@@ -83,6 +83,8 @@ public struct InstallFailure: Error, Equatable, Sendable {
         case .folder: "无法创建「输入法」文件夹（个人资料库里的 Input Methods）。"
         case .notWritable: "当前用户没有权限修改「输入法」文件夹里的灵译输入法。"
         case .busy: "灵译输入法正在自动更新，请稍等片刻再试。"
+        case .installing: "另一个安装正在进行，请等它完成后再试。"
+        case .lock: "无法创建安装用的锁文件，为避免两个安装互相干扰，没有开始安装。"
         case .copy: "复制文件时出错。"
         case .signature: "复制过去的文件没有通过签名校验。"
         case .quarantine: "文件已复制，但没能解除系统对下载文件的隔离标记。"
@@ -139,6 +141,9 @@ public struct AppInstaller: Sendable {
     /// Select the input source after enabling it (a first install); otherwise the user's
     /// current input source is left alone.
     public var select: Bool
+    /// Held for the whole install (flock): two installers must never work on the same
+    /// folder at once, each removing what the other has staged.
+    public var installLock: URL
     /// The updater's files, to stay out of its way and to keep it from undoing this install.
     public var updates: UpdatePaths?
     public var signature: any CodeSignatureEvaluating
@@ -146,19 +151,36 @@ public struct AppInstaller: Sendable {
     public var system: any InstallSystem
     public var clearQuarantine: @Sendable (URL) throws -> Void
 
-    public init(source: URL, destination: URL, bundleID: String, select: Bool, updates: UpdatePaths?,
-                signature: any CodeSignatureEvaluating, fs: any UpdateFileSystem = LocalUpdateFileSystem(),
+    public init(source: URL, destination: URL, bundleID: String, select: Bool, installLock: URL = AppInstaller.standardLock(),
+                updates: UpdatePaths?, signature: any CodeSignatureEvaluating, fs: any UpdateFileSystem = LocalUpdateFileSystem(),
                 system: any InstallSystem,
                 clearQuarantine: @escaping @Sendable (URL) throws -> Void = { try QuarantineAttribute.remove(below: $0) }) {
         self.source = source
         self.destination = destination
         self.bundleID = bundleID
         self.select = select
+        self.installLock = installLock
         self.updates = updates
         self.signature = signature
         self.fs = fs
         self.system = system
         self.clearQuarantine = clearQuarantine
+    }
+
+    /// `~/Library/Caches/com.leelib.inputmethod.rimelingo.installer/lock`: outside the
+    /// Input Methods folder (nothing there but input methods) and outside the updater's
+    /// folder (which exists only once an installed copy has run).
+    public static func standardLock() -> URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches", isDirectory: true)
+        return caches.appendingPathComponent(RimeLingoInstallations.bundleID + ".installer", isDirectory: true)
+            .appendingPathComponent("lock")
+    }
+
+    /// The locks an install holds until it returns.
+    private struct Locks {
+        var install: UpdateLock
+        var update: UpdateLock?
     }
 
     private enum Placement {
@@ -173,8 +195,8 @@ public struct AppInstaller: Sendable {
         let previous = system.runningInputMethods(executable: destination.appendingPathComponent(Self.executablePath))
 
         progress(.checkPackage)
-        let lock = try prepare()
-        defer { withExtendedLifetime(lock) {} }
+        let locks = try prepare()
+        defer { withExtendedLifetime(locks) {} }
 
         progress(.copyFiles)
         let placement = try place()
@@ -183,7 +205,7 @@ public struct AppInstaller: Sendable {
                                                     running: signature.evaluateRunningProcess(), bundleID: bundleID) {
             throw undo(placement, InstallFailure(step: .verifySignature, reason: .signature, detail: problem, bundle: .installed))
         }
-        finish(placement, holdingUpdateLock: lock != nil)
+        finish(placement, holdingUpdateLock: locks.update != nil)
 
         try run(.clearQuarantine, .quarantine, progress) { try clearQuarantine(destination) }
         try run(.registerApp, .registration, progress) { try system.registerWithLaunchServices(destination) }
@@ -216,14 +238,22 @@ public struct AppInstaller: Sendable {
         }
     }
 
-    /// Checks that do not change anything but the folder itself. Returns the updater's
-    /// lock when there is an updater to exclude.
-    private func prepare() throws -> UpdateLock? {
+    /// Checks that do not change anything but the folder itself. Returns the installer's
+    /// lock, and the updater's when there is an updater to exclude.
+    private func prepare() throws -> Locks {
         func failure(_ reason: InstallFailure.Reason, _ detail: String = "") -> InstallFailure {
             InstallFailure(step: .checkPackage, reason: reason, detail: detail, bundle: .untouched)
         }
         // A damaged download must not get as far as replacing a copy that works.
         guard signature.evaluateRunningProcess().isValid else { throw failure(.damagedPackage) }
+        // Before anything in the folder is looked at: what an earlier install left there
+        // is only told apart from what another one is working on by this lock.
+        let install: UpdateLock
+        switch UpdateLock.attempt(file: installLock) {
+        case let .acquired(lock): install = lock
+        case .held: throw failure(.installing)
+        case let .unavailable(code): throw failure(.lock, "\(installLock.path): errno \(code)")
+        }
         let folder = destination.deletingLastPathComponent()
         do { try fs.createDirectory(at: folder) } catch { throw failure(.folder, Self.describe(error)) }
         guard fs.isUserWritable(folder) else { throw failure(.notWritable, folder.path) }
@@ -237,9 +267,9 @@ public struct AppInstaller: Sendable {
         default: throw failure(.copy, "the destination is not a folder")
         }
         // An updater exists only once an installed copy has run. It is never created here.
-        guard let updates, FileManager.default.fileExists(atPath: updates.root.path) else { return nil }
-        guard let lock = UpdateLock.acquire(updates) else { throw failure(.busy) }
-        return lock
+        guard let updates, FileManager.default.fileExists(atPath: updates.root.path) else { return Locks(install: install) }
+        guard let update = UpdateLock.acquire(updates) else { throw failure(.busy) }
+        return Locks(install: install, update: update)
     }
 
     /// A complete copy of the previous version that an earlier install left in `folder`

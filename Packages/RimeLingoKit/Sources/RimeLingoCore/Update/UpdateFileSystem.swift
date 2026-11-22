@@ -133,15 +133,30 @@ public final class UpdateLock: @unchecked Sendable {
 
     private init(descriptor: Int32) { self.descriptor = descriptor }
 
+    public enum Attempt: Sendable {
+        case acquired(UpdateLock)
+        /// Another process (or another holder in this one) has it.
+        case held
+        /// The lock file could not be created or opened (errno).
+        case unavailable(Int32)
+    }
+
     public static func acquire(_ paths: UpdatePaths) -> UpdateLock? {
-        try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
-        let fd = open(paths.lock.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o644)
-        guard fd >= 0 else { return nil }
+        guard case let .acquired(lock) = attempt(file: paths.lock) else { return nil }
+        return lock
+    }
+
+    /// The same exclusion on any lock file; its folder is created when missing.
+    public static func attempt(file: URL) -> Attempt {
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let fd = open(file.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o644)
+        guard fd >= 0 else { return .unavailable(errno) }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+            let code = errno
             close(fd)
-            return nil
+            return code == EWOULDBLOCK ? .held : .unavailable(code)
         }
-        return UpdateLock(descriptor: fd)
+        return .acquired(UpdateLock(descriptor: fd))
     }
 
     deinit {
