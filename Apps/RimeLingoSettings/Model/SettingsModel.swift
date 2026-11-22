@@ -26,6 +26,9 @@ final class SettingsModel {
 
     /// Bumped after every write so views re-read values.
     private(set) var revision = 0
+    /// Bumped when the app becomes active again, for lists read from folders the user
+    /// may have changed in Finder meanwhile.
+    private(set) var activationRevision = 0
     /// Any write marks changes pending; they are applied automatically shortly after.
     private(set) var hasPendingChanges = false {
         didSet { if hasPendingChanges { changeCount += 1; scheduleAutoDeploy() } }
@@ -159,6 +162,7 @@ final class SettingsModel {
     /// `.gram` language models available in the user and shared data directories.
     var gramModels: [String] {
         _ = revision
+        _ = activationRevision
         let dirs = [paths.userDataDir, paths.sharedDataDir].compactMap { $0 }
         let files = dirs.flatMap { (try? FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])) ?? [] }
         let names = files.filter {
@@ -856,7 +860,10 @@ final class SettingsModel {
             MainActor.assumeIsolated { self?.inputMethodUpdated(to: version) }
         }
         NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.compareWithInstalledVersion() }
+            MainActor.assumeIsolated {
+                self?.compareWithInstalledVersion()
+                self?.activationRevision += 1
+            }
         }
     }
 
