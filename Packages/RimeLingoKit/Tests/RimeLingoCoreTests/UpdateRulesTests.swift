@@ -54,30 +54,91 @@ import Testing
 
     func signature(_ data: Data) throws -> Data { Data((try key.signature(for: data).base64EncodedString() + "\n").utf8) }
 
-    func failure(_ data: Data, key: String? = nil, signature: Data? = nil) -> UpdateFailure? {
+    func failure(_ data: Data, key: String? = nil, backup: String = UpdateConfiguration.placeholderPublicKey,
+                 signature: Data? = nil) -> UpdateFailure? {
         do {
-            _ = try ManifestVerifier.release(manifest: data, signature: try signature ?? self.signature(data), publicKey: key ?? publicKey)
+            _ = try ManifestVerifier.release(manifest: data, signature: try signature ?? self.signature(data),
+                                             keys: ManifestKeys(key ?? publicKey, backup: backup))
             return nil
         } catch { return error as? UpdateFailure }
     }
 
-    /// Holds before and after the real key is pasted in: the constant is the placeholder
-    /// (inert) or a usable Ed25519 public key, never something in between.
+    /// Holds before and after the real keys are pasted in: each constant is the placeholder
+    /// or a usable Ed25519 public key, never something in between, and only the everyday
+    /// key switches the updater on.
     @Test func thePlaceholderKeyKeepsTheUpdaterInert() throws {
-        let shipped = UpdateConfiguration.manifestPublicKey
-        #expect(shipped == UpdateConfiguration.placeholderPublicKey || Data(base64Encoded: shipped)?.count == 32)
-        #expect(UpdateConfiguration.isConfigured == (shipped != UpdateConfiguration.placeholderPublicKey))
-        #expect(!UpdateConfiguration.isConfigured(UpdateConfiguration.placeholderPublicKey))
+        let placeholder = UpdateConfiguration.placeholderPublicKey
+        for shipped in [UpdateConfiguration.manifestPublicKey, UpdateConfiguration.manifestBackupPublicKey] {
+            #expect(shipped == placeholder || UpdateConfiguration.isConfigured(shipped))
+            let raw = try #require(shipped == placeholder ? Data(count: 32) : Data(base64Encoded: shipped))
+            #expect((try? Curve25519.Signing.PublicKey(rawRepresentation: raw)) != nil)
+        }
+        let everyday = UpdateConfiguration.manifestPublicKey, backup = UpdateConfiguration.manifestBackupPublicKey
+        #expect(UpdateConfiguration.isConfigured == (everyday != placeholder))
+        #expect(ManifestKeys.shipped == ManifestKeys(everyday, backup: backup))
+        #expect(ManifestKeys.shipped.isConfigured == UpdateConfiguration.isConfigured)
+        #expect(ManifestKeys.shipped.accepted == [everyday, backup].filter { everyday != placeholder && $0 != placeholder })
+        #expect(everyday == placeholder || everyday != backup, "the backup key must be a different key")
+
+        #expect(!UpdateConfiguration.isConfigured(placeholder))
         let data = manifest()
-        #expect(failure(data, key: UpdateConfiguration.placeholderPublicKey) == .notConfigured)
-        #expect(!ManifestVerifier.verify(manifest: data, signature: try signature(data), publicKey: UpdateConfiguration.placeholderPublicKey))
+        #expect(failure(data, key: placeholder) == .notConfigured)
+        #expect(!ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: ManifestKeys(placeholder)))
+        #expect(!ManifestVerifier.verify(manifest: data, signature: try signature(data), publicKey: placeholder))
         #expect(!UpdateConfiguration.isConfigured("") && !UpdateConfiguration.isConfigured("AAAA"))
         #expect(UpdateConfiguration.isConfigured(publicKey))
     }
 
+    @Test func acceptsAManifestSignedByEitherKey() throws {
+        let data = manifest()
+        let other = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString()
+        let third = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString()
+        for keys in [ManifestKeys(publicKey, backup: other), ManifestKeys(other, backup: publicKey), ManifestKeys(publicKey, backup: publicKey)] {
+            #expect(ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: keys))
+            #expect(try ManifestVerifier.release(manifest: data, signature: try signature(data), keys: keys).version == "0.3.0")
+        }
+        // Signed by neither.
+        let neither = ManifestKeys(other, backup: third)
+        #expect(!ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: neither))
+        #expect(throws: UpdateFailure.untrustedManifest) {
+            try ManifestVerifier.release(manifest: data, signature: try signature(data), keys: neither)
+        }
+        // A tampered manifest is refused whichever key signed the original.
+        #expect(!ManifestVerifier.verify(manifest: data + Data(" ".utf8), signature: try signature(data),
+                                         keys: ManifestKeys(other, backup: publicKey)))
+    }
+
+    /// A backup constant that is not a real key is left out: it neither verifies anything,
+    /// nor crashes, nor gets in the way of the everyday key.
+    @Test func ignoresAPlaceholderOrMalformedBackupKey() throws {
+        let data = manifest()
+        let other = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString()
+        let zeroSignature = Data(Data(count: 64).base64EncodedString().utf8)
+        let unusable = [UpdateConfiguration.placeholderPublicKey, "", "AAAA", "not base64 at all !",
+                        Data(count: 31).base64EncodedString(), Data(count: 33).base64EncodedString(), String(publicKey.dropLast(2))]
+        for backup in unusable {
+            #expect(ManifestKeys(publicKey, backup: backup).accepted == [publicKey])
+            #expect(ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: ManifestKeys(publicKey, backup: backup)))
+            let keys = ManifestKeys(other, backup: backup)
+            #expect(keys.isConfigured && keys.accepted == [other])
+            #expect(!ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: keys))
+            #expect(!ManifestVerifier.verify(manifest: data, signature: zeroSignature, keys: keys))
+            #expect(!ManifestVerifier.verify(manifest: data, signature: Data(), keys: keys))
+            #expect(failure(data, key: other, backup: backup) == .untrustedManifest)
+        }
+        // The default is no backup key, and the everyday key must be real for either to count.
+        #expect(ManifestKeys(publicKey).accepted == [publicKey])
+        for everyday in unusable {
+            let keys = ManifestKeys(everyday, backup: publicKey)
+            #expect(!keys.isConfigured && keys.accepted.isEmpty)
+            #expect(!ManifestVerifier.verify(manifest: data, signature: try signature(data), keys: keys))
+            #expect(failure(data, key: everyday, backup: publicKey) == .notConfigured)
+        }
+    }
+
     @Test func acceptsAManifestSignedByTheKey() throws {
         let data = manifest()
-        let release = try ManifestVerifier.release(manifest: data, signature: try signature(data), publicKey: publicKey)
+        let release = try ManifestVerifier.release(manifest: data, signature: try signature(data), keys: ManifestKeys(publicKey))
         #expect(release.appVersion == AppVersion("0.3.0", build: 21))
         #expect(release.archive == .init(name: "RimeLingo-0.3.0.zip", size: 10, sha256: String(repeating: "a", count: 64)))
     }
@@ -253,33 +314,33 @@ import Testing
     let bundle = URL(fileURLWithPath: "/Users/someone/Library/Input Methods/RimeLingo.app")
 
     @Test func aReleaseBuildInAWritableLocationIsEligible() {
-        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: FakeSignature(), fs: FaultyFileSystem(), publicKey: key)
+        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: FakeSignature(), fs: FaultyFileSystem(), keys: ManifestKeys(key))
             == .eligible(bundle: bundle))
     }
 
     @Test func thePlaceholderKeyComesFirst() {
         #expect(UpdateEligibility.evaluate(bundle: bundle, signature: FakeSignature(), fs: FaultyFileSystem(),
-                                           publicKey: UpdateConfiguration.placeholderPublicKey) == .notConfigured)
+                                           keys: ManifestKeys(UpdateConfiguration.placeholderPublicKey)) == .notConfigured)
     }
 
     @Test func developmentBuildsOfTheSameTeamNeverUpdate() {
         let signature = FakeSignature()
         // Apple Development: valid, same team identifier, but not Developer ID.
         signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: false, teamID: UpdateConfiguration.teamID)
-        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: FaultyFileSystem(), publicKey: key) == .developmentBuild)
+        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: FaultyFileSystem(), keys: ManifestKeys(key)) == .developmentBuild)
         signature.running = .unsigned  // ad hoc
-        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: FaultyFileSystem(), publicKey: key) == .developmentBuild)
+        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: FaultyFileSystem(), keys: ManifestKeys(key)) == .developmentBuild)
         signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: true, teamID: "ABCDEFGHIJ")
-        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: FaultyFileSystem(), publicKey: key) == .developmentBuild)
+        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: FaultyFileSystem(), keys: ManifestKeys(key)) == .developmentBuild)
     }
 
     @Test func aBundleTheUserCannotWriteIsLeftAlone() {
         let fs = FaultyFileSystem()
         fs.userWritable = false
-        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: FakeSignature(), fs: fs, publicKey: key)
+        #expect(UpdateEligibility.evaluate(bundle: bundle, signature: FakeSignature(), fs: fs, keys: ManifestKeys(key))
             == .unsupportedLocation(bundle.path))
         let translocated = URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/1/d/RimeLingo.app")
-        #expect(UpdateEligibility.evaluate(bundle: translocated, signature: FakeSignature(), fs: FaultyFileSystem(), publicKey: key)
+        #expect(UpdateEligibility.evaluate(bundle: translocated, signature: FakeSignature(), fs: FaultyFileSystem(), keys: ManifestKeys(key))
             == .unsupportedLocation(translocated.path))
     }
 

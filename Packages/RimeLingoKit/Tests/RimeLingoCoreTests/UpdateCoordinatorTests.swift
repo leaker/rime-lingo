@@ -19,6 +19,7 @@ final class UpdateRig {
     let published: URL
     let assetURL = UpdateConfiguration.assetURL(version: "0.3.0", name: "RimeLingo-0.3.0.zip")
     var publicKey: String
+    var backupKey = UpdateConfiguration.placeholderPublicKey
 
     init() throws {
         paths = RimeLingoPaths(userDataDir: scratch.url("Rime"))
@@ -46,7 +47,7 @@ final class UpdateRig {
     func coordinator(current: AppVersion = AppVersion("0.2.0", build: 20)) -> UpdateCoordinator {
         let clock = clock
         return UpdateCoordinator(paths: paths, bundle: installed, bundleID: fixtureBundleID, current: current, transport: transport,
-                                 signature: signature, fs: fs, process: process, publicKey: publicKey,
+                                 signature: signature, fs: fs, process: process, keys: ManifestKeys(publicKey, backup: backupKey),
                                  system: OperatingSystemVersion(majorVersion: 15, minorVersion: 6, patchVersion: 0),
                                  now: { clock.now })
     }
@@ -70,6 +71,30 @@ final class UpdateRig {
         #expect(await coordinator.installIfReady(idle: rig.idle, userRequested: true) == .notReady)
         #expect(rig.transport.requests.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: UpdateState.file(rig.paths).path), "nothing is written either")
+    }
+
+    /// The everyday key was lost or replaced: a release signed with the backup key is
+    /// still found, and one signed with neither is not.
+    @Test func acceptsAReleaseSignedWithTheBackupKey() async {
+        let everyday = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedString()
+        rig.backupKey = rig.publicKey
+        rig.publicKey = everyday
+        var state = await rig.coordinator().check(force: true)
+        #expect(state.phase == .downloading && state.release?.version == "0.3.0" && state.failure == nil)
+
+        rig.backupKey = everyday
+        state = await rig.coordinator().check(force: true)
+        #expect(state.failure?.code == "untrustedManifest")
+    }
+
+    /// A backup key alone does not switch the updater on.
+    @Test func staysInertWithOnlyABackupKey() async {
+        rig.backupKey = rig.publicKey
+        rig.publicKey = UpdateConfiguration.placeholderPublicKey
+        let coordinator = rig.coordinator()
+        #expect(await coordinator.eligibility() == .notConfigured)
+        _ = await coordinator.check(force: true)
+        #expect(rig.transport.requests.isEmpty)
     }
 
     @Test func developmentBuildsNeverCheckDownloadOrInstall() async throws {
@@ -380,7 +405,7 @@ final class UpdateRig {
 
     @Test func launchWithoutAnUpdateDirectoryTouchesNothing() {
         #expect(UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs,
-                                                  process: rig.process, publicKey: rig.publicKey) == .none)
+                                                  process: rig.process, keys: ManifestKeys(rig.publicKey)) == .none)
         #expect(!FileManager.default.fileExists(atPath: rig.paths.userDataDir.path))
     }
 
@@ -405,7 +430,7 @@ final class UpdateRig {
         try Data("partial".utf8).write(to: rig.updates.archive("RimeLingo-0.3.0.zip.part"))
 
         let outcome = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
-                                                        fs: rig.fs, process: rig.process, publicKey: rig.publicKey,
+                                                        fs: rig.fs, process: rig.process, keys: ManifestKeys(rig.publicKey),
                                                         now: { [clock = rig.clock] in clock.now })
         #expect(outcome == .rolledBack(from: "0.3.0 (21)", to: "0.2.0 (20)"))
         #expect(snapshot(rig.installed) == before)
@@ -427,7 +452,7 @@ final class UpdateRig {
         let before = snapshot(rig.installed)
         func launch(key: String) -> RecoveryOutcome {
             UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs,
-                                              process: rig.process, publicKey: key)
+                                              process: rig.process, keys: ManifestKeys(key))
         }
         // …is not acted on by a build without a manifest key,
         #expect(launch(key: UpdateConfiguration.placeholderPublicKey) == .none)
@@ -464,7 +489,7 @@ final class UpdateRig {
         rig.signature.running = SignatureInfo(isValid: false, satisfiesDeveloperID: false, teamID: UpdateConfiguration.teamID)
         func launch(key: String? = nil) -> RecoveryOutcome {
             UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
-                                              fs: rig.fs, process: rig.process, publicKey: key ?? rig.publicKey,
+                                              fs: rig.fs, process: rig.process, keys: ManifestKeys(key ?? rig.publicKey),
                                               now: { [clock = rig.clock] in clock.now })
         }
         // Still not without a manifest key or where the bundle cannot be replaced.
@@ -489,7 +514,7 @@ final class UpdateRig {
             try InstallMarker(pid: 1, from: .init(version: "0.1.0", build: 9), to: .init(version: "0.2.0", build: 20),
                               bundle: bundle.path, phase: phase, startedAt: rig.clock.now).write(rig.updates.marker)
             return UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
-                                                     fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+                                                     fs: rig.fs, process: rig.process, keys: ManifestKeys(rig.publicKey))
         }
         rig.signature.running = .unsigned
         // Nothing was replaced yet: the broken signature has another cause.
@@ -525,7 +550,7 @@ final class UpdateRig {
         try state.save(rig.paths)
 
         let outcome = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
-                                                        fs: rig.fs, process: rig.process, publicKey: rig.publicKey, now: { [clock = rig.clock] in clock.now })
+                                                        fs: rig.fs, process: rig.process, keys: ManifestKeys(rig.publicKey), now: { [clock = rig.clock] in clock.now })
         #expect(outcome == .completed(version: "0.3.0", build: 21))
         #expect(snapshot(rig.installed) == snapshot(rig.published))
         #expect(rig.state.phase == .restartPending && rig.state.failure == nil && rig.state.release == nil)
@@ -547,7 +572,7 @@ final class UpdateRig {
         let bundle = snapshot(rig.installed), kept = snapshot(rig.updates.backupApp)
         func launch() -> RecoveryOutcome {
             UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature,
-                                              fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+                                              fs: rig.fs, process: rig.process, keys: ManifestKeys(rig.publicKey))
         }
         #expect(launch() == .none)
         #expect(rig.state.phase == .restartPending && snapshot(rig.installed) == bundle && snapshot(rig.updates.backupApp) == kept)
@@ -625,18 +650,18 @@ final class UpdateRig {
         try state.save(rig.paths)
         try FileManager.default.createDirectory(at: rig.updates.stagingTemporary, withIntermediateDirectories: true)
         #expect(UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs,
-                                                  process: rig.process, publicKey: rig.publicKey) == .none)
+                                                  process: rig.process, keys: ManifestKeys(rig.publicKey)) == .none)
         #expect(rig.state.phase == .ready && rig.state.progress == nil)
         #expect(BundleTree.entry(at: rig.updates.stagingTemporary) == nil)
         // The staged bundle vanished (cache cleaned): download again instead of failing.
         try FileManager.default.removeItem(at: rig.updates.staged)
-        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs, process: rig.process, keys: ManifestKeys(rig.publicKey))
         #expect(rig.state.phase == .downloading)
         // While another process works, nothing is changed.
         let other = try #require(UpdateLock.acquire(rig.updates))
         state.phase = .installing
         try state.save(rig.paths)
-        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs, process: rig.process, publicKey: rig.publicKey)
+        _ = UpdateCoordinator.recoverAtLaunch(paths: rig.paths, bundle: rig.installed, bundleID: fixtureBundleID, signature: rig.signature, fs: rig.fs, process: rig.process, keys: ManifestKeys(rig.publicKey))
         #expect(rig.state.phase == .installing)
         withExtendedLifetime(other) {}
     }

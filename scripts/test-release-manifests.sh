@@ -42,6 +42,34 @@ if "${SIGN[@]}" sign "$WORK/latest.json" --ephemeral-key-file "$WORK/missing" > 
   fail "signed without a key"
 fi
 
+# The backup key: its own file, same rules, and a signature that only its public key accepts.
+BACKUP=(--backup --ephemeral-key-file "$WORK/backup-key")
+BACKUP_PUBLIC_KEY="$("${SIGN[@]}" keygen "${BACKUP[@]}")"
+[[ "$BACKUP_PUBLIC_KEY" =~ ^[A-Za-z0-9+/]{43}=$ ]] || fail "keygen --backup must print the public key and nothing else"
+[[ "$BACKUP_PUBLIC_KEY" != "$PUBLIC_KEY" ]] || fail "the backup key is the everyday key"
+! grep -qF "$(cat "$WORK/backup-key")" <<<"$BACKUP_PUBLIC_KEY" || fail "keygen --backup printed the private key"
+[[ "$("${SIGN[@]}" pubkey "${BACKUP[@]}")" == "$BACKUP_PUBLIC_KEY" ]] || fail "pubkey --backup differs from keygen --backup"
+[[ "$("${SIGN[@]}" pubkey "${KEY[@]}")" == "$PUBLIC_KEY" ]] || fail "keygen --backup changed the everyday key"
+BACKUP_PRIVATE="$(cat "$WORK/backup-key")"
+if "${SIGN[@]}" keygen "${BACKUP[@]}" > "$WORK/backup-second.log" 2>&1; then fail "keygen --backup replaced an existing key"; fi
+[[ "$(cat "$WORK/backup-key")" == "$BACKUP_PRIVATE" ]] || fail "a refused keygen --backup rewrote the key"
+"${SIGN[@]}" sign --backup "$WORK/latest.json" --ephemeral-key-file "$WORK/backup-key" > "$WORK/backup-sign.log"
+! grep -qF "$BACKUP_PRIVATE" "$WORK/backup-sign.log" || fail "sign --backup printed the private key"
+"${SIGN[@]}" verify "$WORK/latest.json" "$BACKUP_PUBLIC_KEY" >/dev/null
+if "${SIGN[@]}" verify "$WORK/latest.json" "$PUBLIC_KEY" > "$WORK/backup-everyday.log" 2>&1; then
+  fail "the everyday key accepted a signature made with the backup key"
+fi
+"${SIGN[@]}" sign "$WORK/latest.json" "${KEY[@]}" >/dev/null
+if "${SIGN[@]}" verify "$WORK/latest.json" "$BACKUP_PUBLIC_KEY" > "$WORK/everyday-backup.log" 2>&1; then
+  fail "the backup key accepted a signature made with the everyday key"
+fi
+if "${SIGN[@]}" pubkey --backup --ephemeral-key-file "$WORK/missing" > "$WORK/backup-missing.log" 2>&1; then
+  fail "pubkey --backup without a key"
+fi
+if "${SIGN[@]}" verify --backup "$WORK/latest.json" "$PUBLIC_KEY" > "$WORK/backup-verify.log" 2>&1; then
+  fail "verify took --backup"
+fi
+
 # Pre-release versions, wrong archive names and bad numbers are refused.
 mkdir "$WORK/bad"
 for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip 0.3.1 21 15.0" \
@@ -52,4 +80,4 @@ for arguments in "RimeLingo-0.3.0.zip 0.3.0-beta.1 21 15.0" "RimeLingo-0.3.0.zip
   fi
   [[ ! -e "$WORK/bad/latest.json" ]] || fail "wrote a manifest for: $arguments"
 done
-echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, refused input'
+echo 'PASS: public-key-only keygen, manifest fields and checksum, signature, tampering, wrong key, missing key, backup key, refused input'

@@ -24,7 +24,7 @@ public actor UpdateCoordinator {
     private let signature: any CodeSignatureEvaluating
     private let fs: any UpdateFileSystem
     private let process: any ProcessControlling
-    private let publicKey: String
+    private let keys: ManifestKeys
     private let system: OperatingSystemVersion
     private let now: @Sendable () -> Date
     private var onChange: (@Sendable () -> Void)?
@@ -37,7 +37,7 @@ public actor UpdateCoordinator {
                 signature: any CodeSignatureEvaluating = SecCodeSignatureEvaluator(),
                 fs: any UpdateFileSystem = LocalUpdateFileSystem(),
                 process: any ProcessControlling = SystemProcessControl(),
-                publicKey: String = UpdateConfiguration.manifestPublicKey,
+                keys: ManifestKeys = .shipped,
                 system: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
                 now: @escaping @Sendable () -> Date = { Date() }) {
         self.paths = paths
@@ -49,7 +49,7 @@ public actor UpdateCoordinator {
         self.signature = signature
         self.fs = fs
         self.process = process
-        self.publicKey = publicKey
+        self.keys = keys
         self.system = system
         self.now = now
     }
@@ -60,7 +60,7 @@ public actor UpdateCoordinator {
     private var cachedEligibility: UpdateEligibility?
     public func eligibility() -> UpdateEligibility {
         if let cachedEligibility { return cachedEligibility }
-        let value = UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: fs, publicKey: publicKey)
+        let value = UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: fs, keys: keys)
         cachedEligibility = value
         return value
     }
@@ -119,7 +119,7 @@ public actor UpdateCoordinator {
 
         let release: AppRelease
         do {
-            release = try ManifestVerifier.release(manifest: manifest, signature: signatureData, publicKey: publicKey)
+            release = try ManifestVerifier.release(manifest: manifest, signature: signatureData, keys: keys)
         } catch {
             let failure = error as? UpdateFailure ?? .malformedManifest("decode")
             return mutate {
@@ -423,12 +423,12 @@ public actor UpdateCoordinator {
                                        signature: any CodeSignatureEvaluating = SecCodeSignatureEvaluator(),
                                        fs: any UpdateFileSystem = LocalUpdateFileSystem(),
                                        process: any ProcessControlling = SystemProcessControl(),
-                                       publicKey: String = UpdateConfiguration.manifestPublicKey,
+                                       keys: ManifestKeys = .shipped,
                                        now: @Sendable () -> Date = { Date() }) -> RecoveryOutcome {
         let updates = UpdatePaths(paths)
         guard FileManager.default.fileExists(atPath: updates.root.path) else { return .none }
         let installer = UpdateInstaller(paths: updates, signature: signature, fs: fs, process: process)
-        switch UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: fs, publicKey: publicKey) {
+        switch UpdateEligibility.evaluate(bundle: bundle, signature: signature, fs: fs, keys: keys) {
         case .eligible: break
         // A valid signature that is not a release's stays a development build.
         case .developmentBuild where !signature.evaluateRunningProcess().isValid

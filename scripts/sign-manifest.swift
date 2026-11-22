@@ -7,6 +7,11 @@
 //   swift scripts/sign-manifest.swift sign latest.json     # writes latest.json.sig
 //   swift scripts/sign-manifest.swift verify latest.json <public-key-base64>
 //
+// `--backup` after keygen, pubkey or sign uses the backup key instead of the everyday one
+// (Keychain account "ed25519-backup" instead of "ed25519"). The apps trust a manifest
+// signed by either (UpdateConfiguration.manifestBackupPublicKey), so the backup key is what
+// still reaches installed copies when the everyday key is lost or has leaked. See below.
+//
 // What protects the key, and what does not. The Keychain item is created by the `swift`
 // interpreter running this file, so its access list trusts that interpreter: this script
 // reads the key without a prompt, and so can any other Swift script run by this user on
@@ -24,14 +29,31 @@
 //   security add-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519 \
 //     -l "RimeLingo release manifest signing key" -X <the hex>
 // Do not paste the hex anywhere that is logged or synced.
+//
+// The backup key is generated once, before the first release, and does not stay on this Mac:
+//   swift scripts/sign-manifest.swift keygen --backup
+// prints its PUBLIC key; paste that into `manifestBackupPublicKey` and commit. Then move
+// the private half to offline storage. This prints its 32 bytes as hex, to be written down
+// or stored where no network reaches:
+//   security find-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519-backup -w
+// and this DELETES it from the Keychain once the offline copy is checked:
+//   security delete-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519-backup
+// From then on releases are signed with the everyday key only, as before. When the backup
+// key is needed, put it back:
+//   security add-generic-password -s com.leelib.rimelingo.manifest-key -a ed25519-backup \
+//     -l "RimeLingo release manifest backup signing key" -X <the hex>
+// check that `pubkey --backup` prints the key in the source, and sign the release with
+// `sign --backup` (RIMELINGO_SIGN_WITH_BACKUP_KEY=1 makes scripts/release.sh do that). That
+// release should carry a new everyday key in `manifestPublicKey`; delete the backup key
+// from the Keychain again afterwards.
 // Tests only: `--ephemeral-key-file <path>` after keygen, pubkey or sign keeps the key in
-// that file instead of the Keychain (scripts/test-release-manifests.sh).
+// that file instead of the Keychain, with or without `--backup`
+// (scripts/test-release-manifests.sh).
 import CryptoKit
 import Foundation
 import Security
 
 let service = "com.leelib.rimelingo.manifest-key"
-let account = "ed25519"
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data((message + "\n").utf8))
@@ -45,6 +67,16 @@ if let index = arguments.firstIndex(of: "--ephemeral-key-file") {
     keyFile = arguments[index + 1]
     arguments.removeSubrange(index...(index + 1))
 }
+var backup = false
+if let index = arguments.firstIndex(of: "--backup") {
+    guard ["keygen", "pubkey", "sign"].contains(arguments.first ?? "") else { fail("--backup goes with keygen, pubkey or sign") }
+    backup = true
+    arguments.remove(at: index)
+}
+let account = backup ? "ed25519-backup" : "ed25519"
+let label = backup ? "RimeLingo release manifest backup signing key" : "RimeLingo release manifest signing key"
+let keyName = backup ? "backup manifest signing key" : "manifest signing key"
+let flags = backup ? " --backup" : ""
 
 func keychainQuery() -> [String: Any] {
     [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
@@ -68,15 +100,27 @@ func storedKey() -> Curve25519.Signing.PrivateKey? {
 func requireKey() -> Curve25519.Signing.PrivateKey {
     guard let key = storedKey() else {
         fail(keyFile.map { "no valid key in \($0)" }
-            ?? "no manifest signing key in the login Keychain (service \(service)); run: swift scripts/sign-manifest.swift keygen")
+            ?? (backup
+                ? "no backup manifest signing key in the login Keychain (service \(service), account \(account)); "
+                    + "it is kept offline: restore it as described at the top of scripts/sign-manifest.swift"
+                : "no manifest signing key in the login Keychain (service \(service)); run: swift scripts/sign-manifest.swift keygen"))
     }
     return key
 }
 
 switch arguments.first {
 case "keygen":
-    guard arguments.count == 1 else { fail("usage: keygen") }
-    guard storedKey() == nil else { fail("a manifest signing key already exists; refusing to replace it") }
+    guard arguments.count == 1 else { fail("usage: keygen\(flags)") }
+    // Anything already there is kept, readable as a key or not.
+    if let keyFile {
+        guard !FileManager.default.fileExists(atPath: keyFile) else { fail("\(keyFile) already exists; refusing to replace it") }
+    } else {
+        let status = SecItemCopyMatching(keychainQuery() as CFDictionary, nil)
+        guard status == errSecItemNotFound else {
+            fail(status == errSecSuccess ? "a \(keyName) already exists; refusing to replace it"
+                : "cannot tell whether a \(keyName) already exists (status \(status))")
+        }
+    }
     let key = Curve25519.Signing.PrivateKey()
     if let keyFile {
         guard FileManager.default.createFile(atPath: keyFile, contents: Data(key.rawRepresentation.base64EncodedString().utf8),
@@ -84,16 +128,16 @@ case "keygen":
     } else {
         var item = keychainQuery()
         item[kSecValueData as String] = key.rawRepresentation
-        item[kSecAttrLabel as String] = "RimeLingo release manifest signing key"
+        item[kSecAttrLabel as String] = label
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else { fail("could not store the key in the Keychain (status \(status))") }
     }
     print(key.publicKey.rawRepresentation.base64EncodedString())
 case "pubkey":
-    guard arguments.count == 1 else { fail("usage: pubkey") }
+    guard arguments.count == 1 else { fail("usage: pubkey\(flags)") }
     print(requireKey().publicKey.rawRepresentation.base64EncodedString())
 case "sign":
-    guard arguments.count == 2 else { fail("usage: sign <file>") }
+    guard arguments.count == 2 else { fail("usage: sign\(flags) <file>") }
     let key = requireKey()
     let path = arguments[1]
     let data = try Data(contentsOf: URL(fileURLWithPath: path))
@@ -108,5 +152,5 @@ case "verify":
     guard let signature = Data(base64Encoded: text), key.isValidSignature(signature, for: data) else { fail("signature invalid") }
     print("signature valid")
 default:
-    fail("usage: sign-manifest.swift keygen | pubkey | sign <file> | verify <file> <public-key>")
+    fail("usage: sign-manifest.swift keygen [--backup] | pubkey [--backup] | sign [--backup] <file> | verify <file> <public-key>")
 }

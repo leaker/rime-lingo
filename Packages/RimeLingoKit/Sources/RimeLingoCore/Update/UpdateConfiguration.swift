@@ -12,7 +12,14 @@ public enum UpdateConfiguration {
     /// `swift scripts/sign-manifest.swift keygen`; scripts/release.sh refuses to publish
     /// while this is the placeholder or differs from the key in the login Keychain.
     public static let manifestPublicKey = "REPLACE_BEFORE_FIRST_RELEASE"
+    /// Second Ed25519 public key whose private half is kept offline, so that losing or
+    /// leaking the everyday key does not strand installed copies: a manifest signed by
+    /// either key is trusted. TO BE REPLACED BEFORE THE FIRST RELEASE with the output of
+    /// `swift scripts/sign-manifest.swift keygen --backup`; scripts/release.sh refuses to
+    /// publish while this is the placeholder. On its own it does not switch the updater on.
+    public static let manifestBackupPublicKey = "REPLACE_BEFORE_FIRST_RELEASE"
 
+    /// Only the everyday key decides this: a build with just a backup key stays inert.
     public static var isConfigured: Bool { isConfigured(manifestPublicKey) }
     public static func isConfigured(_ key: String) -> Bool {
         key != placeholderPublicKey && Data(base64Encoded: key)?.count == 32
@@ -92,9 +99,38 @@ public struct AppRelease: Codable, Sendable, Equatable {
     }
 }
 
+/// The public keys a manifest signature may verify under: the everyday key and the offline
+/// backup key. Tests inject their own.
+public struct ManifestKeys: Sendable, Equatable {
+    public var everyday: String
+    public var backup: String
+
+    public init(_ everyday: String, backup: String = UpdateConfiguration.placeholderPublicKey) {
+        self.everyday = everyday
+        self.backup = backup
+    }
+
+    /// The keys compiled into this build.
+    public static let shipped = ManifestKeys(UpdateConfiguration.manifestPublicKey,
+                                             backup: UpdateConfiguration.manifestBackupPublicKey)
+
+    public var isConfigured: Bool { UpdateConfiguration.isConfigured(everyday) }
+    /// Nothing without a real everyday key; the backup key only when it is a real key too,
+    /// so a placeholder or a mangled constant is never something a signature is checked against.
+    public var accepted: [String] {
+        guard isConfigured else { return [] }
+        return UpdateConfiguration.isConfigured(backup) ? [everyday, backup] : [everyday]
+    }
+}
+
 /// Turns the bytes of latest.json and latest.json.sig into a trusted `AppRelease`.
 public enum ManifestVerifier {
-    /// `signature` is the base64 text of latest.json.sig.
+    /// Whether the signature verifies under either accepted key.
+    public static func verify(manifest: Data, signature: Data, keys: ManifestKeys) -> Bool {
+        keys.accepted.contains { verify(manifest: manifest, signature: signature, publicKey: $0) }
+    }
+
+    /// One key. `signature` is the base64 text of latest.json.sig.
     public static func verify(manifest: Data, signature: Data, publicKey: String) -> Bool {
         guard UpdateConfiguration.isConfigured(publicKey),
               let keyData = Data(base64Encoded: publicKey),
@@ -105,9 +141,9 @@ public enum ManifestVerifier {
     }
 
     /// The signature is checked before a single byte of the manifest is interpreted.
-    public static func release(manifest: Data, signature: Data, publicKey: String) throws -> AppRelease {
-        guard UpdateConfiguration.isConfigured(publicKey) else { throw UpdateFailure.notConfigured }
-        guard verify(manifest: manifest, signature: signature, publicKey: publicKey) else { throw UpdateFailure.untrustedManifest }
+    public static func release(manifest: Data, signature: Data, keys: ManifestKeys = .shipped) throws -> AppRelease {
+        guard keys.isConfigured else { throw UpdateFailure.notConfigured }
+        guard verify(manifest: manifest, signature: signature, keys: keys) else { throw UpdateFailure.untrustedManifest }
         guard let release = try? JSONDecoder().decode(AppRelease.self, from: manifest) else {
             throw UpdateFailure.malformedManifest("decode")
         }

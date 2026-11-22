@@ -24,6 +24,13 @@
 #      Losing the private key means no installed copy can ever be updated again, and the
 #      Keychain is its only home: keep a copy offline (the commands are at the top of
 #      scripts/sign-manifest.swift, with what protects the Keychain item and what does not).
+#      Backup key, so that losing or leaking that key does not strand installed copies:
+#        swift scripts/sign-manifest.swift keygen --backup
+#      Paste the PUBLIC key it prints into `manifestBackupPublicKey` in the same file and
+#      commit, then move the private half to offline storage and delete it from the
+#      Keychain (commands at the top of scripts/sign-manifest.swift). Installed copies
+#      accept a manifest signed by either key. This script refuses to release while the
+#      backup constant is the placeholder; it does not ask for the backup private key.
 #   2. Notarization credentials, stored by notarytool in the Keychain under a profile name:
 #        xcrun notarytool store-credentials "rimelingo-notary"
 #      Another name goes into RIMELINGO_NOTARY_PROFILE.
@@ -39,6 +46,12 @@
 # once before the app is sent to Apple for notarization, once before the tag is pushed and
 # the release is created.
 #
+# Releasing with the backup key (the everyday key is lost or has leaked): restore the
+# backup private key into the Keychain, put a NEW everyday public key into
+# `manifestPublicKey`, commit, and run this script with RIMELINGO_SIGN_WITH_BACKUP_KEY=1.
+# The manifest is then signed with `sign --backup` and checked against
+# `manifestBackupPublicKey`; the everyday private key is not needed for that release.
+#
 # The release notes start with the section of CHANGELOG.md for this version, if there is
 # one (scripts/promote-changelog.sh writes it; only plain x.y.z versions are released).
 # If publishing stops part-way, the script prints the commands that undo what was done.
@@ -50,6 +63,7 @@ REPO="leaker/rime-lingo"
 TEAM="FKKCZM5CBJ"
 IDENTITY="${RIMELINGO_SIGN_IDENTITY:-}"
 NOTARY_PROFILE="${RIMELINGO_NOTARY_PROFILE:-rimelingo-notary}"
+SIGN_WITH_BACKUP_KEY="${RIMELINGO_SIGN_WITH_BACKUP_KEY:-}"
 OUT="$ROOT/dist/release"
 APP="$ROOT/build/Release/RimeLingo.app"
 CONFIGURATION="Packages/RimeLingoKit/Sources/RimeLingoCore/Update/UpdateConfiguration.swift"
@@ -108,14 +122,29 @@ if [[ -n "$LATEST" ]]; then
     || die "build $BUILD is not higher than build ${PREVIOUS_BUILD:-?} of v$LATEST"
 fi
 
-SOURCE_KEY="$(sed -n 's/^[[:space:]]*public static let manifestPublicKey = "\(.*\)"$/\1/p' "$CONFIGURATION")"
+source_key() {  # <constant name>
+  sed -n 's/^[[:space:]]*public static let '"$1"' = "\(.*\)"$/\1/p' "$CONFIGURATION"
+}
+SOURCE_KEY="$(source_key manifestPublicKey)"
 [[ -n "$SOURCE_KEY" ]] || die "cannot read manifestPublicKey from $CONFIGURATION"
 [[ "$SOURCE_KEY" != "$PLACEHOLDER_KEY" ]] \
   || die "manifestPublicKey is still the placeholder; run 'swift scripts/sign-manifest.swift keygen', paste the key, commit"
-KEYCHAIN_KEY="$(swift scripts/sign-manifest.swift pubkey)" \
-  || die "no manifest signing key in the login Keychain (see the one-time setup at the top of this script)"
-[[ "$KEYCHAIN_KEY" == "$SOURCE_KEY" ]] \
-  || die "the Keychain's signing key ($KEYCHAIN_KEY) is not the one in the source ($SOURCE_KEY): installed copies would reject this release"
+SOURCE_BACKUP_KEY="$(source_key manifestBackupPublicKey)"
+[[ -n "$SOURCE_BACKUP_KEY" ]] || die "cannot read manifestBackupPublicKey from $CONFIGURATION"
+[[ "$SOURCE_BACKUP_KEY" != "$PLACEHOLDER_KEY" ]] \
+  || die "manifestBackupPublicKey is still the placeholder; run 'swift scripts/sign-manifest.swift keygen --backup', paste the key, commit"
+[[ "$SOURCE_BACKUP_KEY" != "$SOURCE_KEY" ]] || die "manifestBackupPublicKey is the same key as manifestPublicKey: it backs nothing up"
+# The key this release is signed with. The backup private key is offline by design and is
+# only looked for when it is asked for.
+case "$SIGN_WITH_BACKUP_KEY" in
+  1) SIGN_FLAGS=(--backup); SIGNING_KEY="$SOURCE_BACKUP_KEY"; SIGNING_KEY_NAME="backup signing key" ;;
+  ""|0) SIGN_FLAGS=(); SIGNING_KEY="$SOURCE_KEY"; SIGNING_KEY_NAME="signing key" ;;
+  *) die "RIMELINGO_SIGN_WITH_BACKUP_KEY must be 1 or unset, not '$SIGN_WITH_BACKUP_KEY'" ;;
+esac
+KEYCHAIN_KEY="$(swift scripts/sign-manifest.swift pubkey ${SIGN_FLAGS[@]+"${SIGN_FLAGS[@]}"})" \
+  || die "no manifest $SIGNING_KEY_NAME in the login Keychain (see the one-time setup at the top of this script)"
+[[ "$KEYCHAIN_KEY" == "$SIGNING_KEY" ]] \
+  || die "the Keychain's $SIGNING_KEY_NAME ($KEYCHAIN_KEY) is not the one in the source ($SIGNING_KEY): installed copies would reject this release"
 
 [[ -n "$IDENTITY" ]] || die "set RIMELINGO_SIGN_IDENTITY to the Developer ID Application identity of team $TEAM"
 [[ "$IDENTITY" != "-" ]] || die "an ad-hoc signature cannot be released"
@@ -225,8 +254,8 @@ spctl --assess --type execute "$WORK/extracted/RimeLingo.app" || die "Gatekeeper
 
 step "writing and signing the manifest"
 python3 scripts/write-release-manifest.py "$ZIP" "$VERSION" "$BUILD" "$MIN_MACOS" "$OUT"
-swift scripts/sign-manifest.swift sign "$OUT/latest.json"
-swift scripts/sign-manifest.swift verify "$OUT/latest.json" "$SOURCE_KEY"
+swift scripts/sign-manifest.swift sign ${SIGN_FLAGS[@]+"${SIGN_FLAGS[@]}"} "$OUT/latest.json"
+swift scripts/sign-manifest.swift verify "$OUT/latest.json" "$SIGNING_KEY"
 
 NOTES="$WORK/notes.md"
 SECTION="$(awk -v v="$VERSION" '
@@ -269,7 +298,7 @@ EOF
 for file in "$ZIP" "$OUT/latest.json" "$OUT/latest.json.sig"; do
   printf '  %-22s %10s bytes  sha256 %s\n' "$(basename "$file")" "$(size "$file")" "$(sha256 "$file")"
 done
-echo "  manifest key $SOURCE_KEY"
+echo "  manifest key $SIGNING_KEY ($SIGNING_KEY_NAME)"
 echo "Every installed release build updates itself to $VERSION within about 24 hours."
 confirm "publish it" "published (the notarized build stays in $OUT)"
 

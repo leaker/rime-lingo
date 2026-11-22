@@ -120,8 +120,8 @@ public enum UpdateEligibility: Equatable, Sendable {
     case unsupportedLocation(String)
 
     public static func evaluate(bundle: URL, signature: any CodeSignatureEvaluating, fs: any UpdateFileSystem,
-                                publicKey: String = UpdateConfiguration.manifestPublicKey) -> UpdateEligibility {
-        guard UpdateConfiguration.isConfigured(publicKey) else { return .notConfigured }
+                                keys: ManifestKeys = .shipped) -> UpdateEligibility {
+        guard keys.isConfigured else { return .notConfigured }
         let running = signature.evaluateRunningProcess()
         guard running.isValid, running.satisfiesDeveloperID, running.teamID == UpdateConfiguration.teamID else {
             return .developmentBuild
