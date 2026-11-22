@@ -13,10 +13,10 @@ RimeLingo (灵译输入法) is a Chinese input method for macOS. It is based on 
 ## Installation
 
 1. Download `RimeLingo-<version>.dmg` from the [Releases](https://github.com/leaker/rime-lingo/releases/latest) page.
-2. Double-click the downloaded file to open it, then double-click the app inside (shown as "灵译输入法"). When macOS asks whether to open an app downloaded from the internet, click "Open".
+2. Double-click the downloaded file to open it, then double-click the app inside. It is shown as "RimeLingo" ("灵译输入法" when the system language is Chinese); the disk image itself is named "灵译输入法" in every language. When macOS asks whether to open an app downloaded from the internet, click "Open".
 3. Click "安装" (Install) in the window that appears.
 
-Then pick "灵译输入法" from the input menu in the menu bar, or press ⌃Space, and start typing.
+Then pick "RimeLingo" ("灵译输入法" when the system language is Chinese) from the input menu in the menu bar, or press ⌃Space, and start typing.
 
 The installer copies the input method into your own Input Methods folder (`~/Library/Input Methods`) and enables it. It needs no administrator password and no logout. Afterwards you can eject the disk image and delete the downloaded file.
 
@@ -27,9 +27,15 @@ Later versions download and install themselves while the Mac is idle. You do not
 <details>
 <summary>Manual installation</summary>
 
-If the installer window reports an error, or you prefer to do it yourself:
+For when the installer window reports an error, or you prefer to do it yourself. First read what the installer said (its messages are in Chinese):
 
-1. Copy `RimeLingo.app` from the disk image to `~/Library/Input Methods/` (in Finder press ⇧⌘G and paste that path). `RimeLingo-<version>.zip` unzips to the same app.
+- It contains "文件已复制" (the files were copied) or "已安装并启用" (installed and enabled): the app is already in the Input Methods folder. **Skip step 1 and start at step 2.**
+- It contains "已恢复为原来的版本" (the previous version was restored): the previous version still works. Click "重试" (Retry), or start at step 1 to put the new version in by hand.
+- It says the package is incomplete or damaged ("不完整或已损坏"): download it again; do not copy this one by hand.
+
+Every step can be repeated.
+
+1. Copy `RimeLingo.app` from the disk image to `~/Library/Input Methods/` (in Finder press ⇧⌘G and paste that path); choose "Replace" if Finder asks. `RimeLingo-<version>.zip` unzips to the same app.
 2. Open Terminal and run:
 
    ```bash
@@ -38,8 +44,8 @@ If the installer window reports an error, or you prefer to do it yourself:
    killall imklaunchagent TextInputMenuAgent TextInputSwitcher
    ```
 
-   The last line restarts the system processes that launch input methods; they come back by themselves. Logging out and back in does the same if you would rather not run it.
-3. If "灵译输入法" is not in the input menu of the menu bar yet, open System Settings › Keyboard › Input Sources › Edit…, click "+", and add it under "Chinese, Simplified".
+   The last line restarts the system processes that launch input methods; they come back by themselves, and a message that no process was found can be ignored. Logging out and back in does the same if you would rather not run it. If step 1 replaced a version that was already installed, log out and back in once after this step as well.
+3. If "RimeLingo" ("灵译输入法" when the system language is Chinese) is not in the input menu of the menu bar yet, open System Settings › Keyboard › Input Sources › Edit…, click "+", and add it under "Chinese, Simplified".
 
 </details>
 
