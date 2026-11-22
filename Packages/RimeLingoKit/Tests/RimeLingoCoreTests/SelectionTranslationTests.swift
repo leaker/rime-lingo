@@ -257,29 +257,30 @@ struct SelectionTranslationSessionTests {
         #expect(!SelectionReplaceBlock.notReady.isPermanent)
     }
 
-    /// Deactivation or a client change: reading goes on, replacing is off.
-    @Test func detachingKeepsCopyButDisablesReplace() {
+    /// A replacement refused for good (the field is no longer the captured one): reading
+    /// goes on, replacing stays off.
+    @Test func aPermanentRefusalKeepsTheTextButDisablesReplace() {
         var session = ready()
-        #expect(session.handle(.detached) == [.render])
+        #expect(session.handle(.replaceRefused(.contextChanged)) == [.render])
         #expect(!session.snapshot.text.isEmpty && !session.snapshot.canSubmit)
         #expect(session.snapshot.message == "输入位置已改变，无法替换")
         #expect(check(session) == .blocked(.contextChanged))
-        #expect(session.handle(.detached).isEmpty)
+        #expect(session.handle(.replaceRefused(.contextChanged)).isEmpty)
 
-        // Detached while translating: the answer still arrives and can be copied.
+        // Refused while translating: the answer still arrives and is shown.
         var (translating, request) = started()
-        _ = translating.handle(.detached)
+        _ = translating.handle(.replaceRefused(.contextChanged))
         #expect(translating.snapshot.status == .updating && translating.snapshot.message == "输入位置已改变，无法替换")
         _ = translating.handle(.completed(request.tag, .success("Hello")))
         #expect(!translating.snapshot.text.isEmpty && !translating.snapshot.canSubmit)
-        // Another target still works on the detached preview.
+        // Another target still works on that preview.
         #expect(translating.handle(.targetPressed(.japanese)).count == 3)
         #expect(translating.replaceBlock == .contextChanged)
     }
 
     @Test func failureReasonIsShownInsteadOfTheBlock() {
         var (session, request) = started()
-        _ = session.handle(.detached)
+        _ = session.handle(.replaceRefused(.contextChanged))
         _ = session.handle(.completed(request.tag, .failure(.requestFailed)))
         #expect(session.snapshot.message == "请求失败" && session.snapshot.canRetry)
     }
@@ -536,16 +537,6 @@ struct SelectionTranslationCoordinatorTests {
         translator.answer(0, .success("Hello"))
         await eventually { coordinator.validTranslation == "Hello" }
         #expect(log.snapshots.last??.canSubmit == true)
-    }
-
-    @Test func deactivationKeepsThePreviewForReading() async {
-        await translated()
-        coordinator.detach()
-        #expect(coordinator.isActive)
-        #expect(coordinator.validTranslation == "Hello, world")
-        #expect(log.snapshots.last??.text == "Hello, world")
-        #expect(log.snapshots.last??.canSubmit == false)
-        #expect(coordinator.replace(active: Fixture.field, isSecure: false) { "你好，世界" } == .blocked(.contextChanged))
     }
 
     /// A secure context: capture and preview go, pending results are invalidated, and

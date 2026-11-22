@@ -486,6 +486,38 @@ struct TranslationShortcutSettingsTests {
         #expect(TranslationShortcutBindings.liveSwitchedHint(to: Self.french).targetLabel == "法语")
     }
 
+    // MARK: - Mode and panel content
+
+    @Test func theModeNeedsItsLanguageInTheListWithAShortcut() {
+        #expect(bindings().sustainsLive(.english) && bindings().sustainsLive(.japanese))
+        // Not in the list.
+        #expect(!bindings().sustainsLive(Self.french))
+        #expect(!bindings { $0.translationLanguages.removeAll { $0.code == "ja" } }.sustainsLive(.japanese))
+        // In the list, the shortcut cleared: an empty draft would leave no key to turn it off.
+        #expect(!bindings { $0[shortcut: .english] = "" }.sustainsLive(.english))
+        #expect(bindings { $0[shortcut: .english] = "" }.sustainsLive(.japanese))
+        #expect(!bindings { $0.translationLanguages = [] }.sustainsLive(.english))
+    }
+
+    @Test func thePanelShowsOneThingAtATime() {
+        let started = bindings().liveStartedHint(for: .english)
+        let stopped = TranslationShortcutBindings.liveStoppedHint(committedSource: true)
+        func content(selection: Bool = false, draft: Bool = false, _ hint: TranslationHint? = nil) -> TranslationPreviewContent {
+            .decide(selectionPreviewOpen: selection, sessionShowsPanel: draft, hint: hint)
+        }
+        // The mode is on and nothing is typed: no panel at all.
+        #expect(content() == .hidden)
+        #expect(content(draft: true) == .translation(footnote: ""))
+        // Turned on over an empty draft: the hint alone. Over a draft: its keys under the translation.
+        #expect(content(started) == .hint(started))
+        #expect(content(draft: true, started) == .translation(footnote: started.keys))
+        // Turned off: the session is gone and the notice still shows.
+        #expect(content(stopped) == .hint(stopped))
+        // A selection preview owns the panel whatever else is pending.
+        #expect(content(selection: true, draft: true, started) == .selection)
+        #expect(content(selection: true, started) == .selection)
+    }
+
     @Test func theLiveMessageNamesTheKeyThatActsOnIt() {
         #expect(bindings().liveMessage(snapshot(.failed, "请求失败")) == "请求失败 · ⌥↩ 重试")
         #expect(bindings().liveMessage(snapshot(.overLimit, "超过 200 字")) == "超过 200 字 · ⌥↩ 翻译")

@@ -22,8 +22,8 @@ final class InputEngine {
     /// translation input and selected-text translation; an open selection preview owns it
     /// (see InputEngine+SelectionTranslation.swift).
     let previewPanel = TranslationPreviewPanel()
-    /// Selected-text translation. Kept here and not in a controller: its preview stays
-    /// readable after the field it was captured in lost the keyboard.
+    /// Selected-text translation. One capture at a time for the whole input method; the
+    /// field it was captured in ends it when it loses the keyboard.
     let selection = SelectionTranslationCoordinator(translate: { request in
         let features = await MainActor.run { InputEngine.shared.features }
         return await LiveTranslator.translate(request, features: features)
@@ -37,6 +37,13 @@ final class InputEngine {
     /// The translation shortcuts in effect, resolved once per features reload instead of
     /// on every key press.
     private(set) var translationBindings = TranslationShortcutBindings(features: RimeLingoFeatures())
+    /// Live translation is on with this target. Process-wide and memory only: every
+    /// field that gets the keyboard starts its own session for it, and a restart of the
+    /// input method turns it off.
+    var liveTarget: TranslationTarget?
+    /// The notice of a mode change on screen now (see "Translation hint").
+    private(set) var translationHint: TranslationHint?
+    private var translationHintTask: Task<Void, Never>?
     /// Chinese/English punctuation shared by all apps, following ⌃⇧3 wherever it is
     /// pressed. Nil until the first session: it then starts from librime's remembered
     /// state when `switcher/save_options` lists ascii_punct, else from the setting.
@@ -207,10 +214,14 @@ final class InputEngine {
         }
         usage.isEnabled = features.usageStats
         if !features.aiPolish { activeController?.cancelPolish() }
-        // Switched off mid-session: the source goes into the app and the session ends.
-        if !features.liveTranslation {
-            selection.end()
-            activeController?.exitLive(client: nil)
+        if !features.liveTranslation { selection.end() }
+        // Switched off, or the mode's language left the list or lost its shortcut (with
+        // an empty draft no key could turn the mode off then): the source goes into the
+        // app, the session ends and the mode is off. No hint: the user is in Settings.
+        let sustained = liveTarget.map { features.liveTranslation && translationBindings.sustainsLive($0) } ?? false
+        if !sustained {
+            activeController?.exitLive(client: nil, announce: false)
+            liveTarget = nil
         }
     }
 
@@ -254,7 +265,8 @@ final class InputEngine {
             isComposing: controller?.isComposing ?? false,
             hasPendingInput: controller?.hasPendingInput ?? false,
             hasDraft: controller.map { !$0.draft.isEmpty } ?? false,
-            liveSessionActive: controller?.live != nil,
+            // Live translation left on with nothing typed has nothing to interrupt.
+            liveSessionActive: controller?.live?.session?.snapshot.showsPanel == true,
             selectionPreviewActive: selection.isActive,
             aiActionActive: controller?.polish != nil,
             quickMenuOpen: controller?.quickMenu != nil || controller?.menuHold.isArmed == true,
@@ -495,6 +507,7 @@ final class InputEngine {
         activeController?.flushBeforeEngineRestart()
         panel.hide()
         selection.end()
+        cancelTranslationHint()
         previewPanel.hide()
         let engine = RimeEngine.shared
         engine.cleanupAllSessions()
@@ -714,6 +727,42 @@ final class InputEngine {
     }
 
     func cancelStatus() { statusHideTask?.cancel() }
+
+    // MARK: - Translation hint
+
+    /// Shows a notice of the live translation mode once, in the preview panel: alone, or
+    /// as the footnote of a translation already on screen. It goes after its duration or
+    /// at the next key press that is not a repeat (`dismissTranslationHint`).
+    func showTranslationHint(_ hint: TranslationHint) {
+        guard let controller = activeController, bubbleAllowed, !selection.isActive,
+              !controller.blockedBySecureContext() else { return }
+        cancelTranslationHint()
+        translationHint = hint
+        translationHintTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: hint.duration)
+            guard !Task.isCancelled else { return }
+            self?.dismissTranslationHint()
+        }
+        controller.refreshLivePreview()
+    }
+
+    /// Takes the hint off the screen; the panel then shows what is left (a translation, or nothing).
+    func dismissTranslationHint() {
+        guard translationHint != nil else { return }
+        cancelTranslationHint()
+        if let controller = activeController {
+            controller.refreshLivePreview()
+        } else if !selection.isActive {
+            previewPanel.hide()
+        }
+    }
+
+    /// Forgets the hint without touching the panel, for callers that hide or redraw it themselves.
+    func cancelTranslationHint() {
+        translationHintTask?.cancel()
+        translationHintTask = nil
+        translationHint = nil
+    }
 
     /// A second look that asks no client: no bubble while the screen is locked, an
     /// authentication surface is the frontmost application, or the session is known to

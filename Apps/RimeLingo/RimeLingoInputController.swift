@@ -243,6 +243,7 @@ final class RimeLingoInputController: IMKInputController {
             bundleID = client?.bundleIdentifier()
             discardPendingState()
             engine.panel.hide()
+            engine.cancelTranslationHint()
             engine.previewPanel.hide()
             // Modifier state is kept current (see `handle`) so the first modifier event
             // after the context turns eligible is compared against the truth.
@@ -294,9 +295,10 @@ final class RimeLingoInputController: IMKInputController {
         quickMenu = nil
         polish?.task?.cancel()
         polish = nil
+        // The session ends; live translation itself stays on for the next field.
         endLive()
         engine.panel.hide()
-        // A selection preview stays for reading; it can no longer replace.
+        // A selection preview captured here closes: nothing could close it afterwards.
         detachSelectionPreview()
         if !engine.selection.isActive { engine.previewPanel.hide() }
     }
@@ -437,8 +439,12 @@ final class RimeLingoInputController: IMKInputController {
         }
         engine.activeController = self
         clearDiscardedComposition()
-        // The client of this field changed under a selection preview captured here.
-        if engine.selection.isActive, !selectionPreviewIsAttached { detachSelectionPreview() }
+        // The client of this field changed under a selection preview captured here: it
+        // closes, and a session of this field takes the panel back.
+        if engine.selection.isActive, !selectionPreviewIsAttached {
+            detachSelectionPreview()
+            refreshLivePreview()
+        }
         var handled = false
 
         switch event.type {
@@ -452,6 +458,11 @@ final class RimeLingoInputController: IMKInputController {
             if menuHold.isArmed { engine.panel.hideHoldCue(animated: true) }
             menuHold.keyPressed() // a key while the modifier is down is a shortcut, not a hold
             let flags = event.modifierFlags
+            // A hint of the translation mode goes with the next key. Not with a repeat:
+            // holding the shortcut that raised it would clear it at once.
+            if !event.isARepeat { engine.dismissTranslationHint() }
+            // Live translation is on and this field has no session yet.
+            resumeLiveIfNeeded(client: client)
             // Translation shortcuts as configured in Settings (⌃⌥⌘E / ⌃⌥⌘J / ⌥↩ by default),
             // resolved when the features file is loaded and reached only past the secure-context gate.
             let shortcut = engine.translationBindings.match(

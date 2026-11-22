@@ -127,6 +127,30 @@ public struct TranslationHint: Sendable, Equatable {
     }
 }
 
+/// What the one translation preview panel shows for the field that has the keyboard.
+public enum TranslationPreviewContent: Sendable, Equatable {
+    /// An open selection preview owns the panel: nothing else is drawn.
+    case selection
+    /// The live translation of the draft. `footnote` carries the key line of a hint
+    /// that came up while a translation was already on screen; empty otherwise.
+    case translation(footnote: String)
+    /// A transient notice alone: the mode changed and there is no draft to translate.
+    case hint(TranslationHint)
+    case hidden
+
+    /// `sessionShowsPanel`: this field has a live session whose draft has text
+    /// (`LiveTranslationSnapshot.showsPanel`). A hint needs no session: the one shown
+    /// when the mode is turned off comes after the session ended.
+    public static func decide(
+        selectionPreviewOpen: Bool, sessionShowsPanel: Bool, hint: TranslationHint?
+    ) -> TranslationPreviewContent {
+        if selectionPreviewOpen { return .selection }
+        if sessionShowsPanel { return .translation(footnote: hint?.keys ?? "") }
+        if let hint { return .hint(hint) }
+        return .hidden
+    }
+}
+
 /// What a key press means to the translation shortcuts.
 public enum TranslationShortcutMatch: Sendable, Equatable {
     case language(TranslationTarget)
@@ -228,6 +252,13 @@ public struct TranslationShortcutBindings: Sendable, Equatable {
     public func action(holding hotkey: String) -> TranslationShortcutAction? {
         guard let notation = Self.parse(hotkey)?.notation else { return nil }
         return actions.first { self[$0] == notation }
+    }
+
+    /// Whether live translation may stay on with `target`: the language is in the list
+    /// and has a shortcut in effect. Without one nothing could turn the mode off while
+    /// the draft is empty.
+    public func sustainsLive(_ target: TranslationTarget) -> Bool {
+        languages.contains(target) && !self[.language(target)].isEmpty
     }
 
     // MARK: - Hints

@@ -15,7 +15,8 @@ import InputMethodKit
 // Panel ownership: there is one preview panel. While a selection capture is open it owns
 // the panel; a live translation session of the same field stays active underneath
 // without drawing, and gets the panel back when the selection preview closes. The
-// preview has no controls: its footnote names the keys that act on it.
+// preview has no controls: its footnote names the keys that act on it, so it closes with
+// the field it was captured in (nothing could close it once that field lost the keyboard).
 
 extension RimeLingoInputController {
     private var selectionClient: (any IMKTextInput)? { client() }
@@ -100,11 +101,14 @@ extension RimeLingoInputController {
     }
 
     /// This field was deactivated, gave up the panels or lost its client: a preview
-    /// captured here stays on screen for reading, with replacing off.
+    /// captured here closes. State and panel only: this runs while IMK is activating
+    /// another field, so the client is not asked anything (which rules out
+    /// `closeSelectionPreview`, whose redraw reads the cursor).
     func detachSelectionPreview() {
         let selection = InputEngine.shared.selection
         guard selection.session?.capture.context.owner == ObjectIdentifier(self) else { return }
-        selection.detach()
+        DebugLog.write("selection close reason=detached")
+        selection.end()
     }
 
     /// Reads the captured range back and, when it still holds the captured text, puts
@@ -143,6 +147,8 @@ extension InputEngine {
         // The lock screen or an authentication surface is in front: like a secure context,
         // the capture ends. A translation that was never shown is not kept for replacing.
         guard bubbleAllowed else { return selection.end() }
+        // The panel is this preview's now: a hint still pending is not drawn after it.
+        cancelTranslationHint()
         let status: TranslationPreviewState.Status = switch snapshot.status {
         case .waiting: .waiting
         case .updating: .updating
@@ -165,7 +171,7 @@ extension InputEngine {
         guard selection.isActive else { return }
         DebugLog.write("selection close")
         selection.end()
-        activeController?.resumeLivePreview()
+        activeController?.refreshLivePreview()
     }
 
     /// The submit shortcut. The field is checked again right before the write: the capture's

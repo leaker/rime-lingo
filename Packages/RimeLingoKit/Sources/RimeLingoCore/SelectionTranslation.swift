@@ -118,8 +118,6 @@ public struct SelectionTranslationSession: Sendable, Equatable {
         case targetPressed(TranslationTarget)
         case completed(TranslationTag, Result<String, TranslationFailure>)
         case retry
-        /// The capture's controller was deactivated or lost its client.
-        case detached
         case replaceRefused(SelectionReplaceBlock)
     }
 
@@ -184,9 +182,6 @@ public struct SelectionTranslationSession: Sendable, Equatable {
 
         case .retry:
             return isFailed ? startNow() : []
-
-        case .detached:
-            return block(.contextChanged)
 
         case let .replaceRefused(reason):
             return reason.isPermanent ? block(reason) : []
@@ -306,8 +301,8 @@ public enum SelectionPreviewOwnership {
 }
 
 /// Drives a `SelectionTranslationSession`: owns the request in flight and reports every
-/// snapshot change. One instance serves the whole input method; the preview it feeds
-/// outlives the controller the selection was captured in.
+/// snapshot change. One instance serves the whole input method; the field a selection
+/// was captured in ends it when it loses the keyboard.
 @MainActor public final class SelectionTranslationCoordinator {
     /// Called once per render with the new snapshot, and once with nil after `end()`.
     public var onChange: (@MainActor (LiveTranslationSnapshot?) -> Void)?
@@ -336,8 +331,6 @@ public enum SelectionPreviewOwnership {
 
     public func targetPressed(_ target: TranslationTarget) { apply(.targetPressed(target)) }
     public func retry() { apply(.retry) }
-    /// The capture's field is gone: the preview stays, replacing is off.
-    public func detach() { apply(.detached) }
 
     /// Decides a replacement (see `SelectionTranslationSession.checkReplace`) and records
     /// its outcome: a permanent block stays on the preview, a secure context ends it.
