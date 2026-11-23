@@ -1,5 +1,5 @@
 import FoundationModels
-public import RimeLingoCore
+import RimeLingoCore
 
 /// One-shot text generation for live translation.
 public protocol TranslationBackend: Sendable {
@@ -23,7 +23,7 @@ public struct OnDeviceTranslationBackend: TranslationBackend {
         let session = LanguageModelSession(model: model, instructions: instructions)
         // `respond` throws on cancellation. `streamResponse` does not: if this ever streams,
         // call `try Task.checkCancellation()` after the loop, or a cut-off reply looks complete.
-        return try await session.respond(to: prompt, options: GenerationOptions(sampling: .greedy)).content
+        return try await session.respond(to: prompt, options: GenerationOptions(samplingMode: .greedy)).content
     }
 }
 

@@ -141,7 +141,7 @@ public struct ModifierHold: Sendable, Equatable {
     /// `modifiersChanged`). True when it is the hold key's release, which must not
     /// reach librime (a lone modifier tap can switch Chinese/English there).
     public mutating func consumeRelease(_ flags: UInt) -> Bool {
-        guard isFired, let target else { return false }
+        guard isFired, target != nil else { return false }
         // The hold key counts as released when its bits are gone: for a sided key the
         // side bit (the generic flag may still be set by the opposite side); for an
         // unsided key the generic flag clears only once the last side is released.
