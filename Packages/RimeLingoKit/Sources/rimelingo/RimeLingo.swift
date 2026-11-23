@@ -8,7 +8,7 @@ struct RimeLingoCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "rimelingo",
         abstract: "RimeLingo command line — deploy, benchmark and manage your Rime workspace.",
-        version: "0.2.2",
+        version: "0.2.3",
         subcommands: [
             Deploy.self, Bench.self, Doctor.self, ImportSquirrel.self, Package.self,
             Get.self, Set.self, Sync.self, Register.self, Subscribe.self, DiagnosticsCommand.self
