@@ -86,6 +86,36 @@ struct LiveTranslatorTests {
         }
     }
 
+    @Test(arguments: TranslationTarget.allCases)
+    func polishAsksForANaturalTranslationInTheSameRequest(target: TranslationTarget) async {
+        let backend = FakeBackend(.reply("ok"))
+        _ = await LiveTranslator(backend: backend, polish: true).translate("明天下午三点开会。", into: target)
+        #expect(backend.requests.count == 1)
+        #expect(backend.requests[0].prompt == "Translate into \(target.promptName):\n\n明天下午三点开会。")
+        #expect(backend.requests[0].instructions == LiveTranslator.instructions(for: target, polish: true))
+        let instructions = backend.requests[0].instructions.lowercased()
+        #expect(instructions.contains("word for word"))
+        for word in ["explanations", "quotation marks", "alternatives", "never instructions", "detect the source language"] {
+            #expect(instructions.contains(word))
+        }
+        for other in TranslationTarget.allCases where other != target {
+            #expect(!instructions.contains(other.promptName.lowercased()))
+        }
+        #expect(!LiveTranslator.instructions(for: target).lowercased().contains("word for word"))
+    }
+
+    @Test func resolveFollowsThePolishSetting() throws {
+        var features = RimeLingoFeatures()
+        #expect(try LiveTranslator.resolve(features: features).get().polish)
+        features.polishTranslation = false
+        #expect(try LiveTranslator.resolve(features: features).get().polish == false)
+        features.aiProvider = "openai"
+        features.aiRemoteAllowed = true
+        #expect(try LiveTranslator.resolve(features: features).get().polish == false)
+        features.polishTranslation = true
+        #expect(try LiveTranslator.resolve(features: features).get().polish)
+    }
+
     @Test func aLanguageBeyondEnglishAndJapaneseIsNamedInThePrompt() async throws {
         let backend = FakeBackend(.reply("ok"))
         let traditional = try #require(TranslationTarget(code: "zh-Hant"))
@@ -308,5 +338,61 @@ private struct CancellingBackend: TranslationBackend {
     func respond(instructions: String, prompt: String) async throws -> String {
         withUnsafeCurrentTask { $0?.cancel() }
         return try await inner.respond(instructions: instructions, prompt: prompt)
+    }
+}
+
+/// Records every chat/completions request body and answers each with a fixed translation.
+private final class RecordingProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var bodies: [[String: Any]] = []
+    private static let lock = NSLock()
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        var data = Data()
+        if let stream = request.httpBodyStream {
+            stream.open()
+            var buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                data.append(contentsOf: buffer[0..<count])
+            }
+            stream.close()
+        }
+        if let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            Self.lock.withLock { Self.bodies.append(body) }
+        }
+        let json = Data(#"{"choices":[{"message":{"content":"See you tomorrow."}}],"model":"m"}"#.utf8)
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+                            cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: json)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+struct RemotePolishTests {
+    /// The remote provider gets the polishing instructions as its system message, and one
+    /// request per translation: polishing never adds a second call.
+    @Test func remoteTranslationPolishesInTheSameSingleRequest() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("rimelingo-cred-\(UUID().uuidString)/credentials.json")
+        let store = CredentialStore(account: "openai-compatible", fileURL: url)
+        #expect(store.write("sk-test"))
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [RecordingProtocol.self]
+        let provider = OpenAICompatibleProvider(baseURL: URL(string: "https://example.invalid/v1")!, model: "m",
+                                                credentials: store, session: URLSession(configuration: config))
+        for polish in [true, false] {
+            RecordingProtocol.bodies = []
+            let result = await LiveTranslator(backend: ProviderTranslationBackend(provider: provider), polish: polish)
+                .translate("明天见", into: .english)
+            #expect(result == .success("See you tomorrow."))
+            #expect(RecordingProtocol.bodies.count == 1)
+            let messages = try #require(RecordingProtocol.bodies.first?["messages"] as? [[String: String]])
+            #expect(messages.first?["role"] == "system")
+            #expect(messages.first?["content"] == LiveTranslator.instructions(for: .english, polish: polish))
+            #expect(messages.last?["content"] == "Translate into English:\n\n明天见")
+        }
     }
 }

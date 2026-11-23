@@ -22,6 +22,17 @@ struct UsageStatsTests {
     }
 
     /// Live translation is on in this build, also for features.json files written before it existed.
+    @Test func polishTranslationDefaultsOnAndRoundTrips() throws {
+        let decoder = JSONDecoder()
+        #expect(RimeLingoFeatures().polishTranslation)
+        // A file written before the setting existed gets it on.
+        #expect(try decoder.decode(RimeLingoFeatures.self, from: Data(#"{"liveTranslation":true}"#.utf8)).polishTranslation)
+        #expect(try decoder.decode(RimeLingoFeatures.self, from: Data(#"{"polishTranslation":false}"#.utf8)).polishTranslation == false)
+        var features = RimeLingoFeatures()
+        features.polishTranslation = false
+        #expect(try decoder.decode(RimeLingoFeatures.self, from: JSONEncoder().encode(features)).polishTranslation == false)
+    }
+
     @Test func liveTranslationDefaultsOnAndRoundTrips() throws {
         let decoder = JSONDecoder()
         #expect(RimeLingoFeatures().liveTranslation)

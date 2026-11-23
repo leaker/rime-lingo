@@ -36,6 +36,10 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
     public var asciiPunct = false
     /// Live translation shortcuts; on by default in this build.
     public var liveTranslation = true
+    /// Live and selected-text translation ask for a polished, natural translation in the
+    /// same request (one call, no second pass). Off gives a plain, faithful translation.
+    /// On by default, also for files written before the setting existed.
+    public var polishTranslation = true
     /// The target languages the user enabled, in the user's order. Being in the list is
     /// being enabled; the list may be empty. Each language has its own optional shortcut in
     /// the key recorder's notation (empty = none). Read through `TranslationShortcutBindings`,
@@ -98,6 +102,7 @@ public struct RimeLingoFeatures: Sendable, Codable, Equatable {
         traditional = try container.decodeIfPresent(Bool.self, forKey: .traditional) ?? defaults.traditional
         asciiPunct = try container.decodeIfPresent(Bool.self, forKey: .asciiPunct) ?? defaults.asciiPunct
         liveTranslation = try container.decodeIfPresent(Bool.self, forKey: .liveTranslation) ?? defaults.liveTranslation
+        polishTranslation = (try? container.decodeIfPresent(Bool.self, forKey: .polishTranslation)) ?? defaults.polishTranslation
         // A value of the wrong type costs that shortcut only, not the whole file.
         submitTranslationShortcut = (try? container.decodeIfPresent(String.self, forKey: .submitTranslationShortcut)) ?? defaults.submitTranslationShortcut
         let stored = (try? container.decodeIfPresent([Lossy<TranslationLanguage>].self, forKey: .translationLanguages)) ?? nil
