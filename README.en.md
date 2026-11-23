@@ -98,6 +98,8 @@ Until you insert the translation you can keep editing the Chinese text: move the
 
 The translation view has no buttons; everything is done from the keyboard. English and Japanese are enabled by default. On the 翻译 (Translation) page of the settings you can add other languages and give each its own shortcut.
 
+Translations keep the tone of the source: casual chat between friends stays casual (plain form in Japanese, contractions in English), while work email and other formal text stays polite.
+
 By default the translation is also polished: it reads more naturally, and typos and punctuation slips in the source are fixed along the way. Polishing happens in the same request as the translation, so it does not add any waiting. For a plain, literal translation, turn off 翻译时同时润色 (Polish while translating) on the 翻译 (Translation) page. The switch applies both to translation as you type and to translating selected text.
 
 ### Translate selected text
