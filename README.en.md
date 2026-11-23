@@ -98,6 +98,8 @@ Until you insert the translation you can keep editing the Chinese text: move the
 
 The translation view has no buttons; everything is done from the keyboard. English and Japanese are enabled by default. On the 翻译 (Translation) page of the settings you can add other languages and give each its own shortcut.
 
+By default the translation is also polished: it reads more naturally, and typos and punctuation slips in the source are fixed along the way. Polishing happens in the same request as the translation, so it does not add any waiting. For a plain, literal translation, turn off 翻译时同时润色 (Polish while translating) on the 翻译 (Translation) page. The switch applies both to translation as you type and to translating selected text.
+
 ### Translate selected text
 
 Select text where you can type (a chat field, a document, an editor) and press **⌃⌥⌘E** or **⌃⌥⌘J** (or the shortcut you gave another language). When the translation appears, press **⌥↩** to replace the selection with it, **⌥↩** again to retry after a failure, or **Esc** to close it.
@@ -114,7 +116,7 @@ Click the input method icon in the menu bar and choose "灵译输入法设置…
 
 | Section | What it does |
 | --- | --- |
-| 翻译 (Translation) | Turn live translation on or off; add, remove and reorder target languages; give each language a shortcut; change the "insert translation" shortcut; choose the translation service |
+| 翻译 (Translation) | Turn live translation on or off; turn 翻译时同时润色 (Polish while translating) on or off (on by default; off gives a literal translation); add, remove and reorder target languages; give each language a shortcut; change the "insert translation" shortcut; choose the translation service |
 | AI 助手 (AI assistant) | Configure the translation service: the on-device model, or any online service with an OpenAI-compatible API (enter its address and key, then allow text to be sent to it) |
 | 输入方案 (Schemas) | Full pinyin, double pinyin and other schemas |
 | 输入习惯, 中英切换, 模糊音与拼写 | Number of candidates, switching keys, fuzzy pinyin |
