@@ -55,7 +55,7 @@ extension RimeLingoInputController {
     func startConversion(client: (any IMKTextInput)?, committed: String?) {
         guard !blockedBySecureContext(client: client) else { return }
         let engine = InputEngine.shared
-        guard let client = client ?? (self.client() as? (any IMKTextInput)) else { return }
+        guard let client = client ?? self.client() else { return }
         guard let target = actionTarget(client: client, committed: committed) else {
             return engine.showStatus("没有可处理的文字：先打一段字，或选中一段文字")
         }
@@ -96,7 +96,7 @@ extension RimeLingoInputController {
     func hasActionTarget(client: (any IMKTextInput)?) -> Bool {
         guard !blockedBySecureContext(client: client) else { return false }
         if isComposing || !draft.isEmpty { return true }
-        guard let client = client ?? (self.client() as? (any IMKTextInput)) else { return false }
+        guard let client = client ?? self.client() else { return false }
         return actionTarget(client: client, committed: nil) != nil
     }
 
@@ -105,7 +105,7 @@ extension RimeLingoInputController {
         let engine = InputEngine.shared
         let features = engine.features
         guard features.aiPolish else { return engine.showStatus("AI 动作未开启：设置 › AI 助手") }
-        guard let client = client ?? (self.client() as? (any IMKTextInput)) else { return }
+        guard let client = client ?? self.client() else { return }
         guard let target = actionTarget(client: client, committed: committed) else {
             return engine.showStatus("没有可处理的文字：先打一段字，或选中一段文字")
         }
@@ -204,7 +204,7 @@ extension RimeLingoInputController {
         if let message {
             InputEngine.shared.showStatus(message)
         } else if !draft.isEmpty || isComposing {
-            sync(client: self.client() as? (any IMKTextInput)) // back to the draft / candidates
+            sync(client: self.client()) // back to the draft / candidates
         } else {
             InputEngine.shared.panel.hide()
         }
@@ -239,7 +239,7 @@ extension RimeLingoInputController {
         // Before the read-back below and before any write.
         guard !blockedBySecureContext(client: client) else { return }
         guard let request = polish, request.variants.indices.contains(index),
-              let client = client ?? (self.client() as? (any IMKTextInput)) else { return }
+              let client = client ?? self.client() else { return }
         let result = request.variants[index].text
         switch request.target {
         case .draft:

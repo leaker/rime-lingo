@@ -57,7 +57,7 @@ final class RimeLingoInputController: IMKInputController {
     var menuShown: (depth: Int, category: Int) = (0, 0)
 
     private var engine: InputEngine { InputEngine.shared }
-    private var textClient: (any IMKTextInput)? { client() as? any IMKTextInput }
+    private var textClient: (any IMKTextInput)? { client() }
     var ownsPanel: Bool { engine.activeController === self }
 
     // MARK: - Secure context

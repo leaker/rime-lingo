@@ -61,7 +61,7 @@ extension RimeLingoInputController {
         return true
     }
 
-    private var liveTextClient: (any IMKTextInput)? { client() as? (any IMKTextInput) }
+    private var liveTextClient: (any IMKTextInput)? { client() }
 
     // MARK: - Session
 

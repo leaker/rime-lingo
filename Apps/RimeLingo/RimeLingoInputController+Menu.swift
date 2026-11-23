@@ -74,7 +74,7 @@ extension RimeLingoInputController {
         }
     }
 
-    private func menuClient(_ client: (any IMKTextInput)?) -> (any IMKTextInput)? { client ?? (self.client() as? (any IMKTextInput)) }
+    private func menuClient(_ client: (any IMKTextInput)?) -> (any IMKTextInput)? { client ?? self.client() }
 
     /// Draws the current page. Without an explicit transition the direction is derived
     /// from how the page stack changed: deeper pushes, shallower pops, a new category fades.
