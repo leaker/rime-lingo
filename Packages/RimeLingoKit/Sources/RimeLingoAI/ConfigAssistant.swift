@@ -1,5 +1,5 @@
 public import RimeLingoCore
-public import Foundation
+import Foundation
 
 /// Turns a natural-language request ("候选词改成 7 个，开启 zh/z 模糊音") into validated
 /// catalog changes. The model only proposes; every change is type-checked against the

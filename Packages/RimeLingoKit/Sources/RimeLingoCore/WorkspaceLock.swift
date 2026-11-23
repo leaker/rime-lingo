@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// Advisory cross-process lock (flock) guarding writes to one RimeLingo user directory.
 /// The input method and every `rimelingo` CLI command that deploys, imports, syncs or

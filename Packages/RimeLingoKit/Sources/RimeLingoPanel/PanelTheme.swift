@@ -1,5 +1,5 @@
 public import RimeLingoCore
-public import Foundation
+import Foundation
 
 /// An RGBA color parsed from Rime color notation.
 public struct ThemeColor: Sendable, Hashable {

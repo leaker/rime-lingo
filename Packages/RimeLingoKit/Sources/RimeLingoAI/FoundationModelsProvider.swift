@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 import FoundationModels
 
 /// Apple's on-device model (Apple Intelligence). Nothing leaves the Mac.

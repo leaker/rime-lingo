@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// A text-in / text-out language model backend.
 ///

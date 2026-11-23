@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// 简繁转换 of a piece of text, on the Mac itself: the system's ICU transforms
 /// (Hans-Hant / Hant-Hans). No network, no AI. Typing output uses librime's OpenCC

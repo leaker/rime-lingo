@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// Reads effective values from the deployed `build/` output and writes changes into
 /// the generated layer. Does not link librime; deployment is requested separately.

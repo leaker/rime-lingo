@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// Full pinyin syllables → double pinyin codes, so vocabulary shipped or subscribed in
 /// full pinyin also works for double pinyin schemas (each syllable = two keys).

@@ -1,5 +1,5 @@
-public import RimeLingoCore
-public import Foundation
+import RimeLingoCore
+import Foundation
 
 /// Finds names, brands and jargon in text the user pastes, so they can be added to
 /// custom phrases. The model only selects terms; input codes are computed locally.

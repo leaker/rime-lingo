@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// How far the Chinese/English (ascii_mode) state is shared, like fcitx5's
 /// ShareInputState or Weasel's global_ascii. Configured as `ascii_state/scope` in the

@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// The quick menu opened from the candidate window (button or hotkey): a small stack of
 /// pages the user walks with digits / arrows / Return / Esc. Pure state — the input

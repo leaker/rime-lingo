@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// An input schema found in the user or shared data directory.
 public struct SchemaInfo: Sendable, Hashable, Identifiable {

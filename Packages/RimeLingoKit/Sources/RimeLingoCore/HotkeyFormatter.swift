@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 
 /// Converts between key events and Rime's key notation (`Control+Shift+grave`), and
 /// renders Rime notation for display (`⌃⇧\``). Pure functions so the settings key
