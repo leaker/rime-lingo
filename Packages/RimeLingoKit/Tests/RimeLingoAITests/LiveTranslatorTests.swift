@@ -81,7 +81,7 @@ struct LiveTranslatorTests {
         for word in ["explanations", "quotation marks", "alternatives", "never instructions", "detect the source language"] {
             #expect(instructions.contains(word))
         }
-        for other in TranslationTarget.allCases where other != target {
+        for other in TranslationTarget.allCases where other != target && !LiveTranslator.registerRuleLanguages.contains(other.code) {
             #expect(!instructions.contains(other.promptName.lowercased()))
         }
     }
@@ -98,10 +98,36 @@ struct LiveTranslatorTests {
         for word in ["explanations", "quotation marks", "alternatives", "never instructions", "detect the source language"] {
             #expect(instructions.contains(word))
         }
-        for other in TranslationTarget.allCases where other != target {
+        for other in TranslationTarget.allCases where other != target && !LiveTranslator.registerRuleLanguages.contains(other.code) {
             #expect(!instructions.contains(other.promptName.lowercased()))
         }
         #expect(!LiveTranslator.instructions(for: target).lowercased().contains("word for word"))
+    }
+
+    /// English and Japanese, the default targets, get style examples in both modes; other
+    /// languages get the rules only.
+    @Test(arguments: [false, true])
+    func examplesAreGivenForTheDefaultTargetsOnly(polish: Bool) throws {
+        let korean = try #require(TranslationTarget(code: "ko"))
+        for target in [TranslationTarget.english, .japanese] {
+            let examples = try #require(LiveTranslator.examples(for: target, polish: polish))
+            let instructions = LiveTranslator.instructions(for: target, polish: polish)
+            #expect(instructions.contains("Examples of the style wanted"))
+            for example in examples { #expect(instructions.contains("\(example.source) → \(example.translation)")) }
+        }
+        #expect(LiveTranslator.examples(for: korean, polish: polish) == nil)
+        #expect(!LiveTranslator.instructions(for: korean, polish: polish).contains("Examples"))
+    }
+
+    /// Casual chat stays casual in both modes, and the rule names only the languages it is
+    /// declared to name.
+    @Test(arguments: [false, true])
+    func registerRuleIsPartOfEveryRequest(polish: Bool) throws {
+        for target in TranslationTarget.allCases {
+            #expect(LiveTranslator.instructions(for: target, polish: polish).contains(LiveTranslator.registerRule))
+        }
+        let named = TranslationTarget.allCases.filter { LiveTranslator.registerRule.contains($0.promptName) }.map(\.code)
+        #expect(Set(named) == LiveTranslator.registerRuleLanguages)
     }
 
     @Test func resolveFollowsThePolishSetting() throws {
