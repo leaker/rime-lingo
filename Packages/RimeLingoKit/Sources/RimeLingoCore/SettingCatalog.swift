@@ -92,13 +92,7 @@ public struct SettingCatalog: Sendable, Decodable {
 extension ConfigValue: Decodable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
-        if container.decodeNil() { self = .null }
-        else if let value = try? container.decode(Bool.self) { self = .bool(value) }
-        else if let value = try? container.decode(Int.self) { self = .int(value) }
-        else if let value = try? container.decode(Double.self) { self = .double(value) }
-        else if let value = try? container.decode(String.self) { self = .string(value) }
-        else if let value = try? container.decode([ConfigValue].self) { self = .list(value) }
-        else if let value = try? container.decode([String: ConfigValue].self) {
+        if container.decodeNil() { self = .null } else if let value = try? container.decode(Bool.self) { self = .bool(value) } else if let value = try? container.decode(Int.self) { self = .int(value) } else if let value = try? container.decode(Double.self) { self = .double(value) } else if let value = try? container.decode(String.self) { self = .string(value) } else if let value = try? container.decode([ConfigValue].self) { self = .list(value) } else if let value = try? container.decode([String: ConfigValue].self) {
             self = .map(value.keys.sorted().map { Entry($0, value[$0]!) })
         } else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "unsupported value")

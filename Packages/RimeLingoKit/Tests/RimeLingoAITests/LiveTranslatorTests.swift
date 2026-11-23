@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 @testable import RimeLingoAI
 @testable import RimeLingoCore
+import Testing
 
 /// A backend that never touches a model or the network.
 private final class FakeBackend: TranslationBackend, @unchecked Sendable {
@@ -186,7 +186,7 @@ struct LiveTranslatorTests {
         ("See you tomorrow.\n\n(Note: informal)", "See you tomorrow. (Note: informal)"),
         ("line one \r\n  line two", "line one line two"),
         ("```\nfirst\nsecond\n```", "first second"),
-        ("one\u{2028}two", "one two"),
+        ("one\u{2028}two", "one two")
     ])
     func oneLineSourceNeverGetsALineBreak(reply: String, expected: String) async {
         let result = await LiveTranslator(backend: FakeBackend(.reply(reply))).translate("明天见", into: .english)
@@ -259,7 +259,7 @@ struct LiveTranslatorTests {
             (URLError(.timedOut), .requestFailed),
             (UnknownError(), .requestFailed),
             (CancellationError(), .cancelled),
-            (URLError(.cancelled), .cancelled),
+            (URLError(.cancelled), .cancelled)
         ]
         for (error, expected) in cases {
             let result = await LiveTranslator(backend: FakeBackend(.fail(error))).translate("你好", into: .english)

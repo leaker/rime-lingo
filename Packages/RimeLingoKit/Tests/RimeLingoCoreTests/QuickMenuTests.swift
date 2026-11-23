@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct QuickMenuTests {
     let content = QuickMenu.Content(
@@ -22,7 +22,7 @@ struct QuickMenuTests {
     @Test func lettersPickCellsLikeTheKeyboardAndDigitsSwitchTabs() {
         let symbols = QuickMenu.Symbols(categories: [
             .init(id: "a", title: "甲", symbol: nil, items: (0..<45).map { "s\($0)" }),
-            .init(id: "b", title: "乙", symbol: nil, items: ["x", "y"]),
+            .init(id: "b", title: "乙", symbol: nil, items: ["x", "y"])
         ])
         var menu = QuickMenu(content: .init(symbols: symbols))
         _ = menu.handle(.digit(2))
@@ -40,7 +40,7 @@ struct QuickMenuTests {
         let snippets: [QuickMenu.Symbols.Category] = [
             .init(id: "1", title: "证件", symbol: nil, items: ["身份证 110101…"]),
             .init(id: "2", title: "地址", symbol: nil, items: ["北京市朝阳区…", "上海市徐汇区…"]),
-            .init(id: "3", title: "空分类", symbol: nil, items: []),
+            .init(id: "3", title: "空分类", symbol: nil, items: [])
         ]
         var menu = QuickMenu(content: .init(phrases: [("稍后回复", "uhhf")], snippets: snippets))
         _ = menu.handle(.digit(1))
@@ -56,7 +56,7 @@ struct QuickMenuTests {
         let many = QuickMenu.Symbols(categories: [
             .init(id: "a", title: "甲", symbol: nil, items: (0..<95).map { "a\($0)" }),
             .init(id: "b", title: "乙", symbol: nil, items: ["x", "y"]),
-            .init(id: "empty", title: "空", symbol: nil, items: []),
+            .init(id: "empty", title: "空", symbol: nil, items: [])
         ])
         var menu = QuickMenu(content: .init(symbols: many))
         _ = menu.handle(.digit(2))

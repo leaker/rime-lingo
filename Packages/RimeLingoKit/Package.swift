@@ -3,7 +3,7 @@ import PackageDescription
 
 let strictSwift: [SwiftSetting] = [
     .enableUpcomingFeature("ExistentialAny"),
-    .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("InternalImportsByDefault")
 ]
 
 let package = Package(
@@ -15,11 +15,11 @@ let package = Package(
         .library(name: "RimeLingoCore", targets: ["RimeLingoCore"]),
         .library(name: "RimeLingoPanel", targets: ["RimeLingoPanel"]),
         .library(name: "RimeLingoAI", targets: ["RimeLingoAI"]),
-        .executable(name: "rimelingo", targets: ["rimelingo"]),
+        .executable(name: "rimelingo", targets: ["rimelingo"])
     ],
     dependencies: [
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.0.0"),
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.6.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.6.0")
     ],
     targets: [
         // librime 1.17 prebuilt, assembled by scripts/fetch-librime.sh.
@@ -46,7 +46,7 @@ let package = Package(
             name: "rimelingo",
             dependencies: [
                 "RimeKit", "RimeLingoCore",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             swiftSettings: strictSwift
         ),
@@ -54,6 +54,6 @@ let package = Package(
         .testTarget(name: "RimeKitTests", dependencies: ["RimeKit"]),
         .testTarget(name: "RimeLingoCoreTests", dependencies: ["RimeLingoCore", "RimeKit"], exclude: ["Fixtures"]),
         .testTarget(name: "RimeLingoPanelTests", dependencies: ["RimeLingoPanel"]),
-        .testTarget(name: "RimeLingoAITests", dependencies: ["RimeLingoAI"]),
+        .testTarget(name: "RimeLingoAITests", dependencies: ["RimeLingoAI"])
     ]
 )

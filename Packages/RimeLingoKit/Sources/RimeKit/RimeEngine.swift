@@ -1,5 +1,5 @@
-public import Foundation
 internal import CRime
+public import Foundation
 
 /// Directories and identity handed to librime on setup / initialize.
 public struct RimeTraits: Sendable, Equatable {

@@ -1,12 +1,12 @@
-import RimeLingoCore
 import Foundation
+import RimeLingoCore
 
 /// Finds installed applications for 智能配置. Reads bundle metadata only.
 enum AppScanner {
     static let roots: [URL] = [
         URL(fileURLWithPath: "/Applications"),
         URL(fileURLWithPath: "/System/Applications"),
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications"),
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
     ]
 
     /// App bundles directly in the roots and one folder down (Utilities, vendor folders).

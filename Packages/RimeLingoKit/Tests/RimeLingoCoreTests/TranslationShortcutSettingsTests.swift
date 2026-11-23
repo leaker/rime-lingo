@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct TranslationShortcutSettingsTests {
     // NSEvent.ModifierFlags raw values.
@@ -37,7 +37,7 @@ struct TranslationShortcutSettingsTests {
         #expect(defaults[.submit] == "Alt+Return")
         #expect(defaults.languages == [.english, .japanese])
         #expect(RimeLingoFeatures().translationLanguages == [
-            language(.english, "Control+Alt+Super+e"), language(.japanese, "Control+Alt+Super+j"),
+            language(.english, "Control+Alt+Super+e"), language(.japanese, "Control+Alt+Super+j")
         ])
     }
 
@@ -113,7 +113,7 @@ struct TranslationShortcutSettingsTests {
             """#)
         #expect(messy.usageStats)
         #expect(messy.translationLanguages == [
-            language(Self.french, "Control+Alt+f"), language(TranslationTarget(code: "zh-Hant")!),
+            language(Self.french, "Control+Alt+f"), language(TranslationTarget(code: "zh-Hant")!)
         ])
     }
 
@@ -223,7 +223,7 @@ struct TranslationShortcutSettingsTests {
             $0.translationLanguages = [
                 language(Self.french, "Control+Alt+t"), language(.english, "Control+Alt+t"),
                 language(Self.german, "Control+Alt+t"), language(.japanese, "Control+Alt+Super+e"),
-                language(Self.korean, "Hyper+k"), language(Self.french, "Control+Alt+x"),
+                language(Self.korean, "Hyper+k"), language(Self.french, "Control+Alt+x")
             ]
         }
         #expect(many.languages == [Self.french, .english, Self.german, .japanese, Self.korean])
@@ -358,7 +358,7 @@ struct TranslationShortcutSettingsTests {
         let others = [
             (shortcut: "Control+grave", title: "方案选单快捷键"), (shortcut: "Shift+Control+grave", title: "方案选单快捷键"),
             (shortcut: "F4", title: "方案选单快捷键"), (shortcut: "Control+Shift+Alt+nosuchkey", title: "损坏"),
-            (shortcut: "", title: "未设置"), (shortcut: "Super+Control+K", title: "以词定字"),
+            (shortcut: "", title: "未设置"), (shortcut: "Super+Control+K", title: "以词定字")
         ]
         for action in Self.sampleActions {
             #expect(defaults.issue(recording: "Control+grave", for: action, others: others) == .taken(by: "方案选单快捷键"))

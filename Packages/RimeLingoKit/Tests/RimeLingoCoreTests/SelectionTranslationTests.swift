@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 private final class Owner: Sendable {}
 
@@ -122,7 +122,7 @@ struct SelectionTranslationSessionTests {
         let stale = [
             TranslationTag(session: 2, revision: request.tag.revision, target: .english),
             TranslationTag(session: 3, revision: request.tag.revision, target: .japanese),
-            TranslationTag(session: 3, revision: request.tag.revision + 1, target: .english),
+            TranslationTag(session: 3, revision: request.tag.revision + 1, target: .english)
         ]
         for tag in stale {
             #expect(session.handle(.completed(tag, .success("stale"))).isEmpty)
@@ -209,7 +209,7 @@ struct SelectionTranslationSessionTests {
             nil,
             SelectionContext(owner: ObjectIdentifier(Fixture.otherController), client: field.client, bundleID: field.bundleID),
             SelectionContext(owner: field.owner, client: ObjectIdentifier(Fixture.otherClient), bundleID: field.bundleID),
-            SelectionContext(owner: field.owner, client: field.client, bundleID: "com.example.chat"),
+            SelectionContext(owner: field.owner, client: field.client, bundleID: "com.example.chat")
         ]
         for active in others {
             var asked = false

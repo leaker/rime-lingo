@@ -1,5 +1,5 @@
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct SecureContextPolicyTests {
     typealias Decision = SecureContextPolicy.Decision
@@ -21,7 +21,7 @@ struct SecureContextPolicyTests {
     @Test(arguments: [
         "com.apple.loginwindow", "com.apple.SecurityAgent", "com.apple.authorizationhost",
         "com.apple.LocalAuthentication.UIAgent", "com.apple.LocalAuthenticationRemoteService",
-        "com.apple.ScreenSaver.Engine",
+        "com.apple.ScreenSaver.Engine"
     ], [false, true])
     func authenticationSurfacesAreSecureWhateverTheFlagSays(bundleID: String, flag: Bool) {
         let decision = SecureContextPolicy.decision(bundleID: bundleID, secureEventInput: flag)
@@ -75,7 +75,7 @@ struct SecureContextPolicyTests {
         let shown = [
             hint.shouldShow(for: .secureEventInput),
             hint.shouldShow(for: .secureEventInput),
-            hint.shouldShow(for: .unknownClient),
+            hint.shouldShow(for: .unknownClient)
         ]
         #expect(shown == [true, false, false])
         hint.activated()
@@ -88,7 +88,7 @@ struct SecureContextPolicyTests {
         let shown = [
             hint.shouldShow(for: .secureClient),
             hint.shouldShow(for: .eligible),
-            hint.shouldShow(for: .secureEventInput),
+            hint.shouldShow(for: .secureEventInput)
         ]
         #expect(shown == [false, false, true])
     }

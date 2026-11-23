@@ -1,6 +1,6 @@
-import RimeLingoCore
 import AppKit
 import Charts
+import RimeLingoCore
 import SwiftUI
 
 /// 输入统计: how much, when and where you type, and your most frequent words. Local and

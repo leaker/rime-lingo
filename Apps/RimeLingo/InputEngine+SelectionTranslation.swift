@@ -1,8 +1,8 @@
-import RimeLingoCore
-import RimeLingoPanel
 import AppKit
 import Carbon
 import InputMethodKit
+import RimeLingoCore
+import RimeLingoPanel
 
 // Selected-text translation in editable fields: with text selected, ⌃⌥⌘E / ⌃⌥⌘J capture
 // the selection through the input client, translate it and show the result in the
@@ -92,7 +92,7 @@ extension RimeLingoInputController {
             firstRect(NSRange(location: range.location, length: 0)),
             lineRect(range.location),
             lineRect(max(range.location, NSMaxRange(range) - 1)),
-            cursorRect(client: client),
+            cursorRect(client: client)
         ]
         let anchor = TranslationPreviewPanel.anchor(candidates: candidates, pointer: NSEvent.mouseLocation,
                                                     screens: NSScreen.screens.map(\.frame))

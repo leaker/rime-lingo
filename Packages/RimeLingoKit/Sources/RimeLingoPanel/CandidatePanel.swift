@@ -477,7 +477,7 @@ final class GlowRing {
     /// Cool hues with one warm accent; the list is symmetric so the ring has no seam.
     static let colors: [CGColor] = [
         (0.10, 0.60, 1.00), (0.13, 0.83, 0.93), (0.20, 0.83, 0.60), (0.98, 0.75, 0.14),
-        (0.20, 0.83, 0.60), (0.13, 0.83, 0.93), (0.10, 0.60, 1.00),
+        (0.20, 0.83, 0.60), (0.13, 0.83, 0.93), (0.10, 0.60, 1.00)
     ].map { CGColor(srgbRed: $0.0, green: $0.1, blue: $0.2, alpha: 1) }
 
     var isShown: Bool { layer.superlayer != nil }

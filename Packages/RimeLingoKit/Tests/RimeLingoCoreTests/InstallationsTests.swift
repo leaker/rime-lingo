@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct InstallationsTests {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("rimelingo-installs-\(UUID().uuidString)")

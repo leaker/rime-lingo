@@ -1,7 +1,7 @@
-import RimeLingoCore
 import ArgumentParser
 import Foundation
 import RimeKit
+import RimeLingoCore
 
 @main
 struct RimeLingoCommand: AsyncParsableCommand {
@@ -11,7 +11,7 @@ struct RimeLingoCommand: AsyncParsableCommand {
         version: "0.2.2",
         subcommands: [
             Deploy.self, Bench.self, Doctor.self, ImportSquirrel.self, Package.self,
-            Get.self, Set.self, Sync.self, Register.self, Subscribe.self, DiagnosticsCommand.self,
+            Get.self, Set.self, Sync.self, Register.self, Subscribe.self, DiagnosticsCommand.self
         ]
     )
 }

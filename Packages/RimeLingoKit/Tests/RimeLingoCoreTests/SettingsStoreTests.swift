@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct SettingsStoreTests {
     let paths: RimeLingoPaths
@@ -116,7 +116,7 @@ struct SettingsStoreTests {
         let store = SettingsStore(paths: paths, catalog: catalog)
         try store.set(true, for: catalog.setting("spelling.fuzzy.l_n")!, schemaID: "double_pinyin_flypy")
         #expect(store.algebra(target: .schema("double_pinyin_flypy")) == [
-            "erase/^xx$/", "derive/^([jqxy])u$/$1v/", "derive/^l/n/", "derive/^n/l/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/",
+            "erase/^xx$/", "derive/^([jqxy])u$/$1v/", "derive/^l/n/", "derive/^n/l/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/"
         ])
         // Abbreviations still apply to the keys, as before: moving them ahead of the xform
         // would let "z" match both z- and zh- syllables.
@@ -127,12 +127,12 @@ struct SettingsStoreTests {
     @Test func deployMovesOldVariantsInFrontOfTransforms() throws {
         let store = SettingsStore(paths: paths, catalog: catalog)
         try store.layers.setGenerated(.schema("double_pinyin_flypy"), keypath: "speller/algebra", value: .list([
-            "erase/^xx$/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/", "derive/^n/l/", "abbrev/^([a-z]).+$/$1/",
+            "erase/^xx$/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/", "derive/^n/l/", "abbrev/^([a-z]).+$/$1/"
         ]))
         store.layers.migrateSpellingVariants(catalog: catalog)
         let patch = try store.layers.generatedPatch(.schema("double_pinyin_flypy"))
         #expect(patch.first { $0.key == "speller/algebra" }?.value == .list([
-            "erase/^xx$/", "derive/^n/l/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/", "abbrev/^([a-z]).+$/$1/",
+            "erase/^xx$/", "derive/^n/l/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/", "abbrev/^([a-z]).+$/$1/"
         ]))
     }
 
@@ -147,11 +147,11 @@ struct SettingsStoreTests {
         let store = SettingsStore(paths: paths, catalog: catalog)
         // What 0.1.6 wrote: the variants appended after the transforms.
         try store.layers.setGenerated(.schema("double_pinyin_flypy"), keypath: "speller/algebra", value: .list([
-            "erase/^xx$/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/", "derive/^l/n/", "derive/^n/l/",
+            "erase/^xx$/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/", "derive/^l/n/", "derive/^n/l/"
         ]))
         try store.set(true, for: catalog.setting("spelling.fuzzy.zh_z")!, schemaID: "double_pinyin_flypy")
         #expect(store.algebra(target: .schema("double_pinyin_flypy")) == [
-            "erase/^xx$/", "derive/^([zcs])h/$1/", "derive/^l/n/", "derive/^n/l/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/",
+            "erase/^xx$/", "derive/^([zcs])h/$1/", "derive/^l/n/", "derive/^n/l/", "xform/^zh/Ⓥ/", "xlit/Ⓥ/v/"
         ])
     }
 
@@ -162,8 +162,8 @@ struct SettingsStoreTests {
                 .init("style/font_face", "PingFang SC"),
                 .init("punctuator/half_shape/,", "，"),
                 .init("key", "true"),
-                .init("list", ["derive/^([zcs])h/$1/", "0x1234"]),
-            ])),
+                .init("list", ["derive/^([zcs])h/$1/", "0x1234"])
+            ]))
         ])
         let yaml = try value.yamlString()
         #expect(try ConfigValue.parse(yaml: yaml) == value)

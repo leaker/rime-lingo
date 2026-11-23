@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct PhraseTableTests {
     let paths: RimeLingoPaths

@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct LanguageModelSettingsTests {
     private struct Fixture {
@@ -177,7 +177,7 @@ struct LanguageModelSettingsTests {
         // A prior version supplied -12; current defaults use -14.
         try fixture.store.layers.setGenerated(fixture.target, keypath: "grammar/collocation_penalty", value: -12)
         try fixture.store.layers.setGenerated(fixture.target, keypath: "rimelingo/_language_model_defaults", value: .map([
-            .init("grammar/collocation_penalty", -12),
+            .init("grammar/collocation_penalty", -12)
         ]))
         try "grammar:\n  collocation_penalty: \"-12\"\n".write(
             to: fixture.paths.builtConfig(fixture.target.configID), atomically: true, encoding: .utf8)
@@ -271,7 +271,7 @@ struct LanguageModelSettingsTests {
         defer { fixture.remove() }
         try fixture.model()
         try fixture.store.layers.setGenerated(fixture.target, keypath: "grammar/=", value: .map([
-            .init("language", "previous-model"), .init("collocation_min_length", 4), .init("rear_penalty", -40),
+            .init("language", "previous-model"), .init("collocation_min_length", 4), .init("rear_penalty", -40)
         ]))
         try fixture.store.setLanguageModel("wanxiang-lts-zh-hans")
         #expect(fixture.store.layers.generatedValue(fixture.target, keypath: "grammar/collocation_min_length") == nil)

@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct PackageManagerTests {
     let root: URL
@@ -60,7 +60,7 @@ struct PackageManagerTests {
             "demo.schema.yaml": "schema: {schema_id: demo}\n",
             "cn_dicts/base.dict.yaml": "---\nname: base\n...\n",
             "demo.custom.yaml": "patch: {evil: true}\n",
-            "installation.yaml": "installation_id: nope\n",
+            "installation.yaml": "installation_id: nope\n"
         ])
         let pkg = try package("demo", archive: zip)
         let record = try await manager([pkg]).install("demo")
@@ -121,7 +121,7 @@ extension PackageManagerTests {
             "rimelingo/generated/default.yaml": "patch: {evil: true}\n",
             "rime_ice.userdb/CURRENT": "x\n",
             "sync/abc/rime_ice.userdb.txt": "x\n",
-            "ok.dict.yaml": "ok\n",
+            "ok.dict.yaml": "ok\n"
         ])
         let record = try await manager([try package("evil", archive: zip)]).install("evil")
         #expect(Array(record.files.keys) == ["ok.dict.yaml"])

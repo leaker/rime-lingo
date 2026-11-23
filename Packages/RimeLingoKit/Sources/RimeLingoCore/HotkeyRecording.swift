@@ -37,10 +37,8 @@ public struct HotkeyRecording: Sendable {
         case .down:
             pressed.insert(keyCode)
             guard pressed.count <= 32 else { stop(); return .cancel }
-            if keyCode == 0x35, modifiers.isEmpty { pending = .cancel }
-            else if pending == nil {
-                if repeatKey { pending = .retry }
-                else if let name = HotkeyFormatter.rimeName(keyCode: keyCode, character: character, modifiers: modifiers) {
+            if keyCode == 0x35, modifiers.isEmpty { pending = .cancel } else if pending == nil {
+                if repeatKey { pending = .retry } else if let name = HotkeyFormatter.rimeName(keyCode: keyCode, character: character, modifiers: modifiers) {
                     pending = .commit(name)
                 } else { pending = .retry; feedback = .unsupported }
             }

@@ -1,5 +1,5 @@
-public import RimeLingoCore
 import Foundation
+public import RimeLingoCore
 
 public extension PanelState {
     /// The panel state for a quick-menu board (symbols or 常用语): visible cells, tabs with

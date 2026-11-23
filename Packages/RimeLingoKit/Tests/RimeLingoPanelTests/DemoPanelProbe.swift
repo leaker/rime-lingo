@@ -1,7 +1,7 @@
 import AppKit
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 /// Renders the panel states the website's home demo animates (quick menu, AI layer,
 /// 常用语, symbol board, typing, AI results) with the real candidate view and RimeLingo's
@@ -36,7 +36,7 @@ import Testing
             snippets: [
                 .init(id: "phone", title: "手机号", symbol: nil, items: ["+852 6100 6100", "+86 139 1234 5678", "+1 (415) 555-0100"]),
                 .init(id: "mail", title: "邮箱", symbol: nil, items: ["hello@example.com", "me@work.example", "me@personal.example"]),
-                .init(id: "addr", title: "地址", symbol: nil, items: ["香港中环皇后大道中 99 号", "成都市锦江区春熙路 1 号"]),
+                .init(id: "addr", title: "地址", symbol: nil, items: ["香港中环皇后大道中 99 号", "成都市锦江区春熙路 1 号"])
             ], emojis: .loadEmojis(RimeLingoPaths(userDataDir: URL(fileURLWithPath: out), sharedDataDir: repo.appendingPathComponent("SharedSupport"))))
         content.hasActionTarget = true
         var menu = QuickMenu(content: content)

@@ -1,8 +1,8 @@
+import AppKit
+import InputMethodKit
 import RimeLingoAI
 import RimeLingoCore
 import RimeLingoPanel
-import AppKit
-import InputMethodKit
 
 /// State of one AI action: the text it works on and the model's variants.
 struct PolishSession {
@@ -188,7 +188,7 @@ extension RimeLingoInputController {
                 applyPolish(digit - 1, client: client)
                 return true
             }
-            if character == "c", event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+            if character == "c", event.modifierFlags.isDisjoint(with: [.command, .control, .option]) {
                 copyPolish(request.highlighted)
                 return true
             }

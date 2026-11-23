@@ -1,6 +1,6 @@
-public import Foundation
 import AppKit
 import CoreServices
+public import Foundation
 
 /// The few things the updater asks of other processes.
 public protocol ProcessControlling: Sendable {

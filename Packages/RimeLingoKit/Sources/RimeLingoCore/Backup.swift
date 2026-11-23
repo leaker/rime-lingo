@@ -20,7 +20,7 @@ public struct BackupManager: Sendable {
         public var files: [String: String]
         /// Version 2 records whole-layer replacement even when a layer has no files.
         /// Absent in version 1, whose missing layers must remain untouched.
-        public var directories: [String]? = nil
+        public var directories: [String]?
 
         public var settingsCount: Int { files.keys.filter { $0.hasPrefix("rime/rimelingo/") }.count }
         public var phraseCount: Int { files.keys.filter { $0.hasPrefix("rime/") && $0.hasSuffix(".txt") && $0.contains("custom_phrase") }.count }

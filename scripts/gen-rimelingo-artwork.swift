@@ -111,7 +111,7 @@ for (name, tile, glyphColor, wordColor) in [("light", ink, Optional(paper), text
         for (string, fontName, size, centreY) in [(wordmark, wordFontName, CGFloat(112), CGFloat(248)), (chineseName, glyphFontName, CGFloat(66), CGFloat(124))] {
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [
                 NSAttributedString.Key(kCTFontAttributeName as String): font(fontName, size: size),
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): wordColor,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): wordColor
             ]))
             let bounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
             context.textPosition = CGPoint(x: 364 - bounds.minX, y: centreY - bounds.midY)

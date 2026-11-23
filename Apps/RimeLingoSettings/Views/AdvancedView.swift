@@ -1,5 +1,5 @@
-import RimeLingoCore
 import AppKit
+import RimeLingoCore
 import SwiftUI
 
 /// Raw YAML editing of the hand-written (imported) layers, validated by a dry-run deploy.

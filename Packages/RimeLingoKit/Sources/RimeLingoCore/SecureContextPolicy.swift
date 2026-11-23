@@ -36,7 +36,7 @@ public enum SecureContextPolicy {
         // LocalAuthenticationUI.framework XPC service: the same sheets drawn out of process.
         "com.apple.localauthenticationremoteservice",
         // CoreServices/ScreenSaverEngine.app: keys typed over a screen saver are an unlock.
-        "com.apple.screensaver.engine",
+        "com.apple.screensaver.engine"
     ]
 
     /// - Parameters:

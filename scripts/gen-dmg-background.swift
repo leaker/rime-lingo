@@ -73,7 +73,7 @@ func draw(_ context: CGContext) {
     func text(_ string: String, _ fontName: String, _ size: CGFloat, _ color: CGColor, x: CGFloat, baseline: CGFloat, centred: Bool = false) -> CGFloat {
         let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: [
             NSAttributedString.Key(kCTFontAttributeName as String): font(fontName, size: size),
-            NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): color
         ]))
         let width = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
         context.textPosition = CGPoint(x: centred ? x - width / 2 : x, y: y(baseline))
@@ -96,7 +96,7 @@ func draw(_ context: CGContext) {
     let badgeX: CGFloat = 322, textX: CGFloat = 346
     let steps: [(top: CGFloat, number: String, chinese: String, english: String)] = [
         (150, "1", "双击左侧图标", "Double-click the icon on the left"),
-        (226, "2", "在弹出的窗口里点「安装」", "Click Install in the window that opens"),
+        (226, "2", "在弹出的窗口里点「安装」", "Click Install in the window that opens")
     ]
     for step in steps {
         context.setFillColor(ink)
@@ -133,7 +133,7 @@ for scale in [1, 2] {
     // The resolution is what tells AppKit that the larger rendering is the same size in points.
     CGImageDestinationAddImage(tiff, render(scale: scale), [
         kCGImagePropertyDPIWidth: 72 * scale, kCGImagePropertyDPIHeight: 72 * scale,
-        kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5], // LZW
+        kCGImagePropertyTIFFDictionary: [kCGImagePropertyTIFFCompression: 5] // LZW
     ] as CFDictionary)
 }
 guard CGImageDestinationFinalize(tiff) else { fatalError("cannot write \(output.path)") }

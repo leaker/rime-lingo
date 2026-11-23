@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct BackupTests {
     let root: URL
@@ -33,7 +33,7 @@ struct BackupTests {
             ("build/default.yaml", "built"),
             ("cn_dicts/8105.dict.yaml", "shipped"),
             ("rime_ice.userdb/000001.ldb", "live"),
-            ("sync/dev-1/rime_ice.userdb.txt", "你好\tni hao\tc=3\n"),
+            ("sync/dev-1/rime_ice.userdb.txt", "你好\tni hao\tc=3\n")
         ]
         for (path, text) in files { try text.write(to: paths.userDataDir.appendingPathComponent(path), atomically: true, encoding: .utf8) }
         try "{\"智能体\":3}".write(to: stats.appendingPathComponent("2026-10-01.json"), atomically: true, encoding: .utf8)
@@ -253,7 +253,7 @@ struct BackupTests {
             "rime/new_folder/nested/new.lua": "new-file",
             "stats/2026-10-01.json": "replacement-stats",
             "stats/new/nested/new.json": "new-stats",
-            "stats/zz-blocker/failure.json": "cannot-write-through-a-file",
+            "stats/zz-blocker/failure.json": "cannot-write-through-a-file"
         ], version: version)
         let opened = try manager.open(archive)
         #expect(throws: (any Error).self) { try manager.restore(opened) }

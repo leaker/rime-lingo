@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 /// Checks the Swift side of the rimelingo-theme contract against the fixtures shared with
 /// the website (scripts/export-themes.py writes them; rimelingo-web copies them verbatim).

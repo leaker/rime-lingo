@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 struct TranslationPreviewPanelTests {
     typealias Panel = TranslationPreviewPanel
@@ -25,7 +25,7 @@ struct TranslationPreviewPanelTests {
             NSRect.zero,
             NSRect(x: 0, y: 0, width: 120, height: 18),          // at the screen origin
             NSRect(x: -5000, y: -5000, width: 10, height: 10),   // off every screen
-            NSRect(x: CGFloat.infinity, y: 10, width: 1, height: 1),
+            NSRect(x: CGFloat.infinity, y: 10, width: 1, height: 1)
         ]
         let found = Panel.anchor(candidates: unplaced + [placed], pointer: pointer, screens: screens)
         #expect(found.rect == placed)

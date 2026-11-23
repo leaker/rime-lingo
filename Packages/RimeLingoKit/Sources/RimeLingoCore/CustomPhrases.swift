@@ -46,7 +46,7 @@ public struct CustomPhrases: Sendable, Equatable {
         "# 自定义短语 — managed by RimeLingo Settings; hand edits are kept.",
         "# 格式：词条<Tab>编码<Tab>权重（可选）",
         "#",
-        "# 此行之后不能写注释",
+        "# 此行之后不能写注释"
     ]
 
     public init(header: [String] = CustomPhrases.defaultHeader, phrases: [Phrase] = []) {

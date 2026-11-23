@@ -1,8 +1,8 @@
 import AppKit
 import Foundation
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 struct PanelTests {
     static let frontend: ConfigValue = {
@@ -338,7 +338,7 @@ extension PanelTests {
         let cursor = NSRect(x: 300, y: 500, width: 2, height: 20)
         var state = PanelState(candidates: [
             .init(label: "1", text: "常用语", symbol: "text.quote"), .init(label: "2", text: "符号", symbol: "number"),
-            .init(label: "3", text: "高频词", symbol: "chart.bar.xaxis"), .init(label: "4", text: "设置", symbol: "gearshape"),
+            .init(label: "3", text: "高频词", symbol: "chart.bar.xaxis"), .init(label: "4", text: "设置", symbol: "gearshape")
         ], highlightedIndex: -1, title: "RimeLingo   空格 AI · 数字选择 · Esc 关闭", presentation: .grid)
         panel.show(state, at: cursor)
         let plain = panel.frameSize
@@ -421,7 +421,7 @@ extension PanelTests {
             .init(label: "1", text: "翻译", comment: "中英互译", symbol: "character.bubble"),
             .init(label: "2", text: "润色", comment: "更通顺，意思不变", symbol: "wand.and.stars"),
             .init(label: "3", text: "更口语", symbol: "sparkle"),
-            .init(label: "4", text: "添加自定义动作…", symbol: "plus"),
+            .init(label: "4", text: "添加自定义动作…", symbol: "plus")
         ], title: "AI 处理   按数字选择 · Esc 返回", presentation: .list)
         state.glow = true
         panel.show(state, at: cursor)
@@ -477,7 +477,6 @@ extension PanelTests {
         }
     }
 }
-
 
 extension PanelTests {
     /// The draft hint leads with a 中 / 英 chip.

@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 @testable import RimeLingoAI
 @testable import RimeLingoCore
+import Testing
 
 /// Captures the request body of the next URLSession request and answers with a
 /// canned chat/completions response, so tests can inspect what would be sent.
@@ -15,7 +15,7 @@ final class BodyCapturingProtocol: URLProtocol, @unchecked Sendable {
            let data = try? Data(reading: stream) {
             Self.lastBody = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         }
-        let json = #"{"choices":[{"message":{"content":"OK"}}],"model":"m"}"#.data(using: .utf8)!
+        let json = Data(#"{"choices":[{"message":{"content":"OK"}}],"model":"m"}"#.utf8)
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: json)
         client?.urlProtocolDidFinishLoading(self)

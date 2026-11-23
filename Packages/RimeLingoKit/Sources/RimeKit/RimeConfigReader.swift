@@ -1,5 +1,5 @@
-import Foundation
 internal import CRime
+import Foundation
 
 /// Read-only view on a deployed (fully merged) librime config.
 @MainActor

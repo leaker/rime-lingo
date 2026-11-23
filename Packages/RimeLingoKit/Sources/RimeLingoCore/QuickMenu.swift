@@ -266,7 +266,7 @@ public struct QuickMenu: Sendable, Equatable {
                 Item("符号", symbol: "number", action: .open(.symbols)),
                 Item("高频词", symbol: "chart.bar.xaxis", action: .open(.frequentWords)),
                 Item("表情", symbol: "face.smiling", action: .open(.emojis)),
-                Item("设置", symbol: "gearshape", selectionKey: 0, action: .openSettings(pane: nil)),
+                Item("设置", symbol: "gearshape", selectionKey: 0, action: .openSettings(pane: nil))
             ]
             var page = Page(id: id, title: "RimeLingo", layout: .grid, items: items, emptyMessage: "")
             // AI is the main action: Space opens it, digits pick the rest. When AI is off
@@ -284,7 +284,7 @@ public struct QuickMenu: Sendable, Equatable {
             var items = [
                 Item("翻译", detail: on ? "中英互译" : "AI 未开启", symbol: "character.bubble", action: ai(.translate)),
                 Item("润色", detail: on ? "更通顺，意思不变" : "AI 未开启", symbol: "wand.and.stars", action: ai(.polish)),
-                Item("简繁转换", detail: "本地转换", symbol: "arrow.triangle.2.circlepath", action: .text(.convertScript)),
+                Item("简繁转换", detail: "本地转换", symbol: "arrow.triangle.2.circlepath", action: .text(.convertScript))
             ]
             for (index, name) in content.customActions.enumerated() {
                 items.append(Item(name, symbol: "sparkle", action: ai(.custom(index))))

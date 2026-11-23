@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 /// A sleep that ends only when the test fires it, or throws when its task is cancelled.
 private final class ManualSleep: @unchecked Sendable {

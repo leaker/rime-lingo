@@ -4,7 +4,6 @@ public enum TranslationShortcutAction: Sendable, Hashable {
     case language(TranslationTarget)
     case submit
 
-
     /// In the key recorder's notation (see `HotkeyFormatter`); empty for a language
     /// without a default.
     public var defaultShortcut: String {
@@ -368,7 +367,7 @@ public struct TranslationShortcutBindings: Sendable, Equatable {
     /// Named keys that type a character, like letters and digits do.
     private static let characterKeys: Set<String> = [
         "grave", "minus", "equal", "bracketleft", "bracketright", "backslash", "semicolon", "apostrophe",
-        "comma", "period", "slash", "space",
+        "comma", "period", "slash", "space"
     ]
 
     static func parse(_ stored: String) -> Parsed? {

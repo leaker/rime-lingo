@@ -16,7 +16,7 @@ public struct ThemePackage: Codable, Sendable, Equatable {
         "back_color", "border_color", "preedit_back_color", "text_color", "hilited_text_color",
         "hilited_back_color", "candidate_text_color", "comment_text_color", "label_color",
         "hilited_candidate_back_color", "hilited_candidate_text_color", "hilited_comment_text_color",
-        "hilited_candidate_label_color",
+        "hilited_candidate_label_color"
     ]
 
     public var format: String
@@ -34,7 +34,7 @@ public struct ThemePackage: Codable, Sendable, Equatable {
         ("corner_radius", 0...30), ("hilited_corner_radius", 0...30),
         ("border_width", 0...30), ("border_height", 0...30),
         ("spacing", 0...40), ("line_spacing", 0...40),
-        ("font_point", 10...40), ("label_font_point", 8...40), ("comment_font_point", 8...40),
+        ("font_point", 10...40), ("label_font_point", 8...40), ("comment_font_point", 8...40)
     ]
 
     public init(id: String, name: String, author: String? = nil, colors: [String: String], layout: [String: Double]? = nil) {

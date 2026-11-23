@@ -24,7 +24,7 @@ extension SettingsStore {
         .init("grammar/collocation_penalty", -14),
         .init("grammar/non_collocation_penalty", -6),
         .init("grammar/weak_collocation_penalty", -100),
-        .init("grammar/rear_penalty", -18),
+        .init("grammar/rear_penalty", -18)
     ]
     private static let languageModelOwnershipKey = "rimelingo/_language_model_defaults"
 
@@ -63,8 +63,7 @@ extension SettingsStore {
                 let inherited = deployed?.value(at: entry.key)
                 let wasAutomatic = owned.contains { $0.key == entry.key && Self.sameLanguageModelValue($0.value, inherited) }
                 let value: ConfigValue
-                if let inherited, inherited != .null, !wasAutomatic { value = inherited }
-                else { value = entry.value }
+                if let inherited, inherited != .null, !wasAutomatic { value = inherited } else { value = entry.value }
                 Self.replaceLanguageModelEntry(entry.key, value: value, in: &patch)
                 supplied.append(.init(entry.key, value))
             }
@@ -96,7 +95,7 @@ extension SettingsStore {
                 ? ConfigLayers.patchEntries(at: layers.shimURL(target))
                 : layers.importedPatch(target)
             let combined = ConfigLayers.compose([
-                try layers.defaultsPatch(target), imported, try layers.generatedPatch(target),
+                try layers.defaultsPatch(target), imported, try layers.generatedPatch(target)
             ])
             let effective = Self.applyingLanguageModelPatch(combined, to: source)
             let pending = effective.value(at: "grammar/language")

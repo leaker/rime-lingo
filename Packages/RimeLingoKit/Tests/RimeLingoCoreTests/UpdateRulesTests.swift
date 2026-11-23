@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 @Suite struct AppVersionTests {
     @Test func comparesVersionsAndBuilds() {
@@ -346,7 +346,7 @@ import Testing
         #expect(!UpdateIdleSnapshot(secondsSinceLastKey: 29.9).allowsInstall(userRequested: false))
         let busy: [WritableKeyPath<UpdateIdleSnapshot, Bool>] = [
             \.isComposing, \.hasPendingInput, \.hasDraft, \.liveSessionActive, \.selectionPreviewActive,
-            \.aiActionActive, \.quickMenuOpen, \.secureContext, \.deployInProgress,
+            \.aiActionActive, \.quickMenuOpen, \.secureContext, \.deployInProgress
         ]
         for flag in busy {
             var snapshot = UpdateIdleSnapshot(secondsSinceLastKey: 3600)
@@ -439,8 +439,7 @@ import Testing
                              bundleID: fixtureBundleID, version: "0.3.0", build: 21)
 
     func failure(_ info: SignatureInfo, installed: AppVersion? = AppVersion("0.2.0", build: 20)) -> UpdateFailure? {
-        do { try BundleVerification.verify(info, release: release, bundleID: fixtureBundleID, installed: installed); return nil }
-        catch { return error as? UpdateFailure }
+        do { try BundleVerification.verify(info, release: release, bundleID: fixtureBundleID, installed: installed); return nil } catch { return error as? UpdateFailure }
     }
 
     @Test func checksSignatureThenIdentityThenVersion() {

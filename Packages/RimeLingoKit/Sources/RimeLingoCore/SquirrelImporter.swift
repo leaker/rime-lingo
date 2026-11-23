@@ -98,7 +98,7 @@ public struct SquirrelImporter: Sendable {
         "weasel.custom.yaml": "Windows frontend",
         "trash": "librime trash folder",
         ".git": "version control metadata",
-        ".DS_Store": "Finder metadata",
+        ".DS_Store": "Finder metadata"
     ]
 
     static let nonConfigNames: Set<String> = ["README", "LICENSE", "go.work", "go.work.sum", "Makefile", "others", "node_modules", "package.json"]

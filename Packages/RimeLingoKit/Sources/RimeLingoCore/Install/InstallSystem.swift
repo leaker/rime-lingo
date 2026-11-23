@@ -1,5 +1,5 @@
-public import Foundation
 import CoreServices
+public import Foundation
 import Synchronization
 
 /// A system action of the install that did not do what it was asked.

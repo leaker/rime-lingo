@@ -1,5 +1,5 @@
-import RimeLingoCore
 import AppKit
+import RimeLingoCore
 import SwiftUI
 
 /// Click, then press a key combination; stored in Rime notation. No typing of key names.

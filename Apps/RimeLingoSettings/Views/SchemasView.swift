@@ -11,7 +11,6 @@ struct SchemasView: View {
         Form {
             Section { PaneHeader(title: "输入方案", subtitle: "启用与排序输入方案。第一个是默认方案，其余可在方案选单（⌃⇧`）中切换。", symbol: "character.book.closed") }
 
-
             Section("已启用") {
                 if enabled.isEmpty {
                     Text("尚未启用任何方案").foregroundStyle(.secondary)

@@ -1,5 +1,5 @@
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct DoublePinyinTests {
     let flypy = DoublePinyin.flypy
@@ -9,7 +9,7 @@ struct DoublePinyinTests {
             "ni": "ni", "hao": "hc", "zhi": "vi", "neng": "ng", "ti": "ti", "shi": "ui", "jie": "jp",
             "chuang": "il", "xue": "xt", "lv": "lv", "lve": "lt", "ju": "jv", "qu": "qv", "yu": "yv",
             "a": "aa", "e": "ee", "ai": "ai", "an": "an", "ang": "ah", "eng": "eg", "er": "er", "ou": "ou",
-            "xiong": "xs", "guang": "gl", "zhuang": "vl", "sheng": "ug", "yuan": "yr", "yun": "yy",
+            "xiong": "xs", "guang": "gl", "zhuang": "vl", "sheng": "ug", "yuan": "yr", "yun": "yy"
         ]
         for (pinyin, code) in cases {
             #expect(flypy.code(forSyllable: pinyin) == code, "\(pinyin)")

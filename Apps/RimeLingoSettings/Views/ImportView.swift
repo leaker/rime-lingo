@@ -1,5 +1,5 @@
-import RimeLingoCore
 import AppKit
+import RimeLingoCore
 import SwiftUI
 
 /// One-click import of an existing RIME setup (Squirrel, Weasel/fcitx backups…) with a

@@ -1,7 +1,7 @@
 import Foundation
+@testable import RimeLingoCore
 import Synchronization
 import Testing
-@testable import RimeLingoCore
 
 @Suite struct BundleReplacerTests {
     let scratch = Scratch()

@@ -1,5 +1,5 @@
-import Foundation
 internal import CRime
+import Foundation
 
 public struct RimeCandidate: Sendable, Hashable {
     public let text: String

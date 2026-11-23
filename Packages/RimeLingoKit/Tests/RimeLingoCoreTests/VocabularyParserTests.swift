@@ -1,5 +1,5 @@
-@testable import RimeLingoCore
 import Foundation
+@testable import RimeLingoCore
 import Testing
 
 struct VocabularyParserTests {

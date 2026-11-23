@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 import RimeKit
 @testable import RimeLingoCore
+import Testing
 
 @MainActor
 @Suite(.serialized)

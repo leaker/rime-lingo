@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 /// Schemas the imported `schema_list` names but only the Squirrel application bundle ships.
 struct SquirrelSchemaImportTests {
@@ -18,7 +18,7 @@ struct SquirrelSchemaImportTests {
         paths = RimeLingoPaths(userDataDir: root.appendingPathComponent("RimeLingo"), sharedDataDir: shared)
         try write(shared, [
             "default.yaml": "schema_list:\n  - schema: house\n",
-            "house.schema.yaml": "schema: {schema_id: house}\n",
+            "house.schema.yaml": "schema: {schema_id: house}\n"
         ])
         try write(bundle, [
             // Shipped by RimeLingo as well: must never be copied.
@@ -54,14 +54,14 @@ struct SquirrelSchemaImportTests {
             "symbols.yaml": "punctuator: {}\n",
             "essay.txt": "啊\t1\n",
             // Its dictionary is not in the bundle.
-            "broken.schema.yaml": "schema: {schema_id: broken}\ntranslator: {dictionary: nowhere}\n",
+            "broken.schema.yaml": "schema: {schema_id: broken}\ntranslator: {dictionary: nowhere}\n"
         ])
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
     }
 
     static let transitive = [
         "alpha_simp.schema.yaml", "alpha.schema.yaml", "alpha.dict.yaml", "alpha.ext.dict.yaml", "strokey.schema.yaml",
-        "strokey.dict.yaml", "lookup.dict.yaml", "spell.yaml", "symbols.yaml", "essay.txt",
+        "strokey.dict.yaml", "lookup.dict.yaml", "spell.yaml", "symbols.yaml", "essay.txt"
     ]
 
     private func write(_ directory: URL, _ files: [String: String]) throws {
@@ -200,7 +200,7 @@ struct SquirrelSchemaImportTests {
         // Both exist one level above the bundle's shared data.
         try write(bundle.deletingLastPathComponent(), [
             "outside.schema.yaml": "schema: {schema_id: outside}\n",
-            "secret.dict.yaml": "---\nname: secret\n...\n",
+            "secret.dict.yaml": "---\nname: secret\n...\n"
         ])
         try write(bundle, ["sneaky.schema.yaml": "schema: {schema_id: sneaky}\ntranslator: {dictionary: ../secret}\n"])
         try listSchemas(["../outside", "sneaky", "house"])

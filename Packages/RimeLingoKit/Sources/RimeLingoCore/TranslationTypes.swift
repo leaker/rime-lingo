@@ -91,7 +91,7 @@ public struct TranslationTarget: Sendable, Hashable, Codable, CaseIterable {
         Entry(code: "ro", displayName: "罗马尼亚语", promptName: "Romanian"),
         Entry(code: "bn", displayName: "孟加拉语", promptName: "Bengali"),
         Entry(code: "fa", displayName: "波斯语", promptName: "Persian"),
-        Entry(code: "fil", displayName: "菲律宾语", promptName: "Filipino"),
+        Entry(code: "fil", displayName: "菲律宾语", promptName: "Filipino")
     ]
 }
 

@@ -1,5 +1,5 @@
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct InputSourceReturnTests {
     @Test func recognizesOnlyRimeLingoSources() {

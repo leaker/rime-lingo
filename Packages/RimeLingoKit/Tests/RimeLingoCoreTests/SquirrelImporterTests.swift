@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct SquirrelImporterTests {
     let source: URL
@@ -31,7 +31,7 @@ struct SquirrelImporterTests {
             "sync/abc-123/rime_ice.userdb.txt": "# snapshot\n",
             ".specstory/history.md": "private\n",
             "README.md": "# readme\n",
-            "go.work": "go 1.22\n",
+            "go.work": "go 1.22\n"
         ]
         for (path, text) in files {
             try text.write(to: source.appendingPathComponent(path), atomically: true, encoding: .utf8)

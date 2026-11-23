@@ -1,5 +1,5 @@
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct HotkeyFormatterTests {
     @Test func convertsKeyPressesToRimeNotation() {

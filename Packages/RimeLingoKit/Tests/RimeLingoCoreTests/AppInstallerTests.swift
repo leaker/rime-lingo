@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 /// Records what an install asks of the system, in order, and does none of it.
 final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
@@ -616,7 +616,7 @@ final class FakeInstallSystem: InstallSystem, @unchecked Sendable {
             ("enable", .enable, .enableInputSource, ["agents", "start RimeLingo.app"]),
             ("agents", .agents, .restartInputAgents, ["start RimeLingo.app"]),
             ("terminate", .start, .startInputMethod, ["start RimeLingo.app"]),
-            ("start", .start, .startInputMethod, []),
+            ("start", .start, .startInputMethod, [])
         ]
         for (call, reason, step, skipped) in expected {
             let system = FakeInstallSystem()
@@ -796,7 +796,7 @@ final class StepLog: @unchecked Sendable {
             ProcessEntry(pid: 14, uid: 501, path: "/Users/me/bin/imklaunchagent"),
             ProcessEntry(pid: 15, uid: 501, path: "/System/Library/CoreServices/TextInputMenuAgentHelper"),
             ProcessEntry(pid: 16, uid: 501, path: "/Library/Input Methods/Squirrel.app/Contents/MacOS/Squirrel"),
-            ProcessEntry(pid: 17, uid: 501, path: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder"),
+            ProcessEntry(pid: 17, uid: 501, path: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder")
         ]
         #expect(InputAgents.targets(in: processes, uid: 501).map(\.pid) == [10, 11, 12])
         #expect(InputAgents.targets(in: processes, uid: 503).isEmpty)
@@ -809,7 +809,7 @@ final class StepLog: @unchecked Sendable {
             ProcessEntry(pid: 21, uid: 501, path: "/Users/me/Downloads/RimeLingo.app/Contents/MacOS/RimeLingo"),
             ProcessEntry(pid: 22, uid: 502, path: executable.path),
             ProcessEntry(pid: 23, uid: 501, path: executable.path),
-            ProcessEntry(pid: 24, uid: 501, path: "/Library/Input Methods/Squirrel.app/Contents/MacOS/Squirrel"),
+            ProcessEntry(pid: 24, uid: 501, path: "/Library/Input Methods/Squirrel.app/Contents/MacOS/Squirrel")
         ]
         #expect(InputAgents.instances(of: executable, in: processes, uid: 501, excluding: 23).map(\.pid) == [20])
     }

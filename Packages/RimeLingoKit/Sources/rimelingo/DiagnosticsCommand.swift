@@ -1,7 +1,7 @@
-import RimeLingoCore
 import ArgumentParser
 import Foundation
 import RimeKit
+import RimeLingoCore
 
 struct DiagnosticsCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "diagnostics", abstract: "Export a privacy-filtered diagnostic zip (no input data or credentials).")

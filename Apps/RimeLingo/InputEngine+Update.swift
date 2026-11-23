@@ -1,6 +1,6 @@
-import RimeLingoCore
 import AppKit
 import Carbon
+import RimeLingoCore
 @preconcurrency import UserNotifications
 
 /// Automatic updates in the input method: a daily check of the public release manifest,

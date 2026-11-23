@@ -11,7 +11,7 @@ private struct CustomActionsSection: View {
         ("更礼貌", "把这段话改得更礼貌、得体，适合发给同事或客户，保持原意。"),
         ("总结成一句", "用一句话概括这段话的要点。"),
         ("修正错别字", "只修正错别字、标点和明显的语病，不要改动措辞和语气。"),
-        ("扩写", "在保持原意的前提下，把这段话扩写得更完整、更有条理。"),
+        ("扩写", "在保持原意的前提下，把这段话扩写得更完整、更有条理。")
     ]
 
     var body: some View {
@@ -118,7 +118,7 @@ struct AIAssistantView: View {
         .init(title: "Kimi", hint: "Kimi / Moonshot：官方 thinking 参数", fields: ["thinking": ["type": "disabled"]]),
         .init(title: "OpenAI", hint: "OpenAI：仅 gpt-5.1 及之后的推理模型支持 none；更早的推理模型最低只到 minimal，非推理模型带此字段会报错", fields: ["reasoning_effort": "none"]),
         .init(title: "OpenRouter", hint: "OpenRouter 统一参数，适用于 Claude 等模型", fields: ["reasoning": ["effort": "none"]]),
-        .init(title: "Qwen", hint: "通义 Qwen / vLLM 部署", fields: ["enable_thinking": false]),
+        .init(title: "Qwen", hint: "通义 Qwen / vLLM 部署", fields: ["enable_thinking": false])
     ]
 
     /// Parses the box as a JSON object. nil = empty or not a valid JSON object.
@@ -215,7 +215,6 @@ struct AIAssistantView: View {
                                : "用一句话修改配置、从文章里挑出新词。可选功能；本机端侧模型需要 macOS 26，可改用自备接口。",
                            symbol: "wand.and.sparkles")
             }
-
 
             Section {
                 Label {

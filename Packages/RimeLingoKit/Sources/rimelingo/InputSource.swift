@@ -1,7 +1,7 @@
-import RimeLingoCore
 import Carbon
 import Foundation
 import RimeKit
+import RimeLingoCore
 
 enum RimeLingoIdentity {
     static let bundleID = "com.leelib.inputmethod.rimelingo"

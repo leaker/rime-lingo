@@ -1,5 +1,5 @@
-public import Foundation
 import CryptoKit
+public import Foundation
 
 /// The mutating file operations of an install, behind a seam so tests can make any one
 /// of them fail. Reads go straight to the file system.

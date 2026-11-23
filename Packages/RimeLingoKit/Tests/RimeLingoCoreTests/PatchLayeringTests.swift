@@ -1,7 +1,7 @@
 import Foundation
-import Testing
-@testable import RimeLingoCore
 import RimeKit
+@testable import RimeLingoCore
+import Testing
 
 /// Proves the shim → imported → generated layering against a real librime deploy.
 @MainActor
@@ -95,7 +95,7 @@ struct PatchLayeringTests {
         let composed = ConfigLayers.compose([
             [.init("style/font_point", 14), .init("engine/translators/+", ["a"])],
             [.init("style", .map([.init("font_point", 16)])), .init("engine/translators/+", ["b"])],
-            [.init("style/color_scheme", "ink")],
+            [.init("style/color_scheme", "ink")]
         ])
         #expect(composed.map(\.key) == ["engine/translators/+", "style", "style/color_scheme"])
         #expect(composed.first?.value == ["a", "b"])
@@ -105,7 +105,7 @@ struct PatchLayeringTests {
         let composed = ConfigLayers.compose([
             [.init("preset_color_schemes/rimelingo_light", .map([.init("name", "RimeLingo")]))],
             [.init("preset_color_schemes", .map([.init("mac_light", .map([.init("name", "Mac")]))])),
-             .init("style", .map([.init("color_scheme", "mac_light")]))],
+             .init("style", .map([.init("color_scheme", "mac_light")]))]
         ])
         #expect(composed.map(\.key) == ["preset_color_schemes/rimelingo_light", "preset_color_schemes/mac_light", "style"])
     }
@@ -114,8 +114,8 @@ struct PatchLayeringTests {
         let composed = ConfigLayers.compose([[
             .init("preset_color_schemes", .map([
                 .init("__include", "squirrel.yaml:/preset_color_schemes"),
-                .init("mac_light", .map([.init("name", "Mac")])),
-            ])),
+                .init("mac_light", .map([.init("name", "Mac")]))
+            ]))
         ]])
         #expect(composed.map(\.key) == ["preset_color_schemes/+", "preset_color_schemes/mac_light"])
         #expect(composed.first?.value == .map([.init("__include", "squirrel.yaml:/preset_color_schemes")]))
@@ -172,7 +172,7 @@ struct PatchLayeringTests {
 
     @Test func sameLayerParentAndChildBothSurvive() {
         let composed = ConfigLayers.compose([[
-            .init("style/font_point", 22), .init("style", .map([.init("color_scheme", "dark")])),
+            .init("style/font_point", 22), .init("style", .map([.init("color_scheme", "dark")]))
         ]])
         #expect(Set(composed.map(\.key)) == ["style/font_point", "style"])
     }
@@ -180,7 +180,7 @@ struct PatchLayeringTests {
     @Test func appendFoldsIntoEarlierReplacement() {
         let composed = ConfigLayers.compose([
             [.init("items/=", ["A"])],
-            [.init("items/+", ["B"])],
+            [.init("items/+", ["B"])]
         ])
         #expect(composed.map(\.key) == ["items/="])
         #expect(composed.first?.value == ["A", "B"])

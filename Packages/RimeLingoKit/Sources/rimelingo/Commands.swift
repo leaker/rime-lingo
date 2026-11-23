@@ -1,8 +1,8 @@
-import RimeLingoCore
-import Carbon
 import ArgumentParser
+import Carbon
 import Foundation
 import RimeKit
+import RimeLingoCore
 
 struct Deploy: AsyncParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Compile the workspace (like Squirrel's 重新部署).")
@@ -333,7 +333,6 @@ struct Register: AsyncParsableCommand {
         print("input source: \(InputSourceRegistrar.status())")
     }
 }
-
 
 struct Subscribe: AsyncParsableCommand {
     static let configuration = CommandConfiguration(

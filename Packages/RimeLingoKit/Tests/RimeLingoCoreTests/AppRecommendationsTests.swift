@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct AppRecommendationsTests {
     let shipped: AppRecommendations = {
@@ -16,7 +16,7 @@ struct AppRecommendationsTests {
             .init(bundleID: "com.jetbrains.intellij", name: "IntelliJ IDEA", category: "public.app-category.developer-tools"),
             .init(bundleID: "org.vim.MacVim", name: "MacVim"),
             .init(bundleID: "com.postmanlabs.mac", name: "Postman", category: "public.app-category.developer-tools"),
-            .init(bundleID: "com.tencent.xinWeChat", name: "WeChat", category: "public.app-category.social-networking"),
+            .init(bundleID: "com.tencent.xinWeChat", name: "WeChat", category: "public.app-category.social-networking")
         ]
         let suggestions = shipped.suggestions(for: apps, existing: [])
         let byID = Dictionary(uniqueKeysWithValues: suggestions.map { ($0.id, $0) })
@@ -32,7 +32,7 @@ struct AppRecommendationsTests {
             .init(bundleID: "com.trae.app", name: "Trae", category: "public.app-category.developer-tools"),
             .init(bundleID: "com.openai.codex", name: "ChatGPT", category: "public.app-category.developer-tools"),
             .init(bundleID: "com.bytedance.douyin.desktop", name: "抖音", category: "public.app-category.developer-tools"),
-            .init(bundleID: "md.obsidian", name: "Obsidian"),
+            .init(bundleID: "md.obsidian", name: "Obsidian")
         ], existing: [])
         let moreByID = Dictionary(uniqueKeysWithValues: more.map { ($0.id, $0) })
         #expect(moreByID["com.trae.app"]?.option.initialMode == .english)

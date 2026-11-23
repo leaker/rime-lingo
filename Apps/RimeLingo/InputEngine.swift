@@ -1,11 +1,11 @@
-import RimeLingoAI
-import RimeLingoCore
-import RimeLingoPanel
 import AppKit
 import Carbon
 import InputMethodKit
 import os
 import RimeKit
+import RimeLingoAI
+import RimeLingoCore
+import RimeLingoPanel
 
 /// Process-wide state of the input method: librime lifecycle, the candidate panel,
 /// the resolved theme and per-app options.
@@ -101,7 +101,7 @@ final class InputEngine {
     private struct QueuedDeploy {
         var request: String?
         var incremental: Bool
-        var importedSnapshots: [String]? = nil
+        var importedSnapshots: [String]?
     }
     private struct ImportJob {
         var requests: [String?] = []

@@ -1,6 +1,6 @@
+import AppKit
 import RimeLingoAI
 import RimeLingoCore
-import AppKit
 import SwiftUI
 
 @main

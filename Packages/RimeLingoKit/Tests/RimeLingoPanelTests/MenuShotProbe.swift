@@ -1,7 +1,7 @@
 import AppKit
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 /// Renders the quick menu into screenshots (RIMELINGO_PANEL_SHOTS=<dir>); skipped otherwise.
 @MainActor
@@ -34,7 +34,7 @@ struct MenuShotProbe {
             snippets: [
                 .init(id: "1", title: "证件", symbol: nil, items: ["110101199001011234", "护照 E12345678"]),
                 .init(id: "2", title: "手机号", symbol: nil, items: ["138 0000 0000", "+1 (415) 555-0100"]),
-                .init(id: "3", title: "地址", symbol: nil, items: ["北京市朝阳区建国路 88 号 SOHO 现代城 A 座 1201 室，邮编 100022，收件人 罗先生", "上海市徐汇区漕溪北路 1 号"]),
+                .init(id: "3", title: "地址", symbol: nil, items: ["北京市朝阳区建国路 88 号 SOHO 现代城 A 座 1201 室，邮编 100022，收件人 罗先生", "上海市徐汇区漕溪北路 1 号"])
             ], emojis: .loadEmojis(RimeLingoPaths(userDataDir: URL(fileURLWithPath: out), sharedDataDir: repo.appendingPathComponent("SharedSupport")))))
         var shots: [(String, PanelState)] = [("root", Self.state(menu))]
         _ = menu.handle(.digit(1)); _ = menu.handle(.digit(3))

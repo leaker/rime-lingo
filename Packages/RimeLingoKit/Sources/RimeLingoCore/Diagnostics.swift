@@ -1,5 +1,5 @@
-public import Foundation
 import Darwin
+public import Foundation
 
 /// An allowlisted snapshot, never an archive of the user's workspace.
 public struct Diagnostics: Sendable {
@@ -82,7 +82,7 @@ public struct Diagnostics: Sendable {
             },
             "installationStatus": appURLs.allSatisfy { fm.fileExists(atPath: $0.path) } ? "重复安装" : "无重复安装",
             "RimeLingo Settings": bundleInfo(settingsURL),
-            "apiKey": !secrets.isEmpty ? "已配置" : "未配置",
+            "apiKey": !secrets.isEmpty ? "已配置" : "未配置"
         ]
         if let data = regularData(paths.rimelingoDir.appendingPathComponent("features.json")),
            let features = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -103,7 +103,7 @@ public struct Diagnostics: Sendable {
         let layers: [(String, URL?)] = [
             ("defaults", paths.userDataDir.appendingPathComponent("rimelingo/defaults")),
             ("shippedDefaults", paths.sharedDataDir?.appendingPathComponent("rimelingo/defaults")),
-            ("imported", paths.importedDir), ("generated", paths.generatedDir), ("composed", paths.userDataDir),
+            ("imported", paths.importedDir), ("generated", paths.generatedDir), ("composed", paths.userDataDir)
         ]
         info["configLayers"] = layers.map { name, url in
             ["layer": name, "files": url.map { fileMetadata($0, composed: name == "composed") } ?? []] as [String: Any]
@@ -220,7 +220,7 @@ public struct Diagnostics: Sendable {
         try handle.seek(toOffset: size > 1_048_576 ? size - 1_048_576 : 0)
         var lines = String(decoding: try handle.readToEnd() ?? Data(), as: UTF8.self).components(separatedBy: "\n")
         if size > 1_048_576 { lines.removeFirst() }
-        if lines.last == "" { lines.removeLast() }
+        if lines.last?.isEmpty == true { lines.removeLast() }
         return lines.suffix(500).joined(separator: "\n") + "\n"
     }
 

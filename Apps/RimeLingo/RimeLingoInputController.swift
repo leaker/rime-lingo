@@ -1,9 +1,9 @@
-import RimeLingoCore
-import RimeLingoPanel
 import AppKit
 import Carbon
 import InputMethodKit
 import RimeKit
+import RimeLingoCore
+import RimeLingoPanel
 
 /// One controller per client input context. Translates key events into librime calls
 /// and mirrors librime's state back into the client (marked text, commits) and the panel.
@@ -489,8 +489,7 @@ final class RimeLingoInputController: IMKInputController {
             if polish != nil, handlePolishKey(event, client: client) { return true }
             if isPolishHotkey(event) { // AI actions, and 简繁转换 which needs no AI
                 // Choose: translate, polish or one of the user's own. With nothing to work on, say so.
-                if hasActionTarget(client: client) { openMenu(client: client, page: .ai) }
-                else { engine.showStatus("没有可处理的文字：先打一段字，或选中一段文字") }
+                if hasActionTarget(client: client) { openMenu(client: client, page: .ai) } else { engine.showStatus("没有可处理的文字：先打一段字，或选中一段文字") }
                 return true
             }
             // A selection preview of this field takes the submit shortcut (replace the
@@ -636,9 +635,7 @@ final class RimeLingoInputController: IMKInputController {
                     rememberAsciiMode()
                     return true
                 }
-                if let typed { recentText.append(typed) }
-                else if event.keyCode == 51 { recentText.deleteBackward() }
-                else { recentText.reset() }
+                if let typed { recentText.append(typed) } else if event.keyCode == 51 { recentText.deleteBackward() } else { recentText.reset() }
             }
 
         case .flagsChanged:
@@ -759,7 +756,7 @@ final class RimeLingoInputController: IMKInputController {
 
     /// Text a key event types on its own (no ⌘ / ⌃), or nil for control and function keys.
     static func printableText(_ event: NSEvent) -> String? {
-        guard event.modifierFlags.intersection([.command, .control]).isEmpty,
+        guard event.modifierFlags.isDisjoint(with: [.command, .control]),
               let characters = event.characters, let scalar = characters.unicodeScalars.first,
               scalar.value >= 0x20, scalar.value != 0x7f, !(0xF700...0xF8FF).contains(scalar.value) else { return nil }
         return characters

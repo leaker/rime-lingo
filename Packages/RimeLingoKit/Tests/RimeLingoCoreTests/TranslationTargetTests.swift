@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct TranslationTargetTests {
     @Test func theCatalogOffersManyLanguagesWithUniqueCodes() {

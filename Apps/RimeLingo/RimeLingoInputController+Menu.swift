@@ -1,7 +1,7 @@
-import RimeLingoCore
-import RimeLingoPanel
 import AppKit
 import InputMethodKit
+import RimeLingoCore
+import RimeLingoPanel
 
 /// Quick menu in the candidate window: 常用语 / 符号 / 高频词 / 表情 / AI 处理 / 设置.
 /// Opened by holding a modifier (⌥ by default), with the panel's RimeLingo button or ⌃⌥M;
@@ -122,7 +122,7 @@ extension RimeLingoInputController {
         // The key that opened the menu may still be held: digits then count as plain digits,
         // so "hold, press 2" works without letting go.
         let flags = NSEvent.ModifierFlags(rawValue: menuHold.withoutHoldKey(event.modifierFlags.rawValue))
-        let plain = flags.intersection([.command, .option, .control]).isEmpty
+        let plain = flags.isDisjoint(with: [.command, .option, .control])
         let key: QuickMenu.Key
         switch event.keyCode {
         case 53: key = .back
@@ -144,12 +144,7 @@ extension RimeLingoInputController {
             // `charactersIgnoringModifiers` keeps Shift, so map by key position instead.
             else if plain, onBoard, let letter = Self.boardKey(forKeyCode: event.keyCode) {
                 key = .letter(letter, shifted: event.modifierFlags.contains(.shift))
-            }
-            else if plain, onBoard, ["=", "]"].contains(character) { key = .pageDown }
-            else if plain, onBoard, ["-", "["].contains(character) { key = .pageUp }
-            else if plain, ["=", ".", "]"].contains(character) { key = .pageDown }
-            else if plain, ["-", ",", "["].contains(character) { key = .pageUp }
-            else { key = .other }
+            } else if plain, onBoard, ["=", "]"].contains(character) { key = .pageDown } else if plain, onBoard, ["-", "["].contains(character) { key = .pageUp } else if plain, ["=", ".", "]"].contains(character) { key = .pageDown } else if plain, ["-", ",", "["].contains(character) { key = .pageUp } else { key = .other }
         }
         guard let outcome = quickMenu?.handle(key) else { return false }
         return perform(outcome, client: client)
@@ -160,7 +155,7 @@ extension RimeLingoInputController {
         let keys: [UInt16: Character] = [
             12: "q", 13: "w", 14: "e", 15: "r", 17: "t", 16: "y", 32: "u", 34: "i", 31: "o", 35: "p",
             0: "a", 1: "s", 2: "d", 3: "f", 5: "g", 4: "h", 38: "j", 40: "k", 37: "l", 41: ";",
-            6: "z", 7: "x", 8: "c", 9: "v", 11: "b", 45: "n", 46: "m", 43: ",", 47: ".", 44: "/",
+            6: "z", 7: "x", 8: "c", 9: "v", 11: "b", 45: "n", 46: "m", 43: ",", 47: ".", 44: "/"
         ]
         return keys[keyCode]
     }

@@ -51,9 +51,7 @@ enum JSONExtractor {
                 if escaped { escaped = false } else if char == "\\" { escaped = true } else if char == "\"" { inString = false }
                 continue
             }
-            if char == "\"" { inString = true }
-            else if char == open { depth += 1 }
-            else if char == close {
+            if char == "\"" { inString = true } else if char == open { depth += 1 } else if char == close {
                 depth -= 1
                 if depth == 0 { return String(scalars[start...index]).data(using: .utf8) }
             }

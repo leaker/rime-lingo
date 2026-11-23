@@ -32,7 +32,7 @@ public enum DoublePinyin: String, Sendable, CaseIterable {
             "iu": "q", "ei": "w", "uan": "r", "van": "r", "ue": "t", "ve": "t", "un": "y", "vn": "y", "uo": "o",
             "ie": "p", "ong": "s", "iong": "s", "ai": "d", "en": "f", "eng": "g", "ang": "h", "an": "j",
             "ing": "k", "uai": "k", "iang": "l", "uang": "l", "ou": "z", "ia": "x", "ua": "x", "ao": "c",
-            "ui": "v", "v": "v", "in": "b", "iao": "n", "ian": "m",
+            "ui": "v", "v": "v", "in": "b", "iao": "n", "ian": "m"
         ]
         case .ziranma: [
             "iu": "q", "ia": "w", "ua": "w", "uan": "r", "van": "r", "ue": "t", "ve": "t",

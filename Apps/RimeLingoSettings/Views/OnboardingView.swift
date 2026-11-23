@@ -1,6 +1,6 @@
+import AppKit
 import RimeLingoCore
 import RimeLingoPanel
-import AppKit
 import SwiftUI
 
 /// First-run guide: enable the input method, pick 全拼 / 双拼, three habits, the optional
@@ -63,7 +63,7 @@ struct OnboardingView: View {
     static let samples: [(code: String, text: String, title: String)] = [
         ("ly", "灵译输入法", "产品名"),
         ("wz", "https://example.com", "网址"),
-        ("yx", "me@example.com", "邮箱"),
+        ("yx", "me@example.com", "邮箱")
     ]
 
     var body: some View {
@@ -343,7 +343,7 @@ private struct SchemeStep: View {
     private static let doublePinyin: [(id: String, title: String)] = [
         ("double_pinyin_flypy", "小鹤双拼"), ("double_pinyin", "自然码"), ("double_pinyin_mspy", "微软双拼"),
         ("double_pinyin_sogou", "搜狗双拼"), ("double_pinyin_abc", "智能 ABC"), ("double_pinyin_ziguang", "紫光双拼"),
-        ("double_pinyin_jiajia", "拼音加加"),
+        ("double_pinyin_jiajia", "拼音加加")
     ]
 
     var body: some View {
@@ -748,7 +748,7 @@ private struct DoneStep: View {
             ("⇧", "切换中英文", "单按 Shift；每个应用会记住自己的状态"),
             ("⌥", "快捷菜单", "打字时长按：常用语、符号、高频词，空格进入 AI"),
             ("⌃⌥P", "AI 处理", "对选中或刚打的文字翻译、润色、简繁转换"),
-            ("⌃⇧4", "简繁切换", "临时切换输出简体或繁体"),
+            ("⌃⇧4", "简繁切换", "临时切换输出简体或繁体")
         ]
         VStack(spacing: 10) {
             ForEach(tips, id: \.0) { key, title, detail in
@@ -881,7 +881,7 @@ private struct GlowRing: View {
     static let colors: [Color] = [
         Color(red: 0.10, green: 0.60, blue: 1.00), Color(red: 0.13, green: 0.83, blue: 0.93), Color(red: 0.20, green: 0.83, blue: 0.60),
         Color(red: 0.98, green: 0.75, blue: 0.14), Color(red: 0.20, green: 0.83, blue: 0.60), Color(red: 0.13, green: 0.83, blue: 0.93),
-        Color(red: 0.10, green: 0.60, blue: 1.00),
+        Color(red: 0.10, green: 0.60, blue: 1.00)
     ]
 
     var body: some View {

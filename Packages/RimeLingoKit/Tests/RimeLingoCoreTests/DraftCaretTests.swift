@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct DraftCaretTests {
     private func draft(_ text: String) -> DraftBuffer {
@@ -169,7 +169,7 @@ struct DraftCaretTests {
         let keys: [(UInt16, Bool, Bool)] = [   // key code, command, control
             (123, false, false), (124, false, false), (115, false, false), (119, false, false),
             (123, true, false), (124, true, false), (0, false, true), (14, false, true),
-            (51, false, false), (117, false, false),
+            (51, false, false), (117, false, false)
         ]
         for (keyCode, command, control) in keys {
             #expect(key(keyCode, command: command, control: control) != nil)

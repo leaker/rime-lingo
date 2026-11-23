@@ -1,7 +1,7 @@
 import AppKit
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 /// Renders every color scheme of a frontend config offscreen, horizontal and vertical,
 /// exactly as the candidate panel draws it. Used to check highlight corners across
@@ -22,7 +22,7 @@ import Testing
             .init(label: "3", text: "爱"),
             .init(label: "4", text: "哎么", comment: "叹词"),
             .init(label: "5", text: "RimeLingo", comment: "英"),
-            .init(label: "6", text: "埃么"),
+            .init(label: "6", text: "埃么")
         ],
         highlightedIndex: 0
     )

@@ -1,5 +1,5 @@
-public import Foundation
 internal import CryptoKit
+public import Foundation
 
 /// Registry entry for a downloadable schema, dictionary or offline language model.
 public struct DictionaryPackage: Sendable, Codable, Identifiable, Hashable {

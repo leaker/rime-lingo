@@ -1,7 +1,7 @@
 import AppKit
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 @MainActor
 @Suite(.serialized)

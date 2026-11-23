@@ -1,5 +1,5 @@
-import RimeLingoCore
 import AppKit
+import RimeLingoCore
 
 /// Where the installed pieces live.
 enum Locations {

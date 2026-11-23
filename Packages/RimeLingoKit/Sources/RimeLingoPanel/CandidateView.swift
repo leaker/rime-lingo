@@ -120,7 +120,7 @@ public struct PanelState: Sendable, Equatable {
             .init(label: "2", text: "只能"),
             .init(label: "3", text: "智能", comment: "zhi neng"),
             .init(label: "4", text: "职能"),
-            .init(label: "5", text: "Agent", comment: "英"),
+            .init(label: "5", text: "Agent", comment: "英")
         ],
         highlightedIndex: 0
     )
@@ -376,12 +376,12 @@ public final class CandidateView: NSView {
             let point = state.busy ? max(11, (theme.fontPoint * 0.74).rounded()) : theme.fontPoint
             let line = NSMutableAttributedString(string: status, attributes: [
                 .font: font(theme.fontFace, point),
-                .foregroundColor: nsColor(theme.candidateTextColor).withAlphaComponent(state.busy ? 0.78 : 1),
+                .foregroundColor: nsColor(theme.candidateTextColor).withAlphaComponent(state.busy ? 0.78 : 1)
             ])
             if !state.statusHint.isEmpty {
                 line.append(NSAttributedString(string: "   " + state.statusHint, attributes: [
                     .font: font(theme.fontFace, max(10, point - 1)),
-                    .foregroundColor: nsColor(theme.candidateTextColor).withAlphaComponent(0.55),
+                    .foregroundColor: nsColor(theme.candidateTextColor).withAlphaComponent(0.55)
                 ]))
             }
             let size = line.size()
@@ -390,7 +390,7 @@ public final class CandidateView: NSView {
             if let badge = state.statusBadge, !badge.isEmpty {
                 let badgeLine = NSAttributedString(string: badge, attributes: [
                     .font: font(theme.labelFontFace, max(10, (point * 0.78).rounded())),
-                    .foregroundColor: nsColor(theme.hilitedCandidateTextColor),
+                    .foregroundColor: nsColor(theme.hilitedCandidateTextColor)
                 ])
                 let badgeSize = badgeLine.size()
                 let rect = NSRect(x: x, y: insetY + padY + (ceil(size.height) - ceil(badgeSize.height) - 4) / 2,
@@ -411,7 +411,7 @@ public final class CandidateView: NSView {
 
         if !state.preedit.isEmpty, forcePreedit || !theme.inlinePreedit {
             let line = NSMutableAttributedString(string: state.preedit, attributes: [
-                .font: font(theme.fontFace, theme.fontPoint * 0.88), .foregroundColor: nsColor(theme.textColor),
+                .font: font(theme.fontFace, theme.fontPoint * 0.88), .foregroundColor: nsColor(theme.textColor)
             ])
             let selection = NSIntersectionRange(state.preeditSelection, NSRange(location: 0, length: line.length))
             if selection.length > 0 {
@@ -428,7 +428,7 @@ public final class CandidateView: NSView {
         // Menu caption (quick menu pages) sits where the preedit row would be.
         if let title = state.title, !title.isEmpty {
             let line = NSAttributedString(string: title, attributes: [
-                .font: font(theme.labelFontFace, theme.fontPoint * 0.72), .foregroundColor: nsColor(theme.commentTextColor),
+                .font: font(theme.labelFontFace, theme.fontPoint * 0.72), .foregroundColor: nsColor(theme.commentTextColor)
             ])
             let size = line.size()
             preeditLine = line
@@ -453,15 +453,15 @@ public final class CandidateView: NSView {
         if let hero = state.hero {
             let text = theme.candidateTextColor
             let title = NSAttributedString(string: hero.title, attributes: [
-                .font: font(theme.fontFace, theme.fontPoint), .foregroundColor: nsColor(text),
+                .font: font(theme.fontFace, theme.fontPoint), .foregroundColor: nsColor(text)
             ])
             let detail = NSAttributedString(string: hero.detail, attributes: [
                 .font: font(theme.commentFontFace, max(10, (theme.fontPoint * 0.72).rounded())),
-                .foregroundColor: nsColor(text).withAlphaComponent(0.6),
+                .foregroundColor: nsColor(text).withAlphaComponent(0.6)
             ])
             let key = NSAttributedString(string: hero.key, attributes: [
                 .font: font(theme.labelFontFace, max(10, (theme.fontPoint * 0.68).rounded())),
-                .foregroundColor: nsColor(text).withAlphaComponent(0.78),
+                .foregroundColor: nsColor(text).withAlphaComponent(0.78)
             ])
             let height = ceil(lineMetrics.height) + padY * 2 + 8
             heroNatural = 10 + symbolSide + 8 + ceil(title.size().width) + (hero.detail.isEmpty ? 0 : 10 + ceil(detail.size().width)) + 18
@@ -482,7 +482,7 @@ public final class CandidateView: NSView {
         let textLimit = widthLimit > 0 ? widthLimit - insetX - padX * 2 : 0
         var wrapped = false
         struct Measured {
-            var line: CTLine, moreLines: [CTLine] = [], tagLine: CTLine? = nil, labelLine: CTLine?, labelWidth: CGFloat, symbol: String?
+            var line: CTLine, moreLines: [CTLine] = [], tagLine: CTLine?, labelLine: CTLine?, labelWidth: CGFloat, symbol: String?
             var textSize: NSSize, width: Double, height: Double
         }
         var measured: [Measured] = []
@@ -499,7 +499,7 @@ public final class CandidateView: NSView {
                 let label = NSAttributedString(string: candidate.label, attributes: [
                     .font: font(theme.labelFontFace, theme.labelFontPoint),
                     NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                        nsColor(highlighted ? theme.hilitedCandidateLabelColor : theme.labelColor).cgColor,
+                        nsColor(highlighted ? theme.hilitedCandidateLabelColor : theme.labelColor).cgColor
                 ])
                 let created = CTLineCreateWithAttributedString(label)
                 labelLine = created
@@ -512,7 +512,7 @@ public final class CandidateView: NSView {
                 let color = nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor)
                 tagLine = CTLineCreateWithAttributedString(NSAttributedString(string: candidate.comment, attributes: [
                     .font: font(theme.labelFontFace, tagFontPoint),
-                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.withAlphaComponent(0.72).cgColor,
+                    NSAttributedString.Key(kCTForegroundColorAttributeName as String): color.withAlphaComponent(0.72).cgColor
                 ]))
                 shown.comment = ""
             }
@@ -542,7 +542,7 @@ public final class CandidateView: NSView {
                         let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [
                             .font: font(theme.fontFace, theme.fontPoint),
                             NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                                nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor,
+                                nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor
                         ]))
                         lines.append(CTLineCreateTruncatedLine(rest, width, .end, ellipsis)
                             ?? CTTypesetterCreateLine(typesetter, CFRange(location: start, length: count)))
@@ -566,7 +566,7 @@ public final class CandidateView: NSView {
                     let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [
                         .font: font(theme.fontFace, theme.fontPoint),
                         NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                            nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor,
+                            nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor
                     ]))
                     if let truncated = CTLineCreateTruncatedLine(line, max(40, limit), .end, ellipsis) {
                         line = truncated
@@ -706,12 +706,12 @@ public final class CandidateView: NSView {
             let text = NSMutableAttributedString(string: digit.isEmpty ? "" : digit + " ", attributes: [
                 .font: digitFont,
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                    nsColor(selected ? theme.hilitedCandidateLabelColor : theme.labelColor).withAlphaComponent(0.85).cgColor,
+                    nsColor(selected ? theme.hilitedCandidateLabelColor : theme.labelColor).withAlphaComponent(0.85).cgColor
             ])
             text.append(NSAttributedString(string: title, attributes: [
                 .font: tabFont,
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                    nsColor(selected ? theme.hilitedCandidateTextColor : theme.commentTextColor).cgColor,
+                    nsColor(selected ? theme.hilitedCandidateTextColor : theme.commentTextColor).cgColor
             ]))
             let line = CTLineCreateWithAttributedString(text)
             let width = ceil(CTLineGetTypographicBounds(line, nil, nil, nil))
@@ -744,7 +744,7 @@ public final class CandidateView: NSView {
                 let created = CTLineCreateWithAttributedString(NSAttributedString(string: board.keyHints[index].uppercased(), attributes: [
                     .font: hintFont,
                     NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                        nsColor(highlighted ? theme.hilitedCandidateLabelColor : theme.labelColor).withAlphaComponent(isList ? 0.9 : 0.7).cgColor,
+                        nsColor(highlighted ? theme.hilitedCandidateLabelColor : theme.labelColor).withAlphaComponent(isList ? 0.9 : 0.7).cgColor
                 ]))
                 hint = created
                 hintWidth = ceil(CTLineGetTypographicBounds(created, nil, nil, nil))
@@ -752,7 +752,7 @@ public final class CandidateView: NSView {
             var line = CTLineCreateWithAttributedString(NSAttributedString(string: candidate.text, attributes: [
                 .font: itemFont,
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                    nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor,
+                    nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor
             ]))
             var width = ceil(CTLineGetTypographicBounds(line, nil, nil, nil))
             if isList {
@@ -761,7 +761,7 @@ public final class CandidateView: NSView {
                 let ellipsis = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: [
                     .font: itemFont,
                     NSAttributedString.Key(kCTForegroundColorAttributeName as String):
-                        nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor,
+                        nsColor(highlighted ? theme.hilitedCandidateTextColor : theme.candidateTextColor).cgColor
                 ]))
                 if Double(width) > available, let truncated = CTLineCreateTruncatedLine(line, available, .end, ellipsis) {
                     line = truncated
@@ -790,7 +790,7 @@ public final class CandidateView: NSView {
             let hintFont = font(theme.labelFontFace, max(10, theme.fontPoint * 0.62))
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: board.hint, attributes: [
                 .font: hintFont,
-                NSAttributedString.Key(kCTForegroundColorAttributeName as String): nsColor(theme.commentTextColor).cgColor,
+                NSAttributedString.Key(kCTForegroundColorAttributeName as String): nsColor(theme.commentTextColor).cgColor
             ]))
             hintLine = (line, NSPoint(x: insetX + 2, y: bottom + 8 + hintFont.ascender))
             // A little air below the hint so it does not sit on the panel's edge.

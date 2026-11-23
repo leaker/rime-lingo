@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 /// An installed 0.2.0 (20), a published 0.3.0 (21), and fakes for everything outside.
 final class UpdateRig {
@@ -307,7 +307,7 @@ final class UpdateRig {
             ("development signature", .untrustedBundle, {
                 rig.process.archiveExtras = []
                 rig.signature.markDevelopmentSigned(rig.updates.stagingTemporary.appendingPathComponent("RimeLingo.app"))
-            }),
+            })
         ]
         for (name, expected, arrange) in cases {
             try arrange()
@@ -465,7 +465,7 @@ final class UpdateRig {
         rig.signature.running = SignatureInfo(isValid: true, satisfiesDeveloperID: false)
         #expect(launch(key: rig.publicKey) == .none)
         #expect(snapshot(rig.installed) == before && rig.fs.count(.rename) == 0 && rig.fs.count(.remove) == 0)
-        #expect(BundleTree.entry(at: rig.updates.marker) != nil && rig.signature.count == 0)
+        #expect(BundleTree.entry(at: rig.updates.marker) != nil && rig.signature.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: UpdateState.file(rig.paths).path))
     }
 
@@ -528,7 +528,7 @@ final class UpdateRig {
         for phase in [InstallMarker.Phase.commit, .cleanup, .rollback] {
             #expect(try launch(phase: phase, bundle: rig.installed) == .none)
         }
-        #expect(snapshot(rig.installed) == before && rig.signature.count == 0)
+        #expect(snapshot(rig.installed) == before && rig.signature.isEmpty)
         #expect(BundleTree.entry(at: rig.updates.marker) != nil && BundleTree.entry(at: rig.updates.backupApp) != nil)
         #expect(!FileManager.default.fileExists(atPath: UpdateState.file(rig.paths).path))
         // A backup that is no release of ours is not restored by anyone.

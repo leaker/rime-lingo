@@ -1,7 +1,7 @@
 import AppKit
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 /// Renders the translation preview offscreen with the real view, RimeLingo's shipped light
 /// and dark schemes and the key hints the input method shows, for the README and the
@@ -75,7 +75,7 @@ import Testing
                 targetLabel: started.targetLabel, status: .notice, message: started.title, footnote: started.keys)),
             ("translation-selection", TranslationPreviewState(
                 targetLabel: selection.targetLabel, status: .ready, text: selection.text,
-                footnote: bindings.selectionFootnote(canReplace: true, canRetry: false), kind: .selection)),
+                footnote: bindings.selectionFootnote(canReplace: true, canRetry: false), kind: .selection))
         ]
 
         try FileManager.default.createDirectory(atPath: out, withIntermediateDirectories: true)

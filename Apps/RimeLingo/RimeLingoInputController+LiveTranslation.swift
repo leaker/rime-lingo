@@ -1,8 +1,8 @@
+import AppKit
+import InputMethodKit
 import RimeLingoAI
 import RimeLingoCore
 import RimeLingoPanel
-import AppKit
-import InputMethodKit
 
 // Live translation input: a session translates the draft (never the unfinished pinyin)
 // and shows the result in a second panel. The mode (`InputEngine.liveTarget`) is

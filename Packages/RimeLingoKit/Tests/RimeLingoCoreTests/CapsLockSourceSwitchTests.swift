@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct CapsLockSourceSwitchTests {
     let t0 = Date(timeIntervalSinceReferenceDate: 1_000_000)

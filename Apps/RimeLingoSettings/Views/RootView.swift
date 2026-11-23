@@ -66,7 +66,7 @@ enum Pane: String, CaseIterable, Identifiable, Hashable {
         ("输入", [.schemas, .general, .switching, .spelling, .keys]),
         ("个性化", [.appearance, .apps]),
         ("词库", [.dictionaries, .phrases, .snippets, .sync]),
-        ("系统", [.advanced, .about]),
+        ("系统", [.advanced, .about])
     ]
 }
 

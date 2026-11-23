@@ -14,7 +14,6 @@ struct AppearanceView: View {
         Form {
             Section { PaneHeader(title: "外观", subtitle: "配色、字体与候选窗布局。预览即输入法中的真实渲染，修改后自动生效。", symbol: "paintpalette") }
 
-
             Section {
                 VStack(spacing: 14) {
                     Picker("预览模式", selection: Binding(get: { dark }, set: { previewDark = $0 })) {
@@ -192,6 +191,6 @@ private struct SchemeTile: View {
 
 extension PanelState {
     static let gallerySample = PanelState(candidates: [
-        .init(label: "1", text: "输入法"), .init(label: "2", text: "输入"), .init(label: "3", text: "RimeLingo"),
+        .init(label: "1", text: "输入法"), .init(label: "2", text: "输入"), .init(label: "3", text: "RimeLingo")
     ])
 }

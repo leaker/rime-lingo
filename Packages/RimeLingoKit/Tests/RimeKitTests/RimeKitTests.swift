@@ -1,7 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeKit
-
+import Testing
 
 @MainActor
 @Suite(.serialized)

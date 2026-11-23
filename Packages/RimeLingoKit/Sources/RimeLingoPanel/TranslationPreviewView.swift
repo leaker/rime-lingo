@@ -142,7 +142,7 @@ final class TranslationPreviewView: NSView {
         let palette = Palette(theme: theme)
         return NSAttributedString(string: state.text, attributes: [
             .font: textFont, .paragraphStyle: style,
-            .foregroundColor: nsColor(palette.text, alpha: Self.textOpacity(for: state)),
+            .foregroundColor: nsColor(palette.text, alpha: Self.textOpacity(for: state))
         ])
     }
 

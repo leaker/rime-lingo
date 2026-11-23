@@ -1,5 +1,5 @@
-public import Foundation
 import CryptoKit
+public import Foundation
 
 /// Where updates come from and what is trusted. Nothing about the user or their input is
 /// sent: only the public release manifest and the release archive are requested.
@@ -64,7 +64,7 @@ public enum UpdateConfiguration {
              0xd5, 0xdf, 0xac, 0x05, 0xd3, 0xc6, 0x33, 0x39, 0xb1, 0x38, 0x02, 0x88, 0x6d, 0x53, 0xfc, 0x05],
             [0xc7, 0x17, 0x6a, 0x70, 0x3d, 0x4d, 0xd8, 0x4f, 0xba, 0x3c, 0x0b, 0x76, 0x0d, 0x10, 0x67, 0x0f,
              0x2a, 0x20, 0x53, 0xfa, 0x2c, 0x39, 0xcc, 0xc6, 0x4e, 0xc7, 0xfd, 0x77, 0x92, 0xac, 0x03, 0x7a],
-            spanning(0xec, 0xff, 0x7f), spanning(0xed, 0xff, 0x7f), spanning(0xee, 0xff, 0x7f),
+            spanning(0xec, 0xff, 0x7f), spanning(0xed, 0xff, 0x7f), spanning(0xee, 0xff, 0x7f)
         ]
     }()
 
@@ -82,7 +82,7 @@ public enum UpdateConfiguration {
 
     /// github.com serves the release URLs and redirects asset downloads to these hosts.
     public static let allowedHosts: Set<String> = [
-        "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com",
+        "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"
     ]
     public static let maxManifestBytes = 262_144
     public static let maxSignatureBytes = 4096

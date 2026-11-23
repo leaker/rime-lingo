@@ -1,7 +1,7 @@
-import RimeLingoCore
 import Foundation
-import Testing
+import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 /// The website shows each theme's contrast with its own JavaScript port; both must agree
 /// with what the candidate panel computes (fixture values from scripts/export-themes.py).
@@ -16,7 +16,7 @@ import Testing
             let package = try ThemePackage.decode(payload: item.d).package
             let frontend = ConfigValue.map([
                 .init("style", .map([.init("color_scheme", .string(package.id))])),
-                .init("preset_color_schemes", .map([.init(package.id, package.schemeValue)])),
+                .init("preset_color_schemes", .map([.init(package.id, package.schemeValue)]))
             ])
             let theme = PanelTheme(frontend: frontend, dark: false)
             #expect(abs(theme.minimumTextContrast - item.min_contrast) <= 0.01, "\(item.id): \(theme.minimumTextContrast)")

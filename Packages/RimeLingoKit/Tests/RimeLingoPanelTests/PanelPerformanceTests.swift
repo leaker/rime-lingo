@@ -1,8 +1,8 @@
 import AppKit
 import QuartzCore
-import Testing
 @testable import RimeLingoCore
 @testable import RimeLingoPanel
+import Testing
 
 /// Main-thread cost of one keystroke's panel update (layout + layers + commit),
 /// with motion on and off. Prints percentiles; the budget is loose for debug builds.

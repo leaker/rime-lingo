@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct CatalogTests {
     let catalog = SettingCatalog.bundled

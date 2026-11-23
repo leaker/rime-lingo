@@ -1,5 +1,5 @@
-import RimeLingoCore
 import AppKit
+import RimeLingoCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -59,8 +59,7 @@ private struct SmartSetupCard: View {
                 header(title: "正在扫描已安装的应用…", detail: name.isEmpty ? "准备中" : name) { EmptyView() }
                 HStack(spacing: 12) {
                     Group {
-                        if let path { Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable() }
-                        else { Image(systemName: "app.dashed").resizable().foregroundStyle(.tertiary) }
+                        if let path { Image(nsImage: NSWorkspace.shared.icon(forFile: path)).resizable() } else { Image(systemName: "app.dashed").resizable().foregroundStyle(.tertiary) }
                     }
                     .frame(width: 28, height: 28)
                     .id(path)
@@ -168,8 +167,7 @@ struct SuggestionRow: View {
                 .labelsHidden()
                 .accessibilityLabel("应用到 \(suggestion.app.name)")
             Group {
-                if let url = suggestion.app.url { Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable() }
-                else { Image(systemName: "magnifyingglass.circle.fill").resizable().foregroundStyle(.secondary) }
+                if let url = suggestion.app.url { Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable() } else { Image(systemName: "magnifyingglass.circle.fill").resizable().foregroundStyle(.secondary) }
             }
             .frame(width: 24, height: 24)
             Text(suggestion.app.name).lineLimit(1)
@@ -627,8 +625,7 @@ private struct SchemeCard: View {
     }
 
     private func install(_ package: DictionaryPackage) {
-        if (package.conflicts ?? []).contains(where: { model.installed($0) != nil }) { confirm = package }
-        else { Task { await model.install(package) } }
+        if (package.conflicts ?? []).contains(where: { model.installed($0) != nil }) { confirm = package } else { Task { await model.install(package) } }
     }
 }
 

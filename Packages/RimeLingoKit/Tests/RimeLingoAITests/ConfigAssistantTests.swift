@@ -1,7 +1,7 @@
 import Foundation
-import Testing
 @testable import RimeLingoAI
 @testable import RimeLingoCore
+import Testing
 
 struct ConfigAssistantTests {
     private func catalog(type: String = "int", bounds: String = "") throws -> SettingCatalog {

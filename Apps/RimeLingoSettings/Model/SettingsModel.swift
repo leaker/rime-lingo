@@ -1,9 +1,9 @@
-import RimeLingoAI
-import RimeLingoCore
-import RimeLingoPanel
 import AppKit
 import Carbon
 import Observation
+import RimeLingoAI
+import RimeLingoCore
+import RimeLingoPanel
 
 /// Single source of state for the settings window. Reads deployed values through
 /// `SettingsStore`, writes into the generated layer, and asks the input method (or the
@@ -264,7 +264,7 @@ final class SettingsModel {
             ("label_color", base.labelColor), ("hilited_candidate_back_color", base.hilitedCandidateBackColor),
             ("hilited_candidate_text_color", base.hilitedCandidateTextColor),
             ("hilited_comment_text_color", base.hilitedCommentTextColor),
-            ("hilited_candidate_label_color", base.hilitedCandidateLabelColor),
+            ("hilited_candidate_label_color", base.hilitedCandidateLabelColor)
         ]
         let scheme = ConfigValue.map(
             [.init("name", "我的配色"), .init("author", "RimeLingo Settings"), .init("color_format", "argb")]

@@ -171,7 +171,7 @@ public struct UsageStatsStore: Sendable {
     /// but their windows are skipped anyway).
     public static let excludedApps: Set<String> = [
         "com.1password.1password", "com.agilebits.onepassword7", "com.bitwarden.desktop",
-        "com.apple.keychainaccess", "com.apple.Passwords", "org.keepassxc.keepassxc",
+        "com.apple.keychainaccess", "com.apple.Passwords", "org.keepassxc.keepassxc"
     ]
     public static let clearedNotification = Notification.Name("com.leelib.rimelingo.stats.cleared")
 

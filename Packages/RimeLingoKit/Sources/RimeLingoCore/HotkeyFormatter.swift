@@ -13,7 +13,7 @@ public enum HotkeyFormatter {
         0x75: "Delete", 0x74: "Page_Up", 0x79: "Page_Down", 0x73: "Home", 0x77: "End",
         0x7b: "Left", 0x7c: "Right", 0x7d: "Down", 0x7e: "Up", 0x39: "Caps_Lock",
         0x7a: "F1", 0x78: "F2", 0x63: "F3", 0x76: "F4", 0x60: "F5", 0x61: "F6", 0x62: "F7", 0x64: "F8",
-        0x65: "F9", 0x6d: "F10", 0x67: "F11", 0x6f: "F12",
+        0x65: "F9", 0x6d: "F10", 0x67: "F11", 0x6f: "F12"
     ]
 
     public struct Modifiers: OptionSet, Sendable, Hashable {
@@ -50,7 +50,7 @@ public enum HotkeyFormatter {
         "semicolon": ";", "apostrophe": "'", "comma": ",", "period": ".", "slash": "/", "space": "空格",
         "Tab": "⇥", "Return": "↩", "Escape": "⎋", "BackSpace": "⌫", "Delete": "⌦", "Page_Up": "⇞", "Page_Down": "⇟",
         "Home": "↖", "End": "↘", "Left": "←", "Right": "→", "Up": "↑", "Down": "↓", "Caps_Lock": "⇪",
-        "numbersign": "#", "dollar": "$", "Shift_L": "左⇧", "Shift_R": "右⇧", "Control_L": "左⌃", "Control_R": "右⌃",
+        "numbersign": "#", "dollar": "$", "Shift_L": "左⇧", "Shift_R": "右⇧", "Control_L": "左⌃", "Control_R": "右⌃"
     ]
 
     /// `Control+Shift+grave` → `⌃⇧\``.

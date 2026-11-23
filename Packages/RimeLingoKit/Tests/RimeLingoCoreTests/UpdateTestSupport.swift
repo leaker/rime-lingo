@@ -107,6 +107,7 @@ final class FakeSignature: CodeSignatureEvaluating, @unchecked Sendable {
         set { lock.withLock { runningInfo = newValue } }
     }
     var count: Int { lock.withLock { evaluations } }
+    var isEmpty: Bool { lock.withLock { evaluations == 0 } }
     /// Whether a bundle is only valid while its files are the ones its seal records
     /// (`makeBundle`): a mix of two versions, or a stray file, is then a broken signature.
     var checksSeal: Bool {

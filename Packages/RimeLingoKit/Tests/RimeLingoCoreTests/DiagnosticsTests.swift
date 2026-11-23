@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 @Suite struct DiagnosticsTests {
     @Test func exportedZipExcludesPrivateFilesAndRedactsLogs() throws {

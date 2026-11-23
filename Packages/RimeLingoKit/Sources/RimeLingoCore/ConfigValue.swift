@@ -109,7 +109,9 @@ extension ConfigValue: ExpressibleByBooleanLiteral, ExpressibleByIntegerLiteral,
 public enum YAMLError: Error, CustomStringConvertible {
     case invalid(String)
     public var description: String {
-        switch self { case let .invalid(message): message }
+        switch self {
+        case let .invalid(message): message
+        }
     }
 }
 

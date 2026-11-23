@@ -1,5 +1,5 @@
-import Testing
 @testable import RimeLingoCore
+import Testing
 
 struct ModifierHoldTests {
     let option: UInt = 1 << 19, shift: UInt = 1 << 17, command: UInt = 1 << 20

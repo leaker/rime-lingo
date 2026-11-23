@@ -1,6 +1,6 @@
+import AppKit
 import RimeLingoCore
 import RimeLingoPanel
-import AppKit
 import SwiftUI
 
 /// Large page title with a one-line explanation, shared by every pane.
@@ -403,7 +403,7 @@ struct DoubleControl: View {
 struct SizeStepControl: View {
     let steps: [(value: Double, title: String)]
     /// Bounds for the custom stepper; without them only the presets are offered.
-    var range: ClosedRange<Double>? = nil
+    var range: ClosedRange<Double>?
     let value: Double
     let commit: (Double) -> Void
     @Namespace private var selection
