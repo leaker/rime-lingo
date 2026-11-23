@@ -34,6 +34,13 @@ struct TranslationView: View {
                             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                Toggle(isOn: Binding(get: { features.polishTranslation }, set: { on in model.updateFeatures { $0.polishTranslation = on } })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("翻译时同时润色")
+                        Text("译文会更自然通顺，并顺带修正原文里的错别字和标点；仍是一次请求，不会多等。关闭后按原文直译。实时翻译和翻译选中文字都适用。")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             } header: {
                 Text("实时翻译")
             }
