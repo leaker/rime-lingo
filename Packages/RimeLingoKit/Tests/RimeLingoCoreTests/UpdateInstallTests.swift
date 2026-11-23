@@ -484,7 +484,8 @@ import Testing
     }
 
     @Test func onlyOneHolderOfTheLock() throws {
-        var first: UpdateLock? = try #require(UpdateLock.acquire(paths))
+        var first = UpdateLock.acquire(paths)
+        #expect(first != nil)
         #expect(UpdateLock.acquire(paths) == nil)
         withExtendedLifetime(first) {}
         first = nil

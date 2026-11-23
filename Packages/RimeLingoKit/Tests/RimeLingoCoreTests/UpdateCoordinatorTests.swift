@@ -358,12 +358,14 @@ final class UpdateRig {
     @Test func onlyOneProcessDownloadsOrInstalls() async throws {
         let coordinator = rig.coordinator()
         _ = await coordinator.check(force: false)
-        var other: UpdateLock? = try #require(UpdateLock.acquire(rig.updates))
+        var other = UpdateLock.acquire(rig.updates)
+        #expect(other != nil)
         #expect(await coordinator.downloadIfNeeded().phase == .downloading)
         #expect(rig.transport.requestCount(rig.assetURL) == 0)
         other = nil
         #expect(await coordinator.downloadIfNeeded().phase == .ready)
-        other = try #require(UpdateLock.acquire(rig.updates))
+        other = UpdateLock.acquire(rig.updates)
+        #expect(other != nil)
         let before = snapshot(rig.installed)
         #expect(await coordinator.installIfReady(idle: rig.idle, userRequested: true) == .failed(.busy))
         #expect(snapshot(rig.installed) == before && rig.state.phase == .ready)
@@ -577,7 +579,8 @@ final class UpdateRig {
         #expect(launch() == .none)
         #expect(rig.state.phase == .restartPending && snapshot(rig.installed) == bundle && snapshot(rig.updates.backupApp) == kept)
         // While another process holds the lock the new version confirms without removing it…
-        var other: UpdateLock? = try #require(UpdateLock.acquire(rig.updates))
+        var other = UpdateLock.acquire(rig.updates)
+        #expect(other != nil)
         #expect(await rig.coordinator(current: AppVersion("0.3.0", build: 21)).confirmRelaunch() == "0.3.0")
         #expect(rig.state.phase == .idle && BundleTree.entry(at: rig.updates.backupApp) != nil)
         withExtendedLifetime(other) {}
